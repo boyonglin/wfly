@@ -1,0 +1,55 @@
+// Google Apps Script 範例：貼到試算表的 Apps Script 編輯器
+// 完成後「部署為網路應用程式」，權限設任何人可存取
+
+function doGet(e) {
+  return ContentService.createTextOutput(
+    JSON.stringify({ status: 'ok', message: 'Apps Script is running' })
+  ).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  try {
+    Logger.log('Received POST data: ' + JSON.stringify(e));
+
+    if (!e || !e.postData || !e.postData.contents) {
+      throw new Error('No POST data received');
+    }
+
+    const data = JSON.parse(e.postData.contents);
+    Logger.log('Parsed data: ' + JSON.stringify(data));
+
+    const ss = SpreadsheetApp.openById(data.sheetId);
+    const sheet = ss.getSheets()[0];
+    const itemsText = data.itemsSummary || JSON.stringify(data.items);
+
+    sheet.appendRow([
+      new Date(),
+      data.orderId,
+      data.consultantName,
+      data.consultantId,
+      data.consultantLocation,
+      data.customerName,
+      data.customerPhone,
+      data.customerEmail,
+      data.customerBirthday,
+      data.customerAddress,
+      data.customerCompany,
+      data.customerTaxId,
+      data.customerSource,
+      data.customerNotes,
+      itemsText,
+      data.total,
+      data.signature
+    ]);
+
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'ok' })
+    ).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    Logger.log('Error: ' + err.message);
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'error', message: err.message })
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
+}
