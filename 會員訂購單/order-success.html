@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>吾飛藝術銀行 - 訂單確認</title>
+
+    <!-- 1. 引入 Tailwind CSS (樣式框架) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- 2. 引入 Babel (用於瀏覽器端編譯 React JSX) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- 3. 引入 html2canvas (用於截圖功能) -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
+    <!-- 4. 引入自訂樣式 -->
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- 5. 引入設定檔 (必須在 React 之前載入) -->
+    <script src="config.js"></script>
+</head>
+<body class="bg-[#f5f5f7]">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        // =============================================
+        // 引入 React 與 Lucide 圖標庫
+        // =============================================
+        import React, { useState, useEffect } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        import {
+            Check, X, Copy, CreditCard, MessageCircle, Clock, ArrowLeft, RefreshCw,
+            AlertCircle, Image as ImageIcon, Share2, QrCode, Sparkles, User, Heart, Briefcase, Network
+        } from 'https://esm.sh/lucide-react@0.263.1';
+
+        // =============================================
+        // 從全域設定取得常數
+        // =============================================
+        const { STORAGE_KEY, DRAFT_KEY, PAYMENT, LINE } = window.APP_CONFIG;
+
+        // Icon 映射表
+        const ICON_MAP = {
+            Sparkles: Sparkles,
+            User: User,
+            Heart: Heart,
+            Briefcase: Briefcase,
+            Network: Network
+        };
+
+        // 將產品資料轉換為包含實際 icon 元件的版本
+        const initialProducts = window.APP_PRODUCTS.map(product => ({
+            ...product,
+            icon: React.createElement(ICON_MAP[product.iconName], { className: "w-8 h-8" })
+        }));
+
+        // =============================================
+        // 倒數計時器元件
+        // =============================================
+        const CountdownTimer = ({ deadline }) => {
+            const [timeLeft, setTimeLeft] = useState(Math.max(0, deadline - Date.now()));
+
+            useEffect(() => {
+                const timer = setInterval(() => {
+                    const newTimeLeft = deadline - Date.now();
+                    if (newTimeLeft <= 0) {
+                        clearInterval(timer);
+                        setTimeLeft(0);
+                    } else {
+                        setTimeLeft(newTimeLeft);
+                    }
+                }, 1000);
+                return () => clearInterval(timer);
+            }, [deadline]);
+
+            const formatTime = (ms) => {
+                if (ms <= 0) return "已截止";
+                const totalSeconds = Math.floor(ms / 1000);
+                const hours = Math.floor(totalSeconds / 3600);
+                const minutes = Math.floor((totalSeconds % 3600) / 60);
+                const seconds = totalSeconds % 60;
+                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            };
+
+            return (
+                <span className={`font-mono font-bold text-lg ${timeLeft <= 0 ? 'text-gray-500' : 'text-red-600'}`}>
+                    {formatTime(timeLeft)}
+                </span>
+            );
+        };
+
+        // =============================================
+        // 訂單成功頁面元件
+        // =============================================
+        const OrderSuccessPage = () => {
+            const [orderResult, setOrderResult] = useState(null);
+            const [restored, setRestored] = useState(false);
+            const [showLineQR, setShowLineQR] = useState(false);
+            const [showImagePreview, setShowImagePreview] = useState(false);
+            const [previewImageUrl, setPreviewImageUrl] = useState('');
+
+            // =============================================
+            // 初始化 - 載入訂單資料
+            // =============================================
+            useEffect(() => {
+                try {
+                    const savedOrder = localStorage.getItem(STORAGE_KEY);
+                    if (savedOrder) {
+                        const parsedOrder = JSON.parse(savedOrder);
+                        // 檢查訂單是否過期
+                        if (parsedOrder.deadline && parsedOrder.deadline > Date.now()) {
+                            setOrderResult(parsedOrder);
+                            setRestored(true);
+                        } else {
+                            // 訂單已過期，跳轉回表單頁
+                            localStorage.removeItem(STORAGE_KEY);
+                            window.location.href = 'order-form.html';
+                        }
+                    } else {
+                        // 沒有訂單資料，跳轉回表單頁
+                        window.location.href = 'order-form.html';
+                    }
+                } catch (error) {
+                    console.error('Failed to load order:', error);
+                    window.location.href = 'order-form.html';
+                }
+            }, []);
+
+            // =============================================
+            // 訂單文字生成與分享功能
+            // =============================================
+            const generateOrderText = (order) => {
+                if (!order) return '';
+                const itemsList = Object.entries(order.items).map(([id, qty]) => {
+                    const product = initialProducts.find(p => p.id === parseInt(id));
+                    return `• ${product.name} x ${qty} = NT$ ${(product.price * qty).toLocaleString()}`;
+                }).join('\n');
+
+                const addressInfo = order.customer.address ? `\n[地址] ${order.customer.address}` : '';
+
+                return `【吾飛藝術銀行 - 訂單確認】\n訂單編號：${order.id}\n------------------------\n[服務顧問]\n姓名：${order.consultant.name} (${order.consultant.id})\n據點：${order.consultant.location}\n------------------------\n[客戶] ${order.customer.name} / ${order.customer.phone}${addressInfo}\n[來源] ${order.customer.source || '無'}\n------------------------\n[訂購項目]\n${itemsList}\n------------------------\n總金額：NT$ ${order.total.toLocaleString()}\n\n* 請協助確認款項，謝謝！`;
+            };
+
+            const copyToClipboard = async (text, silent = false) => {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    if (!silent) alert('複製成功！');
+                } catch (err) {
+                    const textArea = document.createElement("textarea");
+                    textArea.value = text;
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-9999px";
+                    textArea.style.top = "0";
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    try {
+                        const successful = document.execCommand('copy');
+                        if (successful) {
+                            if (!silent) alert('複製成功！');
+                        } else {
+                            if (!silent) alert('複製失敗，請手動長按選取文字複製。');
+                        }
+                    } catch (fallbackErr) {
+                        console.error('Copy failed', fallbackErr);
+                        if (!silent) alert('複製失敗，請嘗試使用截圖功能。');
+                    }
+                    document.body.removeChild(textArea);
+                }
+            };
+
+            const handleShowLineQR = async () => {
+                if (!orderResult) return;
+                const text = generateOrderText(orderResult);
+                await copyToClipboard(text, true);
+                setShowLineQR(true);
+            };
+
+            const handleShare = async () => {
+                if (!orderResult) return;
+                const text = generateOrderText(orderResult);
+
+                if (navigator.share) {
+                    try {
+                        await navigator.share({
+                            title: '吾飛藝術銀行 - 訂單確認',
+                            text: text,
+                        });
+                    } catch (err) {
+                        console.log('Error sharing', err);
+                    }
+                } else {
+                    copyToClipboard(text);
+                }
+            };
+
+            const downloadReceiptImage = () => {
+                const receiptElement = document.getElementById('receipt-card');
+                if (!receiptElement) return;
+
+                const btnTextElement = document.getElementById('download-btn-text');
+                const originalBtnText = btnTextElement.innerText;
+                btnTextElement.innerText = "生成中...";
+
+                html2canvas(receiptElement, { scale: 3, backgroundColor: '#ffffff', useCORS: true }).then(canvas => {
+                    const imgData = canvas.toDataURL('image/png');
+                    setPreviewImageUrl(imgData);
+                    setShowImagePreview(true);
+                    btnTextElement.innerText = originalBtnText;
+                }).catch((err) => {
+                    console.error("Screenshot error:", err);
+                    alert('圖片生成失敗，請嘗試手動截圖。');
+                    btnTextElement.innerText = originalBtnText;
+                });
+            };
+
+            // =============================================
+            // 導航處理
+            // =============================================
+            const handleBackToEdit = () => {
+                // 將訂單資料轉回草稿格式，保留 orderId 以便修改時維持同一編號
+                if (orderResult) {
+                    const draftData = {
+                        consultantInfo: orderResult.consultant,
+                        customerInfo: orderResult.customer,
+                        cart: orderResult.items,
+                        signatureData: orderResult.signature,
+                        editingOrderId: orderResult.id,  // 保留原訂單編號
+                        updatedAt: Date.now()
+                    };
+                    localStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
+                    localStorage.removeItem(STORAGE_KEY);
+                }
+                window.location.href = 'order-form.html';
+            };
+
+            const handleNewOrder = () => {
+                if (confirm('確定要建立新的一張訂單嗎？\n(將清除目前的客戶資料與簽名，但保留顧問資料)')) {
+                    // 保留顧問資料
+                    if (orderResult) {
+                        const draftData = {
+                            consultantInfo: orderResult.consultant,
+                            customerInfo: {
+                                name: '', phone: '', birthday: '', email: '',
+                                address: '', company: '', taxId: '', source: '', notes: ''
+                            },
+                            cart: {},
+                            signatureData: null,
+                            updatedAt: Date.now()
+                        };
+                        localStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
+                    }
+                    localStorage.removeItem(STORAGE_KEY);
+                    window.location.href = 'order-form.html';
+                }
+            };
+
+            // =============================================
+            // 載入中或無資料
+            // =============================================
+            if (!orderResult) {
+                return (
+                    <div className="min-h-screen bg-[#f5f5f7] flex items-center justify-center">
+                        <div className="text-center">
+                            <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                            <p className="text-gray-500">載入訂單資料中...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            // =============================================
+            // 渲染成功頁面
+            // =============================================
+            return (
+                <div className="min-h-screen bg-[#f5f5f7] pb-20">
+                    <div className="w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto bg-white min-h-screen shadow-2xl overflow-hidden flex flex-col">
+                        {/* 成功頁面 Header */}
+                        <div className="bg-[#1d1d1f] text-white p-6 sm:p-8 md:p-10 text-center rounded-b-[2rem] shadow-lg relative z-10 safe-area-top">
+                            <div className="w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-lg shadow-green-500/30">
+                                <Check className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 text-white stroke-[3]" />
+                            </div>
+                            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-1">訂單已送出</h2>
+                            <p className="text-gray-400 text-xs sm:text-sm">請完成付款並傳送資料至官方 Line 確認</p>
+                        </div>
+
+                        <div className="px-4 sm:px-6 md:px-8 -mt-6 relative z-20 flex-grow">
+                            {restored && (
+                                <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-2 rounded-xl flex items-center gap-2 text-sm shadow-sm">
+                                    <AlertCircle className="w-4 h-4" /> 這是您尚未清除的歷史訂單
+                                </div>
+                            )}
+
+                            {/* 訂單摘要卡片 */}
+                            <div id="receipt-card" className="bg-white rounded-xl sm:rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-4 sm:mb-6">
+                                <div className="bg-gray-50 border-b border-gray-100 p-3 sm:p-4 flex justify-between items-center">
+                                    <span className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase">Order ID</span>
+                                    <span className="font-mono font-bold text-sm sm:text-base text-[#1d1d1f]">{orderResult.id}</span>
+                                </div>
+                                <div className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+                                    {/* 客戶資料區塊 */}
+                                    <div className="text-sm border-b border-dashed border-gray-200 pb-3 sm:pb-4 space-y-2 sm:space-y-3">
+                                        <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                                            <div><p className="text-[10px] sm:text-xs text-gray-400">客戶姓名</p><p className="font-medium text-sm sm:text-base text-[#1d1d1f]">{orderResult.customer.name}</p></div>
+                                            <div><p className="text-[10px] sm:text-xs text-gray-400">聯絡電話</p><p className="font-medium text-sm sm:text-base text-[#1d1d1f]">{orderResult.customer.phone}</p></div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                                            <div><p className="text-[10px] sm:text-xs text-gray-400">生日</p><p className="font-medium text-sm sm:text-base text-[#1d1d1f]">{orderResult.customer.birthday || '-'}</p></div>
+                                            <div><p className="text-[10px] sm:text-xs text-gray-400">統編</p><p className="font-medium text-sm sm:text-base text-[#1d1d1f]">{orderResult.customer.taxId || '-'}</p></div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                                            <div><p className="text-[10px] sm:text-xs text-gray-400">公司</p><p className="font-medium text-sm sm:text-base text-[#1d1d1f]">{orderResult.customer.company || '-'}</p></div>
+                                            <div><p className="text-[10px] sm:text-xs text-gray-400">資訊來源</p><p className="font-medium text-sm sm:text-base text-[#6d28d9]">{orderResult.customer.source || '-'}</p></div>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] sm:text-xs text-gray-400">信箱</p>
+                                            <p className="font-medium text-sm sm:text-base text-[#1d1d1f] break-all">{orderResult.customer.email}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] sm:text-xs text-gray-400">地址</p>
+                                            <p className="font-medium text-sm sm:text-base text-[#1d1d1f] break-words">{orderResult.customer.address || '-'}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* 訂購項目 */}
+                                    <div>
+                                        <p className="text-[10px] sm:text-xs text-gray-400 mb-2">訂購項目</p>
+                                        <ul className="space-y-1.5 sm:space-y-2">
+                                            {Object.entries(orderResult.items).map(([id, qty]) => {
+                                                const product = initialProducts.find(p => p.id === parseInt(id));
+                                                return (
+                                                    <li key={id} className="flex justify-between text-xs sm:text-sm">
+                                                        <span className="text-gray-600">{product.name} <span className="text-gray-400 text-[10px] sm:text-xs">x{qty}</span></span>
+                                                        <span className="font-medium">NT$ {(product.price * qty).toLocaleString()}</span>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    </div>
+
+                                    <div className="pt-3 sm:pt-4 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 sm:gap-0">
+                                        <div>
+                                            <p className="text-[10px] sm:text-xs text-gray-400">服務顧問</p>
+                                            <p className="text-xs sm:text-sm font-medium">{orderResult.consultant.name} <span className="text-[10px] sm:text-xs text-gray-500">({orderResult.consultant.id})</span></p>
+                                            <p className="text-[10px] sm:text-xs text-gray-500">{orderResult.consultant.location}</p>
+                                        </div>
+                                        <div className="text-left sm:text-right w-full sm:w-auto">
+                                            <p className="text-[10px] sm:text-xs text-gray-400">總金額 (含稅)</p>
+                                            <p className="text-xl sm:text-2xl md:text-3xl font-bold text-[#1d1d1f]">NT$ {orderResult.total.toLocaleString()}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="bg-gray-50 p-2 sm:p-3 flex border-t border-gray-100" data-html2canvas-ignore>
+                                    <button onClick={downloadReceiptImage} className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-blue-600 text-[10px] sm:text-xs font-bold border-r border-gray-200 py-2 active:bg-blue-50 transition-colors"><ImageIcon className="w-3 h-3 sm:w-4 sm:h-4" /> <span id="download-btn-text">下載圖片</span></button>
+                                    <button onClick={() => copyToClipboard(generateOrderText(orderResult), false)} className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-[#6d28d9] text-[10px] sm:text-xs font-bold border-r border-gray-200 py-2 active:bg-purple-50 transition-colors"><Copy className="w-3 h-3 sm:w-4 sm:h-4" /> 複製文字</button>
+                                    <button onClick={handleShare} className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-[#1d1d1f] text-[10px] sm:text-xs font-bold py-2 active:bg-gray-100 transition-colors"><Share2 className="w-3 h-3 sm:w-4 sm:h-4" /> 分享</button>
+                                </div>
+                            </div>
+
+                            {/* 付款資訊 */}
+                            <div className="bg-white rounded-xl sm:rounded-2xl border border-red-100 p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-sm relative">
+                                <div className="absolute top-0 right-0 bg-red-50 text-red-600 text-[8px] sm:text-[10px] font-bold px-2 py-1 rounded-bl-lg border-l border-b border-red-100">待付款</div>
+                                <h3 className="font-bold text-[#1d1d1f] mb-2 sm:mb-3 flex items-center gap-2 text-xs sm:text-sm"><CreditCard className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" /> 付款資訊</h3>
+                                <div className="bg-red-50 rounded p-2 mb-2 sm:mb-3 flex items-center justify-between text-[10px] sm:text-xs text-red-700">
+                                    <div className="flex items-center gap-1"><Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 匯款剩餘時間</div>
+                                    <CountdownTimer deadline={orderResult.deadline} />
+                                </div>
+                                <div className="space-y-1 text-[10px] sm:text-xs text-gray-600">
+                                    <div className="flex justify-between"><span>銀行</span><span className="font-mono font-bold text-black">{PAYMENT.BANK_CODE} ({PAYMENT.BANK_NAME})</span></div>
+                                    <div className="flex justify-between"><span>帳號</span><span className="font-mono font-bold text-black">{PAYMENT.ACCOUNT_NUMBER}</span></div>
+                                </div>
+                            </div>
+
+                            {/* 操作按鈕 */}
+                            <div className="space-y-2 sm:space-y-3 pb-6 sm:pb-8 safe-area-bottom">
+                                <button onClick={handleShowLineQR} className="w-full py-3 sm:py-4 rounded-xl bg-[#06C755] hover:bg-[#05b54d] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-lg shadow-green-500/20 active:scale-95 transition-transform">
+                                    <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 fill-current" /> 傳送訂單給客服 (Line)
+                                </button>
+                                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                                    <button onClick={handleBackToEdit} className="py-2.5 sm:py-3 rounded-xl bg-gray-100 text-gray-700 text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 active:bg-gray-200 transition-colors"><ArrowLeft className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 返回修改</button>
+                                    <button onClick={handleNewOrder} className="py-2.5 sm:py-3 rounded-xl bg-white border border-gray-200 text-gray-600 text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 active:bg-gray-50 transition-colors"><RefreshCw className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 建立新單</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Line QR Code Modal */}
+                        {showLineQR && (
+                            <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+                                <div className="bg-white w-full max-w-[calc(100%-1.5rem)] sm:max-w-sm md:max-w-md rounded-2xl shadow-2xl p-4 sm:p-6 text-center space-y-4 sm:space-y-6 relative animate-scale-in">
+                                    <button onClick={() => setShowLineQR(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+                                        <X className="w-6 h-6" />
+                                    </button>
+
+                                    <div>
+                                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2 sm:mb-3">
+                                            <QrCode className="w-5 h-5 sm:w-6 sm:h-6 text-[#06C755]" />
+                                        </div>
+                                        <h3 className="text-lg sm:text-xl font-bold text-[#1d1d1f]">加入官方帳號</h3>
+                                        <p className="text-xs sm:text-sm text-gray-500 mt-1 sm:mt-2">訂單資料已自動複製！<br/>請掃描或點擊下方按鈕加入好友，<br/>並在聊天室<span className="font-bold text-green-600">「貼上」</span>即可傳送。</p>
+                                    </div>
+
+                                    <div className="bg-gray-50 p-3 sm:p-4 rounded-xl border border-gray-200 inline-block">
+                                        <img
+                                            src={LINE.QR_CODE_URL}
+                                            alt="Line QR Code"
+                                            className="w-32 h-32 sm:w-40 sm:h-40 mix-blend-multiply"
+                                        />
+                                    </div>
+
+                                    <a
+                                        href={LINE.ADD_FRIEND_URL}
+                                        target="_blank"
+                                        className="w-full py-2.5 sm:py-3 rounded-xl bg-[#06C755] hover:bg-[#05b54d] text-white text-sm sm:text-base font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-500/20 active:scale-95 transition-transform"
+                                    >
+                                        開啟 LINE App <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 rotate-180" />
+                                    </a>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 圖片預覽 Modal */}
+                        {showImagePreview && (
+                            <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-fade-in" onClick={() => setShowImagePreview(false)}>
+                                <div className="relative max-w-[calc(100%-1rem)] sm:max-w-sm md:max-w-md w-full max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+                                    <div className="bg-white rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl p-1.5 sm:p-2">
+                                        <div className="flex justify-between items-center p-2 mb-2 border-b border-gray-100">
+                                            <h3 className="font-bold text-sm text-gray-600 flex items-center gap-2">
+                                                <ImageIcon className="w-4 h-4" /> 長按圖片即可儲存
+                                            </h3>
+                                            <button onClick={() => setShowImagePreview(false)} className="p-1 rounded-full hover:bg-gray-100">
+                                                <X className="w-5 h-5 text-gray-400" />
+                                            </button>
+                                        </div>
+                                        <div className="bg-gray-50 rounded-xl overflow-hidden border border-gray-200">
+                                            <img src={previewImageUrl} alt="Order Receipt" className="w-full h-auto" />
+                                        </div>
+                                        <p className="text-center text-xs text-gray-400 mt-3 mb-1">
+                                            請長按上方圖片並選擇「加入照片」或「儲存影像」
+                                        </p>
+                                    </div>
+                                    <button onClick={() => setShowImagePreview(false)} className="mt-4 w-full py-3 rounded-xl bg-white/20 text-white font-bold backdrop-blur-md border border-white/30 hover:bg-white/30 transition-colors">
+                                        關閉預覽
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // =============================================
+        // 掛載 React 應用
+        // =============================================
+        const root = createRoot(document.getElementById('root'));
+        root.render(<OrderSuccessPage />);
+    </script>
+</body>
+</html>

@@ -22,7 +22,8 @@ function doPost(e) {
     const sheet = ss.getSheets()[0];
     const itemsText = data.itemsSummary || JSON.stringify(data.items);
 
-    sheet.appendRow([
+    // 準備要寫入的資料列
+    const rowData = [
       new Date(),
       data.orderId,
       data.consultantName,
@@ -40,10 +41,39 @@ function doPost(e) {
       itemsText,
       data.total,
       data.signature
-    ]);
+    ];
+
+    // 如果是更新模式，找到原訂單並覆寫
+    if (data.isUpdate && data.orderId) {
+      const lastRow = sheet.getLastRow();
+      let foundRow = -1;
+
+      // 從第2列開始搜尋 (第1列是標題)
+      if (lastRow > 1) {
+        const orderIdColumn = sheet.getRange(2, 2, lastRow - 1, 1).getValues(); // B欄是 orderId
+        for (let i = 0; i < orderIdColumn.length; i++) {
+          if (orderIdColumn[i][0] === data.orderId) {
+            foundRow = i + 2; // +2 因為陣列從0開始，且跳過標題列
+            break;
+          }
+        }
+      }
+
+      if (foundRow > 0) {
+        // 找到原訂單，覆寫該行
+        sheet.getRange(foundRow, 1, 1, rowData.length).setValues([rowData]);
+        Logger.log('Updated existing order at row: ' + foundRow);
+        return ContentService.createTextOutput(
+          JSON.stringify({ status: 'ok', action: 'updated', row: foundRow })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
+    // 新增一筆訂單
+    sheet.appendRow(rowData);
 
     return ContentService.createTextOutput(
-      JSON.stringify({ status: 'ok' })
+      JSON.stringify({ status: 'ok', action: 'created' })
     ).setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
