@@ -1,0 +1,85 @@
+// Google Apps Script 範例：貼到試算表的 Apps Script 編輯器
+// 完成後「部署為網路應用程式」，權限設任何人可存取
+
+function doGet(e) {
+  return ContentService.createTextOutput(
+    JSON.stringify({ status: 'ok', message: 'Apps Script is running' })
+  ).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  try {
+    Logger.log('Received POST data: ' + JSON.stringify(e));
+
+    if (!e || !e.postData || !e.postData.contents) {
+      throw new Error('No POST data received');
+    }
+
+    const data = JSON.parse(e.postData.contents);
+    Logger.log('Parsed data: ' + JSON.stringify(data));
+
+    const ss = SpreadsheetApp.openById(data.sheetId);
+    const sheet = ss.getSheets()[0];
+    const itemsText = data.itemsSummary || JSON.stringify(data.items);
+
+    // 準備要寫入的資料列
+    const rowData = [
+      new Date(),
+      data.orderId,
+      data.consultantName,
+      data.consultantId,
+      data.consultantLocation,
+      data.customerName,
+      data.customerPhone,
+      data.customerEmail,
+      data.customerBirthday,
+      data.customerAddress,
+      data.customerCompany,
+      data.customerTaxId,
+      data.customerSource,
+      data.customerNotes,
+      itemsText,
+      data.total,
+      data.signature
+    ];
+
+    // 如果是更新模式，找到原訂單並覆寫
+    if (data.isUpdate && data.orderId) {
+      const lastRow = sheet.getLastRow();
+      let foundRow = -1;
+
+      // 從第2列開始搜尋 (第1列是標題)
+      if (lastRow > 1) {
+        const orderIdColumn = sheet.getRange(2, 2, lastRow - 1, 1).getValues(); // B欄是 orderId
+        for (let i = 0; i < orderIdColumn.length; i++) {
+          if (orderIdColumn[i][0] === data.orderId) {
+            foundRow = i + 2; // +2 因為陣列從0開始，且跳過標題列
+            break;
+          }
+        }
+      }
+
+      if (foundRow > 0) {
+        // 找到原訂單，覆寫該行
+        sheet.getRange(foundRow, 1, 1, rowData.length).setValues([rowData]);
+        Logger.log('Updated existing order at row: ' + foundRow);
+        return ContentService.createTextOutput(
+          JSON.stringify({ status: 'ok', action: 'updated', row: foundRow })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
+    // 新增一筆訂單
+    sheet.appendRow(rowData);
+
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'ok', action: 'created' })
+    ).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    Logger.log('Error: ' + err.message);
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'error', message: err.message })
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
+}

@@ -1,0 +1,187 @@
+/**
+ * 吾飛藝術銀行 - 會員服務訂購單 樣式表
+ * =============================================
+ * 結構:
+ * 1. 基礎樣式 (Base Styles)
+ * 2. 動畫定義 (Animations)
+ * 3. RWD 響應式設計 (Responsive)
+ * 4. 觸控優化 (Touch Optimization)
+ * 5. Safe Area 處理 (iOS Notch)
+ */
+
+/* =============================================
+   1. 基礎樣式 (Base Styles)
+   ============================================= */
+
+/* 優化移動端體驗：防止 iOS 橡皮筋捲動，優化簽名板操作 */
+html, body {
+    overscroll-behavior: none;
+    touch-action: pan-x pan-y;
+}
+
+/* 美化捲軸 */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+/* 簽名時鎖定觸控 */
+.touch-none {
+    touch-action: none !important;
+}
+
+/* 修正 iOS Date Input 樣式問題 */
+input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-height: 56px; /* 確保高度 */
+}
+
+/* =============================================
+   2. 動畫定義 (Animations)
+   ============================================= */
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes scale-in {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes slide-up {
+    from {
+        opacity: 0;
+        transform: translateY(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-fade-in {
+    animation: fade-in 0.2s ease-out;
+}
+
+.animate-scale-in {
+    animation: scale-in 0.25s ease-out;
+}
+
+.animate-slide-up {
+    animation: slide-up 0.3s ease-out;
+}
+
+/* =============================================
+   3. RWD 響應式設計 (Responsive)
+   ============================================= */
+
+/* 手機 (< 640px) - 預設為手機優先 */
+@media (max-width: 639px) {
+    .mobile-stack {
+        flex-direction: column !important;
+    }
+    .mobile-full {
+        width: 100% !important;
+    }
+    .mobile-text-sm {
+        font-size: 0.875rem !important;
+    }
+    .mobile-p-4 {
+        padding: 1rem !important;
+    }
+    .mobile-gap-2 {
+        gap: 0.5rem !important;
+    }
+}
+
+/* 平板 iPad (640px - 1024px) */
+@media (min-width: 640px) and (max-width: 1024px) {
+    .tablet-container {
+        max-width: 720px !important;
+        margin: 0 auto;
+    }
+    .tablet-grid-2 {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    .tablet-px-8 {
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+    }
+}
+
+/* 桌機 (> 1024px) */
+@media (min-width: 1025px) {
+    .desktop-container {
+        max-width: 800px !important;
+        margin: 0 auto;
+    }
+    .desktop-grid-3 {
+        grid-template-columns: repeat(3, 1fr) !important;
+    }
+    .desktop-hover-scale:hover {
+        transform: scale(1.02);
+    }
+}
+
+/* iPad 橫向模式特殊處理 */
+@media (min-width: 768px) and (max-width: 1024px) and (orientation: landscape) {
+    .ipad-landscape-fix {
+        max-height: 70vh;
+    }
+}
+
+/* =============================================
+   4. Safe Area 處理 (iOS Notch)
+   ============================================= */
+
+@supports (padding: max(0px)) {
+    .safe-area-bottom {
+        padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+    }
+    .safe-area-top {
+        padding-top: max(1rem, env(safe-area-inset-top));
+    }
+}
+
+/* =============================================
+   5. 觸控優化 (Touch Optimization)
+   ============================================= */
+
+/* 改善觸控反饋 */
+@media (hover: none) and (pointer: coarse) {
+    button, .clickable {
+        -webkit-tap-highlight-color: transparent;
+    }
+    button:active, .clickable:active {
+        transform: scale(0.98);
+        transition: transform 0.1s ease;
+    }
+}
+
+/* 優化表單元素在觸控裝置上的大小 */
+@media (pointer: coarse) {
+    input, select, textarea, button {
+        min-height: 48px; /* 確保觸控友善 */
+    }
+}
