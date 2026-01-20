@@ -61,7 +61,8 @@
             const [consultantInfo, setConsultantInfo] = useState({ name: '', id: '', location: DEFAULT_LOCATION });
             const [customerInfo, setCustomerInfo] = useState({
                 name: '', phone: '', birthday: '', email: '',
-                address: '', company: '', taxId: '', source: '', notes: ''
+                address: '', company: '', taxId: '', source: '', notes: '',
+                appointmentDate: '', appointmentTime: '', appointmentPeriod: 'morning'
             });
             const [errors, setErrors] = useState({});
             const [expandedCards, setExpandedCards] = useState({});
@@ -78,6 +79,66 @@
 
             // 編輯模式 - 保留原訂單編號
             const [editingOrderId, setEditingOrderId] = useState(null);
+
+            // 自定義下拉選單狀態
+            const [showPeriodDropdown, setShowPeriodDropdown] = useState(false);
+            const [showTimeDropdown, setShowTimeDropdown] = useState(false);
+            const [showDatePicker, setShowDatePicker] = useState(false);
+            const periodRef = useRef(null);
+            const timeRef = useRef(null);
+            const datePickerRef = useRef(null);
+
+            // 日期選擇器相關狀態
+            const [currentMonth, setCurrentMonth] = useState(new Date());
+
+            // 日期選擇器輔助函數
+            const getDaysInMonth = (date) => {
+                const year = date.getFullYear();
+                const month = date.getMonth();
+                const firstDay = new Date(year, month, 1);
+                const lastDay = new Date(year, month + 1, 0);
+                const daysInMonth = lastDay.getDate();
+                const startingDayOfWeek = firstDay.getDay();
+
+                const days = [];
+                // 填充前面的空白
+                for (let i = 0; i < startingDayOfWeek; i++) {
+                    days.push(null);
+                }
+                // 填充實際日期
+                for (let i = 1; i <= daysInMonth; i++) {
+                    days.push(new Date(year, month, i));
+                }
+                return days;
+            };
+
+            const isSameDay = (date1, date2) => {
+                if (!date1 || !date2) return false;
+                return date1.getFullYear() === date2.getFullYear() &&
+                       date1.getMonth() === date2.getMonth() &&
+                       date1.getDate() === date2.getDate();
+            };
+
+            const isToday = (date) => {
+                if (!date) return false;
+                const today = new Date();
+                return isSameDay(date, today);
+            };
+
+            const isPastDate = (date) => {
+                if (!date) return false;
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                return date < today;
+            };
+
+            const formatDateString = (date) => {
+                if (!date) return '';
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
 
             // =============================================
             // 初始化 Effect - 載入草稿
@@ -136,7 +197,13 @@
                     }));
                 }
 
-                const handleScroll = () => setScrolled(window.scrollY > 20);
+                const handleScroll = () => {
+                    setScrolled(window.scrollY > 20);
+                    // 捲動時關閉所有下拉選單
+                    setShowPeriodDropdown(false);
+                    setShowTimeDropdown(false);
+                    setShowDatePicker(false);
+                };
                 window.addEventListener('scroll', handleScroll);
                 return () => window.removeEventListener('scroll', handleScroll);
             }, []);
@@ -155,6 +222,31 @@
                 };
                 localStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
             }, [consultantInfo, customerInfo, cart, signatureData, editingOrderId]);
+
+            // =============================================
+            // 點擊外部關閉下拉選單
+            // =============================================
+            useEffect(() => {
+                const handleClickOutside = (event) => {
+                    // 檢查是否點擊在任何下拉選單觸發按鈕上
+                    const isPeriodButton = periodRef.current?.querySelector('button:first-child')?.contains(event.target);
+                    const isTimeButton = timeRef.current?.querySelector('button:first-child')?.contains(event.target);
+                    const isDateButton = datePickerRef.current?.querySelector('button:first-child')?.contains(event.target);
+
+                    if (!isPeriodButton && showPeriodDropdown) {
+                        setShowPeriodDropdown(false);
+                    }
+                    if (!isTimeButton && showTimeDropdown) {
+                        setShowTimeDropdown(false);
+                    }
+                    if (!isDateButton && showDatePicker) {
+                        setShowDatePicker(false);
+                    }
+                };
+
+                document.addEventListener('mousedown', handleClickOutside);
+                return () => document.removeEventListener('mousedown', handleClickOutside);
+            }, [showPeriodDropdown, showTimeDropdown, showDatePicker]);
 
             // =============================================
             // 簽名板 Canvas Effects
@@ -333,6 +425,9 @@
                     customerTaxId: finalOrder.customer.taxId,
                     customerSource: finalOrder.customer.source,
                     customerNotes: finalOrder.customer.notes,
+                    customerAppointmentDate: finalOrder.customer.appointmentDate,
+                    customerAppointmentPeriod: finalOrder.customer.appointmentPeriod,
+                    customerAppointmentTime: finalOrder.customer.appointmentTime,
                     itemsSummary,
                     items: finalOrder.items,
                     total: finalOrder.total,
@@ -386,6 +481,9 @@
                 if (!customerInfo.phone) newErrors.customer_phone = true;
                 if (!customerInfo.email) newErrors.customer_email = true;
                 if (!customerInfo.source) newErrors.customer_source = true;
+                if (!customerInfo.appointmentDate) newErrors.customer_appointmentDate = true;
+                if (!customerInfo.appointmentPeriod) newErrors.customer_appointmentPeriod = true;
+                if (!customerInfo.appointmentTime) newErrors.customer_appointmentTime = true;
 
                 if (customerInfo.birthday && customerInfo.birthday.length !== 8) {
                     newErrors.customer_birthday = true;
@@ -558,6 +656,286 @@
                                         </div>
                                     );
                                 })}
+                            </div>
+                        </section>
+
+                        {/* 預約行事曆區塊 */}
+                        <section className="space-y-3 sm:space-y-4">
+                            <h3 className="text-base sm:text-lg font-bold border-b border-gray-200 pb-2 text-[#1d1d1f]">預約行事曆</h3>
+                            <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                                <div className="relative w-full" style={{
+                                    paddingBottom: window.innerWidth < 640 ? '120%' : '80%'
+                                }}>
+                                    <iframe
+                                        src="https://calendar.google.com/calendar/embed?src=c2hhcmVkLmNhbGVuZGFyLnZpYmVAZ21haWwuY29t&ctz=Asia%2FTaipei&mode=WEEK&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0"
+                                        style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0}}
+                                        frameBorder="0"
+                                        scrolling="no"
+                                        title="預約行事曆"
+                                    />
+                                </div>
+                                <div className="p-4 sm:p-6 bg-gray-50 border-t border-gray-100 space-y-3 sm:space-y-4">
+                                    <p className="text-xs sm:text-sm text-gray-600 flex items-center gap-2">
+                                        <Info className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                                        請參考上方行事曆，選擇合適的預約日期與時間
+                                    </p>
+
+                                    <div className="space-y-3">
+                                        {/* 自定義日期選擇器 */}
+                                        <div className="space-y-1" ref={datePickerRef}>
+                                            <label className="text-[10px] sm:text-xs text-gray-400 font-medium">預約日期 <span className="text-red-500">*</span></label>
+                                            <div className="relative">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setShowDatePicker(!showDatePicker);
+                                                        setShowPeriodDropdown(false);
+                                                        setShowTimeDropdown(false);
+                                                    }}
+                                                    className={`${getInputClass(errors.customer_appointmentDate)} text-sm sm:text-base text-left flex items-center justify-between w-full`}
+                                                >
+                                                    <span className={customerInfo.appointmentDate ? 'text-[#1d1d1f]' : 'text-gray-400'}>
+                                                        {customerInfo.appointmentDate ? new Date(customerInfo.appointmentDate).toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' }) : '選擇日期'}
+                                                    </span>
+                                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${showDatePicker ? 'rotate-180' : ''}`} />
+                                                </button>
+
+                                                {showDatePicker && (
+                                                    <div className="fixed inset-0 z-[100]" onClick={() => setShowDatePicker(false)}>
+                                                        <div
+                                                            className="absolute bg-white rounded-xl border border-gray-200 shadow-2xl p-3 sm:p-4 animate-slide-down"
+                                                            style={{
+                                                                top: datePickerRef.current ? datePickerRef.current.getBoundingClientRect().bottom + 4 : 'auto',
+                                                                left: datePickerRef.current ? datePickerRef.current.getBoundingClientRect().left : '16px',
+                                                                maxWidth: datePickerRef.current ? datePickerRef.current.getBoundingClientRect().width : 'auto'
+                                                            }}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                        {/* 月份導航 */}
+                                                        <div className="flex items-center justify-between mb-3">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}
+                                                                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                                                            >
+                                                                <ChevronDown className="w-4 h-4 rotate-90 text-gray-600" />
+                                                            </button>
+                                                            <div className="text-sm sm:text-base font-bold text-[#1d1d1f]">
+                                                                {currentMonth.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long' })}
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}
+                                                                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                                                            >
+                                                                <ChevronDown className="w-4 h-4 -rotate-90 text-gray-600" />
+                                                            </button>
+                                                        </div>
+
+                                                        {/* 星期標題 */}
+                                                        <div className="grid grid-cols-7 gap-1 mb-2">
+                                                            {['日', '一', '二', '三', '四', '五', '六'].map((day, i) => (
+                                                                <div key={i} className="text-center text-[10px] sm:text-xs font-medium text-gray-400 py-1">
+                                                                    {day}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+
+                                                        {/* 日期格子 */}
+                                                        <div className="grid grid-cols-7 gap-1">
+                                                            {getDaysInMonth(currentMonth).map((date, index) => {
+                                                                if (!date) {
+                                                                    return <div key={`empty-${index}`} className="aspect-square" />;
+                                                                }
+
+                                                                const selected = customerInfo.appointmentDate && isSameDay(date, new Date(customerInfo.appointmentDate));
+                                                                const today = isToday(date);
+                                                                const past = isPastDate(date);
+
+                                                                return (
+                                                                    <button
+                                                                        key={index}
+                                                                        type="button"
+                                                                        disabled={past}
+                                                                        onClick={() => {
+                                                                            setCustomerInfo(prev => ({ ...prev, appointmentDate: formatDateString(date) }));
+                                                                            setShowDatePicker(false);
+                                                                            if (errors.customer_appointmentDate) {
+                                                                                setErrors(prev => ({ ...prev, customer_appointmentDate: false }));
+                                                                            }
+                                                                        }}
+                                                                        className={`aspect-square flex items-center justify-center text-xs sm:text-sm rounded-lg transition-all ${
+                                                                            past
+                                                                                ? 'text-gray-300 cursor-not-allowed'
+                                                                                : selected
+                                                                                ? 'bg-purple-600 text-white font-bold shadow-lg shadow-purple-500/30'
+                                                                                : today
+                                                                                ? 'bg-purple-50 text-purple-600 font-bold hover:bg-purple-100'
+                                                                                : 'text-[#1d1d1f] hover:bg-gray-100'
+                                                                        }`}
+                                                                    >
+                                                                        {date.getDate()}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+
+                                                        {/* 快速選擇 */}
+                                                        <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setCurrentMonth(new Date());
+                                                                    setCustomerInfo(prev => ({ ...prev, appointmentDate: formatDateString(new Date()) }));
+                                                                    setShowDatePicker(false);
+                                                                    if (errors.customer_appointmentDate) {
+                                                                        setErrors(prev => ({ ...prev, customer_appointmentDate: false }));
+                                                                    }
+                                                                }}
+                                                                className="flex-1 py-2 text-xs sm:text-sm font-medium text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
+                                                            >
+                                                                今天
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setCustomerInfo(prev => ({ ...prev, appointmentDate: '' }));
+                                                                    setShowDatePicker(false);
+                                                                }}
+                                                                className="flex-1 py-2 text-xs sm:text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                                                            >
+                                                                清除
+                                                            </button>
+                                                        </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                                            {/* 時段選擇 - 自定義下拉選單 */}
+                                            <div className="space-y-1" ref={periodRef}>
+                                                <label className="text-[10px] sm:text-xs text-gray-400 font-medium">時段 <span className="text-red-500">*</span></label>
+                                                <div className="relative">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setShowPeriodDropdown(!showPeriodDropdown);
+                                                            setShowTimeDropdown(false);
+                                                        }}
+                                                        className={`${getInputClass(errors.customer_appointmentPeriod)} text-sm sm:text-base text-left flex items-center justify-between w-full`}
+                                                    >
+                                                        <span>
+                                                            {customerInfo.appointmentPeriod === 'morning' && '上午'}
+                                                            {customerInfo.appointmentPeriod === 'afternoon' && '下午'}
+                                                            {customerInfo.appointmentPeriod === 'evening' && '晚上'}
+                                                        </span>
+                                                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${showPeriodDropdown ? 'rotate-180' : ''}`} />
+                                                    </button>
+
+                                                    {showPeriodDropdown && (
+                                                        <div className="fixed z-[90] bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden animate-slide-down" onClick={(e) => e.stopPropagation()} style={{
+                                                            top: periodRef.current ? periodRef.current.getBoundingClientRect().bottom + 4 : 'auto',
+                                                            left: periodRef.current ? periodRef.current.getBoundingClientRect().left : '16px',
+                                                            width: periodRef.current ? periodRef.current.getBoundingClientRect().width : 'auto'
+                                                        }}>
+                                                            {[
+                                                                { value: 'morning', label: '上午', time: '09:00 - 12:00' },
+                                                                { value: 'afternoon', label: '下午', time: '13:00 - 17:00' },
+                                                                { value: 'evening', label: '晚上', time: '18:00 - 21:00' }
+                                                            ].map((period) => (
+                                                                <button
+                                                                    key={period.value}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setCustomerInfo(prev => ({ ...prev, appointmentPeriod: period.value, appointmentTime: '' }));
+                                                                        setShowPeriodDropdown(false);
+                                                                        if (errors.customer_appointmentPeriod) {
+                                                                            setErrors(prev => ({ ...prev, customer_appointmentPeriod: false }));
+                                                                        }
+                                                                    }}
+                                                                    className={`w-full px-3 py-2.5 sm:px-4 sm:py-3 text-left hover:bg-purple-50 transition-colors flex items-center justify-between group ${
+                                                                        customerInfo.appointmentPeriod === period.value ? 'bg-purple-50' : ''
+                                                                    }`}
+                                                                >
+                                                                    <div>
+                                                                        <div className="text-sm sm:text-base font-medium text-[#1d1d1f]">{period.label}</div>
+                                                                        <div className="text-[10px] sm:text-xs text-gray-400">{period.time}</div>
+                                                                    </div>
+                                                                    {customerInfo.appointmentPeriod === period.value && (
+                                                                        <Check className="w-4 h-4 text-purple-600" />
+                                                                    )}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* 時間選擇 - 自定義下拉選單 */}
+                                            <div className="space-y-1" ref={timeRef}>
+                                                <label className="text-[10px] sm:text-xs text-gray-400 font-medium">時間 <span className="text-red-500">*</span></label>
+                                                <div className="relative">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setShowTimeDropdown(!showTimeDropdown);
+                                                            setShowPeriodDropdown(false);
+                                                        }}
+                                                        className={`${getInputClass(errors.customer_appointmentTime)} text-sm sm:text-base text-left flex items-center justify-between w-full`}
+                                                    >
+                                                        <span className={customerInfo.appointmentTime ? 'text-[#1d1d1f]' : 'text-gray-400'}>
+                                                            {customerInfo.appointmentTime || '選擇時間'}
+                                                        </span>
+                                                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${showTimeDropdown ? 'rotate-180' : ''}`} />
+                                                    </button>
+
+                                                    {showTimeDropdown && (
+                                                        <div className="fixed z-[90] bg-white rounded-xl border border-gray-200 shadow-xl max-h-[240px] overflow-y-auto animate-slide-down custom-scrollbar" onClick={(e) => e.stopPropagation()} style={{
+                                                            top: timeRef.current ? timeRef.current.getBoundingClientRect().bottom + 4 : 'auto',
+                                                            left: timeRef.current ? timeRef.current.getBoundingClientRect().left : '16px',
+                                                            width: timeRef.current ? timeRef.current.getBoundingClientRect().width : 'auto'
+                                                        }}>
+                                                            {(() => {
+                                                                const times = [];
+                                                                if (customerInfo.appointmentPeriod === 'morning') {
+                                                                    times.push('09:00', '09:30', '10:00', '10:30', '11:00', '11:30');
+                                                                } else if (customerInfo.appointmentPeriod === 'afternoon') {
+                                                                    times.push('13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30');
+                                                                } else if (customerInfo.appointmentPeriod === 'evening') {
+                                                                    times.push('18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00');
+                                                                }
+
+                                                                return times.map((time) => (
+                                                                    <button
+                                                                        key={time}
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setCustomerInfo(prev => ({ ...prev, appointmentTime: time }));
+                                                                            setShowTimeDropdown(false);
+                                                                            if (errors.customer_appointmentTime) {
+                                                                                setErrors(prev => ({ ...prev, customer_appointmentTime: false }));
+                                                                            }
+                                                                        }}
+                                                                        className={`w-full px-3 py-2.5 sm:px-4 sm:py-3 text-left hover:bg-purple-50 transition-colors flex items-center justify-between ${
+                                                                            customerInfo.appointmentTime === time ? 'bg-purple-50' : ''
+                                                                        }`}
+                                                                    >
+                                                                        <span className="text-sm sm:text-base font-medium text-[#1d1d1f]">{time}</span>
+                                                                        {customerInfo.appointmentTime === time && (
+                                                                            <Check className="w-4 h-4 text-purple-600" />
+                                                                        )}
+                                                                    </button>
+                                                                ));
+                                                            })()}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </section>
 

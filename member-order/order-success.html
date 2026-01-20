@@ -495,6 +495,39 @@
                                             <p className="text-[10px] sm:text-xs text-gray-400">地址</p>
                                             <p className="font-medium text-sm sm:text-base text-[#1d1d1f] break-words">{orderResult.customer.address || '-'}</p>
                                         </div>
+                                        {(orderResult.customer.appointmentDate || orderResult.customer.appointmentTime) && (
+                                            <div className="bg-purple-50 rounded-xl p-3 sm:p-4 border border-purple-100">
+                                                <p className="text-[10px] sm:text-xs text-purple-600 font-bold mb-1.5 flex items-center gap-1.5">
+                                                    <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> 預約時間
+                                                </p>
+                                                <div className="space-y-1">
+                                                    {orderResult.customer.appointmentDate && (
+                                                        <p className="font-bold text-base sm:text-lg text-purple-900">
+                                                            {new Date(orderResult.customer.appointmentDate).toLocaleDateString('zh-TW', {
+                                                                year: 'numeric',
+                                                                month: 'long',
+                                                                day: 'numeric',
+                                                                weekday: 'short'
+                                                            })}
+                                                        </p>
+                                                    )}
+                                                    {(orderResult.customer.appointmentPeriod || orderResult.customer.appointmentTime) && (
+                                                        <p className="text-sm sm:text-base text-purple-700 flex items-center gap-2">
+                                                            {orderResult.customer.appointmentPeriod && (
+                                                                <span className="bg-purple-100 px-2 py-0.5 rounded text-xs font-medium">
+                                                                    {orderResult.customer.appointmentPeriod === 'morning' && '上午'}
+                                                                    {orderResult.customer.appointmentPeriod === 'afternoon' && '下午'}
+                                                                    {orderResult.customer.appointmentPeriod === 'evening' && '晚上'}
+                                                                </span>
+                                                            )}
+                                                            {orderResult.customer.appointmentTime && (
+                                                                <span className="font-semibold">{orderResult.customer.appointmentTime}</span>
+                                                            )}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* 訂購項目 */}
