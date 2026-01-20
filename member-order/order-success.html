@@ -175,33 +175,39 @@
                         return;
                     }
 
-                    if (!liff.isLoggedIn()) {
-                        // 導向 LINE Login
+                    // 確保 LIFF 已初始化
+                    if (!liff.isInClient() && !liff.isLoggedIn()) {
+                        // 在外部瀏覽器且未登入，需要先登入
                         liff.login({ redirectUri: window.location.href });
                         return;
                     }
 
-                    // 已登入，直接發送訂單
+                    // 已登入或在 LINE App 內，直接發送訂單
                     await sendOrderToLine();
                 } catch (error) {
                     console.error('LINE Login error:', error);
-                    alert('LINE 登入失敗，請改用掃描 QR Code 方式');
+                    alert('LINE 分享失敗，請改用掃描 QR Code 方式');
                     handleShowLineQR();
                 }
             };
 
             // =============================================
-            // 發送訂單到 LINE (Push Message)
+            // 發送訂單到 LINE (使用 LIFF shareTargetPicker)
             // =============================================
             const sendOrderToLine = async () => {
-                if (!orderResult || !lineProfile) {
-                    alert('無法發送訂單，請確認已登入 LINE');
+                if (!orderResult) {
+                    alert('無法發送訂單，請確認訂單資料存在');
                     return;
                 }
 
                 setIsSendingToLine(true);
 
                 try {
+                    // 檢查 LIFF 是否支援 shareTargetPicker
+                    if (!liff.isApiAvailable('shareTargetPicker')) {
+                        throw new Error('此環境不支援分享功能，請使用 QR Code 方式');
+                    }
+
                     // 準備訂單資料
                     const itemsData = Object.entries(orderResult.items).map(([id, qty]) => {
                         const product = initialProducts.find(p => p.id === parseInt(id));
@@ -213,58 +219,125 @@
                         };
                     });
 
-                    const orderData = {
-                        orderId: orderResult.id,
-                        customerName: orderResult.customer.name,
-                        customerPhone: orderResult.customer.phone,
-                        customerEmail: orderResult.customer.email,
-                        items: itemsData,
-                        total: orderResult.total,
-                        consultantName: orderResult.consultant.name,
-                        consultantId: orderResult.consultant.id,
-                        consultantLocation: orderResult.consultant.location,
-                        lineUserId: lineProfile.userId,
-                        lineDisplayName: lineProfile.displayName
+                    // 建立訂單項目 Flex 元件
+                    const itemsComponents = itemsData.map(item => ({
+                        type: 'box',
+                        layout: 'horizontal',
+                        contents: [
+                            { type: 'text', text: item.name, size: 'sm', color: '#555555', flex: 4, wrap: true },
+                            { type: 'text', text: `x${item.qty}`, size: 'sm', color: '#888888', flex: 1, align: 'center' },
+                            { type: 'text', text: `$${item.subtotal.toLocaleString()}`, size: 'sm', color: '#111111', flex: 2, align: 'end' }
+                        ]
+                    }));
+
+                    // 建立 Flex Message
+                    const flexMessage = {
+                        type: 'flex',
+                        altText: `【吾飛藝術銀行】訂單確認 ${orderResult.id}`,
+                        contents: {
+                            type: 'bubble',
+                            size: 'giga',
+                            header: {
+                                type: 'box',
+                                layout: 'vertical',
+                                backgroundColor: '#1d1d1f',
+                                paddingAll: '20px',
+                                contents: [
+                                    { type: 'text', text: '吾飛藝術銀行', color: '#ffffff', size: 'lg', weight: 'bold' },
+                                    { type: 'text', text: '訂單確認', color: '#aaaaaa', size: 'sm', margin: 'sm' }
+                                ]
+                            },
+                            body: {
+                                type: 'box',
+                                layout: 'vertical',
+                                paddingAll: '20px',
+                                spacing: 'md',
+                                contents: [
+                                    // 訂單編號
+                                    {
+                                        type: 'box',
+                                        layout: 'horizontal',
+                                        contents: [
+                                            { type: 'text', text: '訂單編號', size: 'sm', color: '#888888', flex: 2 },
+                                            { type: 'text', text: orderResult.id, size: 'sm', color: '#111111', flex: 3, align: 'end', weight: 'bold' }
+                                        ]
+                                    },
+                                    // 客戶資訊
+                                    {
+                                        type: 'box',
+                                        layout: 'horizontal',
+                                        contents: [
+                                            { type: 'text', text: '客戶', size: 'sm', color: '#888888', flex: 2 },
+                                            { type: 'text', text: `${orderResult.customer.name} / ${orderResult.customer.phone}`, size: 'sm', color: '#111111', flex: 3, align: 'end', wrap: true }
+                                        ]
+                                    },
+                                    // 顧問資訊
+                                    {
+                                        type: 'box',
+                                        layout: 'horizontal',
+                                        contents: [
+                                            { type: 'text', text: '顧問', size: 'sm', color: '#888888', flex: 2 },
+                                            { type: 'text', text: `${orderResult.consultant.name} (${orderResult.consultant.location})`, size: 'sm', color: '#111111', flex: 3, align: 'end', wrap: true }
+                                        ]
+                                    },
+                                    // 分隔線
+                                    { type: 'separator', margin: 'lg' },
+                                    // 訂購項目標題
+                                    { type: 'text', text: '訂購項目', size: 'sm', color: '#888888', margin: 'lg' },
+                                    // 訂購項目列表
+                                    ...itemsComponents,
+                                    // 分隔線
+                                    { type: 'separator', margin: 'lg' },
+                                    // 總金額
+                                    {
+                                        type: 'box',
+                                        layout: 'horizontal',
+                                        margin: 'lg',
+                                        contents: [
+                                            { type: 'text', text: '總金額', size: 'md', color: '#111111', weight: 'bold' },
+                                            { type: 'text', text: `NT$ ${orderResult.total.toLocaleString()}`, size: 'lg', color: '#e74c3c', weight: 'bold', align: 'end' }
+                                        ]
+                                    }
+                                ]
+                            },
+                            footer: {
+                                type: 'box',
+                                layout: 'vertical',
+                                paddingAll: '15px',
+                                backgroundColor: '#f7f7f7',
+                                contents: [
+                                    { type: 'text', text: '請完成付款後截圖回傳確認', size: 'xs', color: '#888888', align: 'center' },
+                                    { type: 'text', text: LINE.OFFICIAL_ACCOUNT_ID, size: 'xs', color: '#888888', align: 'center', margin: 'sm' }
+                                ]
+                            }
+                        }
                     };
 
-                    // 判斷使用哪個 API 端點
-                    const apiEndpoint = LINE.PUSH_API_ENDPOINT || GOOGLE_SCRIPT_URL;
+                    // 使用 shareTargetPicker 讓用戶選擇分享對象
+                    const result = await liff.shareTargetPicker([flexMessage], { isMultiple: false });
 
-                    // 發送到後端 API
-                    const response = await fetch(apiEndpoint, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            action: 'pushOrderCard',
-                            userId: lineProfile.userId,
-                            orderData: orderData
-                        })
-                    });
-
-                    const result = await response.json();
-
-                    if (result.success) {
+                    if (result) {
+                        // 用戶成功分享
                         setLineSendResult('success');
-                        // 同時保存 LINE userId 到訂單中
+                        setShowLineSentModal(true);
+                        // 保存分享記錄
                         const updatedOrder = {
                             ...orderResult,
-                            lineUserId: lineProfile.userId,
-                            lineDisplayName: lineProfile.displayName,
-                            lineSentAt: new Date().toISOString()
+                            lineSharedAt: new Date().toISOString(),
+                            lineDisplayName: lineProfile?.displayName || 'unknown'
                         };
                         localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
                         setOrderResult(updatedOrder);
                     } else {
-                        throw new Error(result.error || '發送失敗');
+                        // 用戶取消分享，不做任何事
+                        console.log('User canceled share');
                     }
                 } catch (error) {
                     console.error('Send to LINE error:', error);
                     setLineSendResult('error');
+                    setShowLineSentModal(true);
                 } finally {
                     setIsSendingToLine(false);
-                    setShowLineSentModal(true);
                 }
             };
 
