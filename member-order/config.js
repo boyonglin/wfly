@@ -19,7 +19,7 @@
 // 3) 將部署後的 URL 貼到 GOOGLE_SCRIPT_URL
 const CONFIG = {
     // Google Apps Script API
-    GOOGLE_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxFg58LVYjkO5TlXvs5FRyGzw6e0B2785ecxthP91_IgAFveai-NiaHn-hy8WHKV4P_DA/exec",
+    GOOGLE_SCRIPT_URL: "https://script.google.com/macros/s/AKfycby85Ru3dcOoFnuZnIGdlbEG-GKC7wJAxx7ZrGUrwsnhk57DVS3UltEWWrem2HGikXXu5g/exec",
     GOOGLE_SHEET_ID: "182ZsNsbZNhF7RmgW3egw9Zg2Z3Tp-XCclHZgGmSvI34",
 
     // =============================================
