@@ -1,0 +1,315 @@
+/**
+ * Google Apps Script - LINE Push Message 代理 v2
+ * =============================================
+ * 使用 GET 請求 + JSONP 來繞過 CORS 問題
+ *
+ * 【設定步驟】
+ * 1. 到 Google Apps Script (script.google.com) 建立新專案
+ * 2. 貼上此程式碼
+ * 3. 設定腳本屬性：
+ *    - 點擊「設定」(齒輪圖示) > 「腳本屬性」
+ *    - 新增屬性：LINE_CHANNEL_ACCESS_TOKEN = 你的 Messaging API Channel Access Token
+ * 4. 部署為網路應用程式：
+ *    - 執行為：我自己
+ *    - 誰可存取：任何人
+ * 5. 複製部署的 URL 到 config.js 的 PUSH_API_ENDPOINT
+ */
+
+const LINE_PUSH_API = 'https://api.line.me/v2/bot/message/push';
+
+/**
+ * 處理 GET 請求（用於繞過 CORS）
+ * 使用方式：GET ?action=pushOrderCard&data=BASE64_ENCODED_JSON
+ */
+function doGet(e) {
+  try {
+    const action = e.parameter.action;
+
+    // 如果沒有 action，返回狀態檢查
+    if (!action) {
+      return createJsonpResponse(e, {
+        status: 'ok',
+        message: 'LINE Push API v2 is running',
+        usage: 'GET ?action=pushOrderCard&data=BASE64_ENCODED_JSON'
+      });
+    }
+
+    // 取得 Channel Access Token
+    const props = PropertiesService.getScriptProperties();
+    const channelAccessToken = props.getProperty('LINE_CHANNEL_ACCESS_TOKEN');
+
+    if (!channelAccessToken) {
+      return createJsonpResponse(e, {
+        success: false,
+        error: 'Server config error: Missing TOKEN'
+      });
+    }
+
+    // 解碼 data 參數（BASE64 編碼的 JSON）
+    let data;
+    try {
+      const encodedData = e.parameter.data;
+      if (!encodedData) {
+        return createJsonpResponse(e, {
+          success: false,
+          error: 'Missing data parameter'
+        });
+      }
+      const decodedData = Utilities.newBlob(Utilities.base64Decode(encodedData)).getDataAsString();
+      data = JSON.parse(decodedData);
+    } catch (decodeError) {
+      return createJsonpResponse(e, {
+        success: false,
+        error: 'Invalid data format: ' + decodeError.message
+      });
+    }
+
+    let result;
+
+    switch (action) {
+      case 'pushOrderCard':
+        if (!data.userId || !data.orderData) {
+          return createJsonpResponse(e, {
+            success: false,
+            error: 'Missing userId or orderData'
+          });
+        }
+        result = pushOrderCard(channelAccessToken, data.userId, data.orderData);
+        break;
+
+      case 'pushText':
+        if (!data.userId || !data.message) {
+          return createJsonpResponse(e, {
+            success: false,
+            error: 'Missing userId or message'
+          });
+        }
+        result = pushTextMessage(channelAccessToken, data.userId, data.message);
+        break;
+
+      default:
+        return createJsonpResponse(e, {
+          success: false,
+          error: 'Invalid action: ' + action
+        });
+    }
+
+    return createJsonpResponse(e, result);
+
+  } catch (error) {
+    console.error('Error:', error);
+    return createJsonpResponse(e, {
+      success: false,
+      error: error.message
+    });
+  }
+}
+
+/**
+ * 發送純文字訊息
+ */
+function pushTextMessage(token, userId, text) {
+  const payload = {
+    to: userId,
+    messages: [{
+      type: 'text',
+      text: text
+    }]
+  };
+  return callLinePushApi(token, payload);
+}
+
+/**
+ * 發送訂單卡片
+ */
+function pushOrderCard(token, userId, orderData) {
+  // 建立訂單項目列表
+  const itemsList = orderData.items.map(item => ({
+    type: 'box',
+    layout: 'horizontal',
+    contents: [
+      {
+        type: 'text',
+        text: item.name,
+        size: 'sm',
+        color: '#555555',
+        flex: 4,
+        wrap: true
+      },
+      {
+        type: 'text',
+        text: 'x' + item.qty,
+        size: 'sm',
+        color: '#888888',
+        flex: 1,
+        align: 'center'
+      },
+      {
+        type: 'text',
+        text: 'NT$ ' + item.subtotal.toLocaleString(),
+        size: 'sm',
+        color: '#111111',
+        flex: 2,
+        align: 'end'
+      }
+    ]
+  }));
+
+  const flexMessage = {
+    type: 'flex',
+    altText: '【吾飛藝術銀行】訂單確認 ' + orderData.orderId,
+    contents: {
+      type: 'bubble',
+      size: 'giga',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#1d1d1f',
+        paddingAll: '20px',
+        contents: [
+          {
+            type: 'text',
+            text: '吾飛藝術銀行',
+            color: '#ffffff',
+            size: 'lg',
+            weight: 'bold'
+          },
+          {
+            type: 'text',
+            text: '訂單確認',
+            color: '#aaaaaa',
+            size: 'sm',
+            margin: 'sm'
+          }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '20px',
+        spacing: 'md',
+        contents: [
+          // 訂單編號
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: '訂單編號', size: 'sm', color: '#888888', flex: 2 },
+              { type: 'text', text: orderData.orderId, size: 'sm', color: '#111111', flex: 3, align: 'end', weight: 'bold' }
+            ]
+          },
+          // 客戶資訊
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: '客戶', size: 'sm', color: '#888888', flex: 2 },
+              { type: 'text', text: orderData.customerName + ' / ' + orderData.customerPhone, size: 'sm', color: '#111111', flex: 3, align: 'end', wrap: true }
+            ]
+          },
+          // 顧問資訊
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: '服務顧問', size: 'sm', color: '#888888', flex: 2 },
+              { type: 'text', text: orderData.consultantName + ' (' + orderData.consultantLocation + ')', size: 'sm', color: '#111111', flex: 3, align: 'end', wrap: true }
+            ]
+          },
+          // 分隔線
+          { type: 'separator', margin: 'lg' },
+          // 訂購項目標題
+          { type: 'text', text: '訂購項目', size: 'sm', color: '#888888', margin: 'lg' },
+          // 項目列表
+          ...itemsList,
+          // 分隔線
+          { type: 'separator', margin: 'lg' },
+          // 總金額
+          {
+            type: 'box',
+            layout: 'horizontal',
+            margin: 'lg',
+            contents: [
+              { type: 'text', text: '總金額', size: 'md', color: '#111111', weight: 'bold' },
+              { type: 'text', text: 'NT$ ' + orderData.total.toLocaleString(), size: 'lg', color: '#e74c3c', weight: 'bold', align: 'end' }
+            ]
+          }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '15px',
+        backgroundColor: '#f7f7f7',
+        contents: [
+          { type: 'text', text: '感謝您的訂購！', size: 'xs', color: '#888888', align: 'center' },
+          { type: 'text', text: '如有問題請聯繫客服', size: 'xs', color: '#888888', align: 'center', margin: 'sm' }
+        ]
+      }
+    }
+  };
+
+  const payload = {
+    to: userId,
+    messages: [flexMessage]
+  };
+
+  return callLinePushApi(token, payload);
+}
+
+/**
+ * 呼叫 LINE Push API
+ */
+function callLinePushApi(token, payload) {
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'Authorization': 'Bearer ' + token
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  const response = UrlFetchApp.fetch(LINE_PUSH_API, options);
+  const responseCode = response.getResponseCode();
+  const responseText = response.getContentText();
+
+  if (responseCode === 200) {
+    return { success: true, message: 'Message sent successfully' };
+  } else {
+    console.error('LINE API Error:', responseCode, responseText);
+    return {
+      success: false,
+      error: 'LINE API Error: ' + responseCode,
+      details: 'Please check server logs for more information.'
+    };
+  }
+}
+
+/**
+ * 建立 JSONP 格式回應（支援跨域）
+ */
+function createJsonpResponse(e, data) {
+  const callback = e.parameter.callback;
+  const jsonData = JSON.stringify(data);
+
+  if (callback) {
+    // JSONP 格式
+    return ContentService
+      .createTextOutput(callback + '(' + jsonData + ')')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  } else {
+    // 一般 JSON 格式
+    return ContentService
+      .createTextOutput(jsonData)
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * 測試用：doPost 仍然保留
+ */
+function doPost(e) {
+  return doGet(e);
+}
