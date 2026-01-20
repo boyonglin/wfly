@@ -56,7 +56,19 @@ const CONFIG = {
     LINE: {
         OFFICIAL_ACCOUNT_ID: '@324vsvvv',
         ADD_FRIEND_URL: 'https://line.me/R/ti/p/@324vsvvv',
-        QR_CODE_URL: 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://line.me/R/ti/p/@324vsvvv'
+        QR_CODE_URL: 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://line.me/R/ti/p/@324vsvvv',
+
+        // =============================================
+        // LINE Login 設定 (用於自動發送訂單給客戶)
+        // =============================================
+        // 請到 LINE Developers Console 建立 LINE Login Channel
+        // https://developers.line.biz/console/
+        LOGIN_CHANNEL_ID: '2008930127-ScWAKfa3',  // 【請填入】LINE Login Channel ID
+
+        // 推播 API Endpoint (建議透過後端代理，避免 Token 暴露)
+        // 如果你有後端服務，請填入你的 API 端點
+        // 如果沒有，可以透過 Google Apps Script 代理
+        PUSH_API_ENDPOINT: 'https://script.google.com/macros/s/AKfycbxVTd6tuStUCvsztqGH9FBhKA7a4RD4Bg5yYreDA-KMlusDaSYCMO9E7206Qka_pTjhEQ/exec'  // 【可選】填入後端 API 端點，或留空使用 Google Apps Script
     },
 
     // =============================================

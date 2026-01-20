@@ -19,6 +19,9 @@
 
     <!-- 5. 引入設定檔 (必須在 React 之前載入) -->
     <script src="config.js"></script>
+
+    <!-- 6. 引入 LINE Login SDK -->
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
 <body class="bg-[#f5f5f7]">
     <div id="root"></div>
@@ -37,7 +40,7 @@
         // =============================================
         // 從全域設定取得常數
         // =============================================
-        const { STORAGE_KEY, DRAFT_KEY, PAYMENT, LINE } = window.APP_CONFIG;
+        const { STORAGE_KEY, DRAFT_KEY, PAYMENT, LINE, GOOGLE_SCRIPT_URL } = window.APP_CONFIG;
 
         // Icon 映射表
         const ICON_MAP = {
@@ -99,10 +102,20 @@
             const [showImagePreview, setShowImagePreview] = useState(false);
             const [previewImageUrl, setPreviewImageUrl] = useState('');
 
+            // LINE Login 相關狀態
+            const [isLineLoggedIn, setIsLineLoggedIn] = useState(false);
+            const [lineProfile, setLineProfile] = useState(null);
+            const [isSendingToLine, setIsSendingToLine] = useState(false);
+            const [lineSendResult, setLineSendResult] = useState(null); // 'success', 'error', null
+            const [showLineSentModal, setShowLineSentModal] = useState(false);
+
             // =============================================
             // 初始化 - 載入訂單資料
             // =============================================
             useEffect(() => {
+                // 初始化 LIFF (LINE Login)
+                initializeLiff();
+
                 try {
                     const savedOrder = localStorage.getItem(STORAGE_KEY);
                     if (savedOrder) {
@@ -125,6 +138,135 @@
                     window.location.href = 'order-form.html';
                 }
             }, []);
+
+            // =============================================
+            // LINE Login (LIFF) 初始化
+            // =============================================
+            const initializeLiff = async () => {
+                try {
+                    // 檢查是否有設定 LIFF ID
+                    if (!LINE.LOGIN_CHANNEL_ID || LINE.LOGIN_CHANNEL_ID === 'YOUR_LINE_LOGIN_CHANNEL_ID') {
+                        console.log('LINE Login not configured, using QR code fallback');
+                        return;
+                    }
+
+                    await liff.init({ liffId: LINE.LOGIN_CHANNEL_ID });
+
+                    if (liff.isLoggedIn()) {
+                        const profile = await liff.getProfile();
+                        setLineProfile(profile);
+                        setIsLineLoggedIn(true);
+                        console.log('LINE Login successful:', profile.displayName);
+                    }
+                } catch (error) {
+                    console.error('LIFF initialization failed:', error);
+                }
+            };
+
+            // =============================================
+            // LINE Login 登入流程
+            // =============================================
+            const handleLineLogin = async () => {
+                try {
+                    // 檢查 LIFF 設定
+                    if (!LINE.LOGIN_CHANNEL_ID || LINE.LOGIN_CHANNEL_ID === 'YOUR_LINE_LOGIN_CHANNEL_ID') {
+                        // 未設定 LINE Login，使用傳統 QR Code 方式
+                        handleShowLineQR();
+                        return;
+                    }
+
+                    if (!liff.isLoggedIn()) {
+                        // 導向 LINE Login
+                        liff.login({ redirectUri: window.location.href });
+                        return;
+                    }
+
+                    // 已登入，直接發送訂單
+                    await sendOrderToLine();
+                } catch (error) {
+                    console.error('LINE Login error:', error);
+                    alert('LINE 登入失敗，請改用掃描 QR Code 方式');
+                    handleShowLineQR();
+                }
+            };
+
+            // =============================================
+            // 發送訂單到 LINE (Push Message)
+            // =============================================
+            const sendOrderToLine = async () => {
+                if (!orderResult || !lineProfile) {
+                    alert('無法發送訂單，請確認已登入 LINE');
+                    return;
+                }
+
+                setIsSendingToLine(true);
+
+                try {
+                    // 準備訂單資料
+                    const itemsData = Object.entries(orderResult.items).map(([id, qty]) => {
+                        const product = initialProducts.find(p => p.id === parseInt(id));
+                        return {
+                            name: product.name,
+                            qty: qty,
+                            price: product.price,
+                            subtotal: product.price * qty
+                        };
+                    });
+
+                    const orderData = {
+                        orderId: orderResult.id,
+                        customerName: orderResult.customer.name,
+                        customerPhone: orderResult.customer.phone,
+                        customerEmail: orderResult.customer.email,
+                        items: itemsData,
+                        total: orderResult.total,
+                        consultantName: orderResult.consultant.name,
+                        consultantId: orderResult.consultant.id,
+                        consultantLocation: orderResult.consultant.location,
+                        lineUserId: lineProfile.userId,
+                        lineDisplayName: lineProfile.displayName
+                    };
+
+                    // 判斷使用哪個 API 端點
+                    const apiEndpoint = LINE.PUSH_API_ENDPOINT || GOOGLE_SCRIPT_URL;
+
+                    // 發送到後端 API
+                    const response = await fetch(apiEndpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            action: 'pushOrderCard',
+                            userId: lineProfile.userId,
+                            orderData: orderData
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        setLineSendResult('success');
+                        // 同時保存 LINE userId 到訂單中
+                        const updatedOrder = {
+                            ...orderResult,
+                            lineUserId: lineProfile.userId,
+                            lineDisplayName: lineProfile.displayName,
+                            lineSentAt: new Date().toISOString()
+                        };
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
+                        setOrderResult(updatedOrder);
+                    } else {
+                        throw new Error(result.error || '發送失敗');
+                    }
+                } catch (error) {
+                    console.error('Send to LINE error:', error);
+                    setLineSendResult('error');
+                } finally {
+                    setIsSendingToLine(false);
+                    setShowLineSentModal(true);
+                }
+            };
 
             // =============================================
             // 訂單文字生成與分享功能
@@ -373,9 +515,65 @@
 
                             {/* 操作按鈕 */}
                             <div className="space-y-2 sm:space-y-3 pb-6 sm:pb-8 safe-area-bottom">
-                                <button onClick={handleShowLineQR} className="w-full py-3 sm:py-4 rounded-xl bg-[#06C755] hover:bg-[#05b54d] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-lg shadow-green-500/20 active:scale-95 transition-transform">
-                                    <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 fill-current" /> 傳送訂單給客服 (Line)
+                                {/* LINE 登入狀態顯示 */}
+                                {isLineLoggedIn && lineProfile && (
+                                    <div className="bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-3 mb-2">
+                                        {lineProfile.pictureUrl && (
+                                            <img src={lineProfile.pictureUrl} alt="LINE Profile" className="w-10 h-10 rounded-full" />
+                                        )}
+                                        <div className="flex-1">
+                                            <p className="text-xs text-green-600 font-bold">LINE 已連結</p>
+                                            <p className="text-sm text-gray-700">{lineProfile.displayName}</p>
+                                        </div>
+                                        <Check className="w-5 h-5 text-green-500" />
+                                    </div>
+                                )}
+
+                                {/* 已發送過訂單的提示 */}
+                                {orderResult?.lineSentAt && (
+                                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 flex items-center gap-2 text-sm text-purple-700 mb-2">
+                                        <Check className="w-4 h-4" />
+                                        <span>訂單已於 {new Date(orderResult.lineSentAt).toLocaleString('zh-TW')} 發送至 LINE</span>
+                                    </div>
+                                )}
+
+                                <button
+                                    onClick={isLineLoggedIn ? sendOrderToLine : handleLineLogin}
+                                    disabled={isSendingToLine}
+                                    className={`w-full py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform ${
+                                        isSendingToLine
+                                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                            : 'bg-[#06C755] hover:bg-[#05b54d] text-white shadow-green-500/20'
+                                    }`}
+                                >
+                                    {isSendingToLine ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            發送中...
+                                        </>
+                                    ) : isLineLoggedIn ? (
+                                        <>
+                                            <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
+                                            {orderResult?.lineSentAt ? '重新發送訂單到 LINE' : '發送訂單到 LINE'}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
+                                            用 LINE 登入並接收訂單
+                                        </>
+                                    )}
                                 </button>
+
+                                {/* 備用方式：傳統 QR Code */}
+                                {!isLineLoggedIn && (
+                                    <button
+                                        onClick={handleShowLineQR}
+                                        className="w-full py-2.5 sm:py-3 rounded-xl bg-white border-2 border-[#06C755] text-[#06C755] text-xs sm:text-sm font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                                    >
+                                        <QrCode className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> 改用 QR Code 手動傳送
+                                    </button>
+                                )}
+
                                 <div className="grid grid-cols-2 gap-2 sm:gap-3">
                                     <button onClick={handleBackToEdit} className="py-2.5 sm:py-3 rounded-xl bg-gray-100 text-gray-700 text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 active:bg-gray-200 transition-colors"><ArrowLeft className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 返回修改</button>
                                     <button onClick={handleNewOrder} className="py-2.5 sm:py-3 rounded-xl bg-white border border-gray-200 text-gray-600 text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 active:bg-gray-50 transition-colors"><RefreshCw className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 建立新單</button>
@@ -441,6 +639,76 @@
                                     <button onClick={() => setShowImagePreview(false)} className="mt-4 w-full py-3 rounded-xl bg-white/20 text-white font-bold backdrop-blur-md border border-white/30 hover:bg-white/30 transition-colors">
                                         關閉預覽
                                     </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* LINE 發送結果 Modal */}
+                        {showLineSentModal && (
+                            <div className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+                                <div className="bg-white w-full max-w-[calc(100%-1.5rem)] sm:max-w-sm md:max-w-md rounded-2xl shadow-2xl p-6 sm:p-8 text-center space-y-4 sm:space-y-6 animate-scale-in">
+                                    {lineSendResult === 'success' ? (
+                                        <>
+                                            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+                                                <Check className="w-8 h-8 sm:w-10 sm:h-10 text-green-500 stroke-[3]" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xl sm:text-2xl font-bold text-[#1d1d1f] mb-2">訂單已發送！</h3>
+                                                <p className="text-sm text-gray-500">
+                                                    訂單確認卡片已發送到您的 LINE<br/>
+                                                    請開啟 LINE App 查看
+                                                </p>
+                                            </div>
+                                            <div className="bg-gray-50 rounded-xl p-4 text-left">
+                                                <p className="text-xs text-gray-400 mb-1">發送對象</p>
+                                                <div className="flex items-center gap-3">
+                                                    {lineProfile?.pictureUrl && (
+                                                        <img src={lineProfile.pictureUrl} alt="" className="w-10 h-10 rounded-full" />
+                                                    )}
+                                                    <div>
+                                                        <p className="font-bold text-[#1d1d1f]">{lineProfile?.displayName}</p>
+                                                        <p className="text-xs text-gray-500">LINE 用戶</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => setShowLineSentModal(false)}
+                                                className="w-full py-3 rounded-xl bg-[#1d1d1f] text-white font-bold active:scale-95 transition-transform"
+                                            >
+                                                好的
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto">
+                                                <AlertCircle className="w-8 h-8 sm:w-10 sm:h-10 text-red-500" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xl sm:text-2xl font-bold text-[#1d1d1f] mb-2">發送失敗</h3>
+                                                <p className="text-sm text-gray-500">
+                                                    無法透過 LINE 發送訂單<br/>
+                                                    請改用 QR Code 方式手動傳送
+                                                </p>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <button
+                                                    onClick={() => {
+                                                        setShowLineSentModal(false);
+                                                        handleShowLineQR();
+                                                    }}
+                                                    className="w-full py-3 rounded-xl bg-[#06C755] text-white font-bold active:scale-95 transition-transform flex items-center justify-center gap-2"
+                                                >
+                                                    <QrCode className="w-4 h-4" /> 使用 QR Code 傳送
+                                                </button>
+                                                <button
+                                                    onClick={() => setShowLineSentModal(false)}
+                                                    className="w-full py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold active:scale-95 transition-transform"
+                                                >
+                                                    關閉
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         )}
