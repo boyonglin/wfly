@@ -68,7 +68,7 @@ const CONFIG = {
         // 推播 API Endpoint (建議透過後端代理，避免 Token 暴露)
         // 如果你有後端服務，請填入你的 API 端點
         // 如果沒有，可以透過 Google Apps Script 代理
-        PUSH_API_ENDPOINT: 'https://script.google.com/macros/s/AKfycbxVTd6tuStUCvsztqGH9FBhKA7a4RD4Bg5yYreDA-KMlusDaSYCMO9E7206Qka_pTjhEQ/exec'  // 【可選】填入後端 API 端點，或留空使用 Google Apps Script
+        PUSH_API_ENDPOINT: 'https://script.google.com/macros/s/AKfycbzPvfEHdyz3juHSJPwu58-LOYeOR4lIMhd3KZcVbx359_6pvocTeCjpXaZF1j2X0kEEXA/exec'  // 【可選】填入後端 API 端點，或留空使用 Google Apps Script
     },
 
     // =============================================

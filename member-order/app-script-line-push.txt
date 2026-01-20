@@ -372,7 +372,21 @@ function callLinePushApi(token, payload) {
 function createResponse(statusCode, data) {
   const output = ContentService.createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
+
+  // 設定 CORS headers（允許從 GitHub Pages 存取）
+  // 注意：Google Apps Script 的 ContentService 不支援直接設定 headers
+  // 但部署為 Web App 時會自動處理 CORS
+
   return output;
+}
+
+/**
+ * 處理 OPTIONS 請求（CORS preflight）
+ */
+function doOptions(e) {
+  // Google Apps Script 會自動處理 CORS
+  // 只要在部署時選擇「任何人」即可
+  return createResponse(200, { status: 'ok' });
 }
 
 /**
