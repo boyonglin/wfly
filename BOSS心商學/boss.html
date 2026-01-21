@@ -1,1223 +1,1631 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-Hant">
-<head>
-  <meta charset="UTF-8" />
-  <title>BOSS 心商學｜領袖光譜分析系統</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  
-  <!-- 引入 Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <head>
+    <meta charset="UTF-8" />
+    <title>BOSS 心商學｜領袖光譜分析系統</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <style>
-    :root {
-      /* Dubai Luxury: Midnight Blue & Champagne Gold */
-      --bg: #020617; /* 極深邃的午夜藍黑 */
-      --card: rgba(15, 23, 42, 0.6); /* 半透明深藍卡片，透出背景 */
-      --card-solid: #0F172A;
-      
-      /* Luxury Gold Palette */
-      --gold-main: #D4AF37; /* 標準金 */
-      --gold-light: #F3E5AB; /* 香檳金，用於高光文字 */
-      --gold-dark: #996515; /* 暗金 */
-      --gold-gradient: linear-gradient(135deg, #F3E5AB 0%, #D4AF37 50%, #B8860B 100%); 
-      
-      /* Text Colors */
-      --text-main: #F8FAFC; 
-      --text-sub: #94A3B8; 
-      --text-gold: #E2C792; 
-      
-      --border-gold: rgba(212, 175, 55, 0.4); 
-      
-      --radius-lg: 16px;
-      --radius-md: 8px;
-      
-      /* Shadows */
-      --shadow-glow: 0 0 40px rgba(212, 175, 55, 0.15);
-      --shadow-card: 0 20px 50px rgba(0, 0, 0, 0.6);
-      
-      --line-green: #06C755;
-      
-      /* Typography */
-      --font-heading: 'Noto Serif TC', serif; 
-      --font-body: 'Noto Sans TC', sans-serif;
-    }
+    <!-- 引入 Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+    />
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    <style>
+      :root {
+        /* Dubai Luxury: Midnight Blue & Champagne Gold */
+        --bg: #020617; /* 極深邃的午夜藍黑 */
+        --card: rgba(15, 23, 42, 0.6); /* 半透明深藍卡片，透出背景 */
+        --card-solid: #0f172a;
 
-    html { scroll-behavior: smooth; }
+        /* Luxury Gold Palette */
+        --gold-main: #d4af37; /* 標準金 */
+        --gold-light: #f3e5ab; /* 香檳金，用於高光文字 */
+        --gold-dark: #996515; /* 暗金 */
+        --gold-gradient: linear-gradient(135deg, #f3e5ab 0%, #d4af37 50%, #b8860b 100%);
 
-    body {
-      font-family: var(--font-body);
-      background-color: var(--bg);
-      color: var(--text-main);
-      line-height: 1.7;
-      overflow-x: hidden;
-      -webkit-font-smoothing: antialiased;
-    }
+        /* Text Colors */
+        --text-main: #f8fafc;
+        --text-sub: #94a3b8;
+        --text-gold: #e2c792;
 
-    .page {
-      max-width: 1080px;
-      margin: 0 auto;
-      padding: 0 24px 100px;
-      position: relative;
-      z-index: 1;
-    }
+        --border-gold: rgba(212, 175, 55, 0.4);
 
-    /* 背景配圖與景深處理 */
-    .bg-image {
-      position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      /* 使用 Unsplash 抽象流動光譜圖 */
-      background-image: url('https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop');
-      background-size: cover;
-      background-position: center;
-      background-repeat: no-repeat;
-      z-index: -2;
-      /* 關鍵：透過微模糊創造景深感，讓前景文字浮現 */
-      filter: blur(8px) brightness(0.6); 
-      transform: scale(1.1); /* 放大一點避免模糊邊緣露白 */
-    }
+        --radius-lg: 16px;
+        --radius-md: 8px;
 
-    /* 疊加一層漸層，增加深邃感與文字可讀性 */
-    .bg-overlay {
-      position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: radial-gradient(circle at center, rgba(2, 6, 23, 0.4) 0%, rgba(2, 6, 23, 0.95) 100%);
-      z-index: -1;
-      pointer-events: none;
-    }
+        /* Shadows */
+        --shadow-glow: 0 0 40px rgba(212, 175, 55, 0.15);
+        --shadow-card: 0 20px 50px rgba(0, 0, 0, 0.6);
 
-    /* HEADER */
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 24px 0;
-      position: relative;
-      z-index: 10;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-    }
+        --line-green: #06c755;
 
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-family: var(--font-heading);
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      color: var(--gold-light); 
-      text-transform: uppercase;
-      text-shadow: 0 2px 10px rgba(0,0,0,0.5);
-    }
-
-    .logo-dot {
-      width: 8px;
-      height: 8px;
-      transform: rotate(45deg);
-      background: var(--gold-main);
-      box-shadow: 0 0 10px var(--gold-main);
-    }
-
-    /* --- 修改：HEADER CTA 樣式升級 (與 btn-gold 風格一致) --- */
-    .header-cta {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      
-      /* 採用金色漸層背景，確保視覺亮度 */
-      background: var(--gold-gradient);
-      color: #0F172A; /* 深色文字增加對比 */
-      font-weight: 700;
-      box-shadow: 0 0 20px rgba(184, 134, 11, 0.3);
-      border: none;
-      
-      /* 尺寸調整為適合 Header 的大小 */
-      padding: 12px 28px;
-      border-radius: 2px;
-      font-size: 14px;
-      
-      text-decoration: none;
-      letter-spacing: 0.05em;
-      transition: all 0.3s ease;
-      position: relative;
-      overflow: hidden;
-    }
-    
-    /* 加入掃光動畫效果 */
-    .header-cta::after {
-      content: '';
-      position: absolute;
-      top: 0; left: -100%;
-      width: 100%; height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-      transition: 0.5s;
-    }
-
-    .header-cta:hover { 
-      transform: translateY(-2px);
-      box-shadow: 0 0 30px rgba(184, 134, 11, 0.6);
-    }
-    
-    .header-cta:hover::after { left: 100%; }
-
-    /* BIG HERO */
-    .big-hero {
-      padding: 120px 0 80px;
-      text-align: center;
-      position: relative;
-    }
-
-    /* Vision Tag (字體放大 + 流光動畫) */
-    .vision-tag {
-      display: inline-block;
-      color: var(--gold-light);
-      font-size: 22px; /* 放大字體 */
-      font-weight: 600;
-      margin-bottom: 40px;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      position: relative;
-      padding: 12px 30px; /* 增加內距 */
-      border: 1px solid var(--border-gold);
-      background: rgba(15, 23, 42, 0.4);
-      backdrop-filter: blur(10px);
-      border-radius: 50px;
-      overflow: hidden; /* 確保光澤不溢出 */
-      box-shadow: 0 0 20px rgba(212, 175, 55, 0.1);
-    }
-
-    /* 流光動畫 Pseudo-element */
-    .vision-tag::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg, 
-        transparent, 
-        rgba(255, 243, 200, 0.1), 
-        rgba(255, 255, 255, 0.5), 
-        rgba(255, 243, 200, 0.1), 
-        transparent
-      );
-      transform: skewX(-25deg);
-      animation: shimmer 4s infinite;
-    }
-
-    @keyframes shimmer {
-      0% { left: -100%; }
-      30% { left: 200%; } /* 快速掃過 */
-      100% { left: 200%; } /* 停留一段時間 */
-    }
-
-    .pain-point {
-      font-family: var(--font-heading);
-      font-size: clamp(2.4rem, 5.5vw, 4.2rem);
-      font-weight: 500;
-      line-height: 1.4;
-      letter-spacing: 0.02em;
-      color: #FFFFFF; /* 在深色背景上改用純白 */
-      margin-bottom: 32px;
-      position: relative;
-      text-shadow: 0 4px 20px rgba(0,0,0,0.5);
-    }
-
-    .pain-point.highlight { 
-      font-weight: 700;
-      background: var(--gold-gradient);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      text-shadow: 0 0 30px rgba(212, 175, 55, 0.3);
-    }
-    
-    .hero-sub-text {
-      max-width: 720px;
-      margin: 50px auto 70px;
-      text-align: center;
-      position: relative;
-    }
-
-    .hero-quote-line {
-      font-family: var(--font-heading);
-      font-size: 22px;
-      font-weight: 400;
-      color: var(--text-gold); 
-      margin-bottom: 40px;
-      display: block;
-      letter-spacing: 0.05em;
-      font-style: italic;
-      opacity: 0.9;
-    }
-
-    .hero-body-text {
-      font-size: 18px;
-      color: #E2E8F0; /* 淺灰白 */
-      line-height: 2;
-      font-weight: 300;
-      margin-bottom: 40px;
-      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-    }
-
-    .hero-question-highlight {
-      font-family: var(--font-heading);
-      font-weight: 700;
-      color: var(--gold-light);
-      font-size: 1.5em;
-      display: block;
-      margin-top: 24px;
-      margin-bottom: 24px;
-      letter-spacing: 0.05em;
-      border-bottom: 1px solid var(--border-gold);
-      padding-bottom: 12px;
-      width: fit-content;
-      margin-left: auto;
-      margin-right: auto;
-      text-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
-    }
-
-    .hero-buttons {
-      display: flex;
-      justify-content: center;
-      gap: 20px;
-      margin-top: 50px;
-    }
-
-    /* 金屬質感按鈕 */
-    .btn-gold {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--gold-gradient);
-      color: #0F172A; 
-      padding: 20px 56px;
-      border-radius: 2px; 
-      font-size: 18px;
-      font-weight: 700;
-      text-decoration: none;
-      transition: all 0.3s ease;
-      letter-spacing: 0.1em;
-      box-shadow: 0 0 30px rgba(184, 134, 11, 0.3);
-      position: relative;
-      overflow: hidden;
-      cursor: pointer;
-    }
-    .btn-gold::after {
-      content: '';
-      position: absolute;
-      top: 0; left: -100%;
-      width: 100%; height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-      transition: 0.5s;
-    }
-    .btn-gold:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 0 50px rgba(184, 134, 11, 0.6);
-    }
-    .btn-gold:hover::after { left: 100%; }
-
-    /* REALITY CHECK - 半透明磨砂質感 */
-    .reality-check {
-      background: rgba(15, 23, 42, 0.7); /* 半透明背景 */
-      backdrop-filter: blur(20px); /* 磨砂玻璃效果 */
-      -webkit-backdrop-filter: blur(20px);
-      color: #fff;
-      padding: 100px 40px 140px;
-      border-radius: 12px;
-      margin: 60px 0;
-      text-align: center;
-      position: relative;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-    }
-
-    .reality-title {
-      font-family: var(--font-heading);
-      font-size: 32px;
-      font-weight: 600;
-      margin-bottom: 80px;
-      color: var(--gold-main);
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }
-    
-    .reality-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 60px;
-      text-align: left;
-      margin-bottom: 0;
-      max-width: 1000px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-
-    .reality-item {
-      padding: 0 0 0 30px;
-      border-left: 1px solid var(--border-gold);
-      transition: all 0.4s ease;
-    }
-    .reality-item:hover {
-      background: linear-gradient(90deg, rgba(212, 175, 55, 0.1), transparent);
-      padding-left: 40px;
-      border-color: var(--gold-light);
-    }
-
-    .reality-item h4 {
-      font-family: var(--font-heading);
-      font-size: 20px;
-      font-weight: 500;
-      margin-bottom: 16px;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      letter-spacing: 0.05em;
-    }
-    
-    .reality-tag {
-      font-family: var(--font-body); font-size: 10px; text-transform: uppercase; 
-      letter-spacing: 0.2em; color: var(--gold-main); 
-      border: 1px solid var(--gold-main);
-      padding: 4px 8px; border-radius: 0px;
-    }
-
-    .reality-item p {
-      font-size: 16px;
-      color: var(--text-sub);
-      line-height: 1.8;
-      font-weight: 300;
-      text-wrap: pretty;
-    }
-
-    /* 懸浮黑金卡 - 實色背景確保閱讀 */
-    .reality-cta-card {
-      background: #0F172A; 
-      border-radius: 4px;
-      padding: 70px 50px;
-      max-width: 800px;
-      margin: 60px auto -180px;
-      position: relative;
-      z-index: 5;
-      box-shadow: 0 40px 100px -20px rgba(0,0,0,0.9);
-      border: 1px solid var(--border-gold);
-      text-align: center;
-    }
-    
-    .reality-cta-card::before {
-      content: ''; position: absolute; inset: 4px; border: 1px solid rgba(255,255,255,0.05); pointer-events: none;
-    }
-
-    .reality-cta-icon {
-      font-size: 40px;
-      margin-bottom: 24px;
-      display: block;
-      color: var(--gold-main);
-      text-shadow: 0 0 20px rgba(212, 175, 55, 0.4);
-    }
-
-    .reality-cta-text {
-      font-family: var(--font-heading);
-      font-size: 26px;
-      font-weight: 600;
-      color: var(--text-main);
-      line-height: 1.6;
-      letter-spacing: 0.05em;
-    }
-
-    .reality-cta-text span {
-      color: var(--gold-light);
-      font-weight: 700;
-      border-bottom: 1px solid var(--gold-main);
-      padding-bottom: 4px;
-    }
-    
-    /* Animation Utility */
-    .reveal-on-scroll {
-      opacity: 0; transform: translateY(30px); transition: all 1s cubic-bezier(0.2, 0.8, 0.2, 1);
-    }
-    .reveal-on-scroll.is-visible { opacity: 1; transform: translateY(0); }
-
-    /* QUIZ AREA - Dark Mode */
-    .quiz-container {
-      background: rgba(15, 23, 42, 0.8);
-      backdrop-filter: blur(20px);
-      border-radius: 12px;
-      padding: 100px 60px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-      border: 1px solid rgba(255,255,255,0.1);
-      margin-top: 220px;
-      position: relative;
-    }
-
-    .quiz-intro-title {
-      font-family: var(--font-heading);
-      font-size: 30px;
-      font-weight: 700;
-      text-align: center;
-      margin-bottom: 12px;
-      color: var(--gold-light);
-      letter-spacing: 0.1em;
-    }
-    
-    .quiz-intro-sub {
-      text-align: center; color: var(--text-sub); margin-bottom: 60px; font-size: 15px; letter-spacing: 0.05em;
-    }
-
-    /* Start Panel */
-    #quizStartPanel { text-align: center; padding: 20px 0; }
-    .start-input {
-      width: 100%; padding: 20px; border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 2px; font-size: 18px; margin-bottom: 40px;
-      outline: none; transition: all 0.3s; text-align: center;
-      background: rgba(255,255,255,0.05); color: var(--gold-light);
-      font-family: var(--font-heading);
-    }
-    .start-input:focus { border-color: var(--gold-main); background: rgba(0,0,0,0.2); box-shadow: 0 0 15px rgba(212, 175, 55, 0.1); }
-    .start-label {
-      display: block; font-size: 16px; font-weight: 600; color: var(--text-main); margin-bottom: 24px; letter-spacing: 0.1em;
-    }
-
-    .quiz-progress-track {
-      width: 100%; height: 1px; background: rgba(255,255,255,0.1); margin-bottom: 60px;
-    }
-    .quiz-progress-fill { height: 100%; width: 0%; background: var(--gold-main); transition: width 0.4s ease; box-shadow: 0 0 10px var(--gold-main); }
-
-    .quiz-question {
-      margin-bottom: 40px; padding: 30px; border-bottom: 1px solid rgba(255,255,255,0.05);
-    }
-
-    .scale-pill {
-      display: block; padding: 14px 0; border: 1px solid rgba(255,255,255,0.1); background: transparent;
-      cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; 
-      text-align: center; color: var(--text-sub); border-radius: 2px;
-    }
-    .scale-option input:checked + .scale-pill {
-      background: var(--gold-main); color: #000; border-color: var(--gold-main); font-weight: 700;
-    }
-
-    /* RESULT CARD */
-    .result-card {
-      background: var(--card-solid);
-      color: #fff;
-      border-radius: 12px;
-      padding: 60px;
-      margin-top: 60px;
-      display: none;
-      animation: fadeInUp 0.8s ease;
-      border: 1px solid var(--border-gold);
-    }
-    .result-title { 
-      font-family: var(--font-heading); font-size: 32px; font-weight: 600; 
-      color: var(--gold-light); margin-bottom: 20px; letter-spacing: 0.05em; 
-    }
-    .result-body { font-size: 16px; line-height: 1.9; opacity: 0.9; margin: 30px 0 50px; color: var(--text-main); font-weight: 300; }
-
-    /* SPECTRUM INTRO */
-    .spectrum-intro {
-      background: rgba(255,255,255,0.02);
-      border-radius: 8px; padding: 40px; margin-top: 40px;
-      border: 1px solid rgba(255,255,255,0.05);
-    }
-    .spectrum-title {
-      font-family: var(--font-heading); font-size: 20px; font-weight: 600; color: var(--gold-light);
-      margin-bottom: 30px; display: flex; align-items: center; gap: 12px;
-      border-bottom: 1px solid rgba(198, 168, 124, 0.3); padding-bottom: 10px;
-      width: fit-content;
-    }
-
-    .spectrum-comparison {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 40px;
-      background: rgba(0,0,0,0.3); padding: 30px; border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.05);
-    }
-    .spectrum-card { text-align: center; }
-    
-    .spectrum-img-placeholder {
-      width: 100%; height: 320px; background: #000; border-radius: 4px; margin-bottom: 20px;
-      position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;
-      border: 1px solid rgba(255,255,255,0.1);
-    }
-    /* 修改：改為 contain 以完整顯示光譜圖，避免被裁切 */
-    .spectrum-img-placeholder img { width: 100%; height: 100%; object-fit: contain; }
-
-    .spectrum-label { font-size: 16px; font-weight: 600; margin-bottom: 8px; color: var(--text-main); letter-spacing: 0.05em; }
-    .spectrum-desc { font-size: 13px; color: var(--text-sub); line-height: 1.5; font-weight: 300; }
-    .label-bad { color: #F87171; }
-    .label-good { color: #60A5FA; }
-
-    /* 2x2 Grid for Spectrum List */
-    .spectrum-list {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px;
-      border-top: 1px solid rgba(255,255,255,0.1); padding-top: 40px; text-align: left;
-    }
-    .spectrum-item {
-      display: flex; align-items: flex-start; gap: 16px; font-size: 15px; color: var(--text-main); font-weight: 300;
-    }
-    .spectrum-icon { color: var(--gold-main); font-size: 12px; line-height: 2.2; margin-top: 2px; }
-    .spectrum-item strong { color: var(--gold-light); font-weight: 600; margin-right: 4px; }
-
-    /* BOOKING SECTION - High End Black */
-    .booking-section {
-      background: rgba(15, 23, 42, 0.8);
-      backdrop-filter: blur(20px);
-      border-radius: 12px;
-      padding: 100px 40px;
-      text-align: center;
-      box-shadow: var(--shadow-card);
-      margin-top: 100px;
-      border: 1px solid var(--border-gold);
-    }
-    .booking-title { 
-      font-family: var(--font-heading); font-size: 36px; font-weight: 700; 
-      margin-bottom: 30px; 
-      letter-spacing: 0.05em;
-      /* 修改：使用金色漸層填充，增強視覺衝擊力 */
-      background: var(--gold-gradient);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      text-shadow: 0 0 30px rgba(212, 175, 55, 0.3);
-    }
-    
-    /* === 新增：聚光燈效果區塊 === */
-    .spotlight-effect {
-      position: relative;
-      display: inline-block;
-      max-width: 800px;
-      margin: 0 auto 40px;
-      padding: 40px;
-      /* Radial Gradient 模擬從正上方打下來的聚光燈 */
-      background: radial-gradient(circle at center, rgba(255, 255, 255, 0.05) 0%, transparent 70%);
-      border-radius: 50%; /* 柔和邊界 */
-    }
-    /* 讓聚光燈下的文字有點發光感 */
-    .spotlight-text {
-      color: #fff;
-      text-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
-      position: relative;
-      z-index: 2;
-    }
-
-    /* === 心跳動畫 Keyframes === */
-    @keyframes heartbeat {
-      0% { transform: scale(1); box-shadow: 0 0 30px rgba(6, 199, 85, 0.3); }
-      15% { transform: scale(1.05); box-shadow: 0 0 60px rgba(6, 199, 85, 0.6); }
-      30% { transform: scale(1); box-shadow: 0 0 30px rgba(6, 199, 85, 0.3); }
-      45% { transform: scale(1.05); box-shadow: 0 0 60px rgba(6, 199, 85, 0.6); }
-      60% { transform: scale(1); box-shadow: 0 0 30px rgba(6, 199, 85, 0.3); }
-      100% { transform: scale(1); box-shadow: 0 0 30px rgba(6, 199, 85, 0.3); }
-    }
-    
-    /* 應用心跳動畫 */
-    .btn-heartbeat {
-      animation: heartbeat 2.5s infinite ease-in-out; /* 稍慢一點比較優雅，但有雙重跳動感 */
-    }
-    
-    .line-box {
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-top: 3px solid var(--line-green);
-      border-radius: 4px;
-      padding: 60px 40px;
-      max-width: 680px;
-      margin: 50px auto 0;
-    }
-    
-    .line-box-title {
-      font-size: 22px; font-weight: 700; color: var(--text-main); margin-bottom: 20px; letter-spacing: 0.05em;
-    }
-
-    .line-text {
-      color: var(--text-sub); font-size: 16px; line-height: 1.8; margin-bottom: 40px;
-    }
-    
-    /* LINE 專用按鈕 - 高級綠 */
-    .btn-line-cta {
-      display: inline-flex; align-items: center; justify-content: center;
-      background: #06C755; color: #fff;
-      padding: 20px 60px; border-radius: 2px;
-      font-size: 20px; font-weight: 600; text-decoration: none;
-      box-shadow: 0 0 30px rgba(6, 199, 85, 0.2);
-      transition: all 0.3s ease;
-      letter-spacing: 0.05em;
-      min-width: 300px;
-    }
-    
-    .btn-line-cta:hover {
-      background: #05A548; 
-      /* hover 時暫停動畫或讓它更亮，這邊選擇增強亮度 */
-      box-shadow: 0 0 80px rgba(6, 199, 85, 0.8);
-    }
-
-    footer {
-      text-align: center; color: var(--text-sub); font-size: 12px; margin-top: 100px; padding-top: 30px; border-top: 1px solid rgba(255,255,255,0.05); text-transform: uppercase; letter-spacing: 0.1em;
-    }
-
-    /* 📱 MOBILE OPTIMIZATION */
-    @media (max-width: 768px) {
-      .page { padding: 0 20px 80px; }
-      
-      .pain-point { 
-        font-size: 2.4rem; line-height: 1.3; text-wrap: balance; 
+        /* Typography */
+        --font-heading: "Noto Serif TC", serif;
+        --font-body: "Noto Sans TC", sans-serif;
       }
-      
-      /* --- 修改：手機版 Vision Tag --- */
-      .vision-tag { 
-        font-size: 16px; /* 手機版也放大 */
-        padding: 10px 24px; 
-        width: auto; 
-        border: 1px solid var(--border-gold); color: var(--gold-light); background: rgba(15, 23, 42, 0.8);
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
       }
-      
-      .big-hero { padding: 80px 0 40px; }
-      .hero-sub-text { margin: 30px 0; }
-      .hero-quote-line { font-size: 18px; line-height: 1.6; }
-      .hero-body-text { font-size: 16px; }
-      .hero-question-highlight { font-size: 1.3em; margin-top: 16px; }
-      
-      .reality-check { padding: 60px 24px 140px; border-radius: 12px; }
-      .reality-title { font-size: 26px; margin-bottom: 40px; }
-      .reality-grid { grid-template-columns: 1fr; gap: 40px; }
-      .reality-item { padding: 0; border-left: none; border-top: 1px solid var(--border-gold); padding-top: 20px; }
-      .reality-item:hover { padding-left: 0; background: transparent; }
 
-      .reality-cta-card { 
-        margin: 0 0 -160px; padding: 40px 24px; border-radius: 8px; border-top: 2px solid var(--gold-main);
+      html {
+        scroll-behavior: smooth;
       }
-      .reality-cta-text { font-size: 20px; }
-      
-      .quiz-container { padding: 40px 24px; margin-top: 180px; border-radius: 12px; }
-      .quiz-question { padding: 0; border-bottom: none; }
-      
-      .spectrum-comparison { grid-template-columns: 1fr; gap: 40px; }
-      .spectrum-img-placeholder { height: 220px; }
-      .spectrum-list { grid-template-columns: 1fr; gap: 20px; }
-      
-      .booking-section { padding: 60px 24px; border-radius: 12px; }
-      .booking-title { font-size: 24px; }
-      .line-box { padding: 40px 24px; }
-      .btn-line-cta { width: 100%; padding: 18px 24px; font-size: 18px; }
-      
-      .spotlight-effect { padding: 20px; width: 100%; border-radius: 20px; }
-    }
-  </style>
-</head>
-<body>
 
-<div class="bg-image"></div>
-<div class="bg-overlay"></div>
-<div class="bg-grid"></div>
+      body {
+        font-family: var(--font-body);
+        background-color: var(--bg);
+        color: var(--text-main);
+        line-height: 1.7;
+        overflow-x: hidden;
+        -webkit-font-smoothing: antialiased;
+      }
 
-<div class="page">
-  <header>
-    <div class="logo"><div class="logo-dot"></div>BOSS 心商學</div>
-    <a href="#booking" class="header-cta">預約光譜分析</a>
-  </header>
+      .page {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 0 24px 100px;
+        position: relative;
+        z-index: 1;
+      }
 
-  <!-- BIG HERO -->
-  <section class="big-hero reveal-on-scroll">
-    <div class="vision-tag">專門照顧老闆與二代的光譜分析系統</div>
-    
-    <h1 class="pain-point delay-1">你照顧了全公司<br>卻忘了照顧你自己</h1>
-    <h1 class="pain-point highlight">BOSS 心商學<br>用科學數據接住<span class="text-chunk">搖搖欲墜的你</span></h1>
-    
-    <div class="hero-sub-text">
-      <span class="hero-quote-line">『在強者不被允許示弱的世界裡，這是唯一能讓你卸下武裝的地方。』</span>
-      
-      <p class="hero-body-text">
-        <span class="text-chunk">經營是一場孤獨的馬拉松</span><br class="mobile-break"><span class="text-chunk">當全世界都要求你飛得更高時</span><br>
-        我們只想問你：
-        <span class="hero-question-highlight">『你現在過的開心嗎？』</span>
-        <span class="hero-question-highlight">『你喜歡現在的自己嗎？』</span>
-        <span class="hero-question-highlight">『你還記得自己是誰嗎？』</span>
-      </p>
-    </div>
+      /* 背景配圖與景深處理 */
+      .bg-image {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        /* 使用 Unsplash 抽象流動光譜圖 */
+        background-image: url("https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        z-index: -2;
+        /* 關鍵：透過微模糊創造景深感，讓前景文字浮現 */
+        filter: blur(8px) brightness(0.6);
+        transform: scale(1.1); /* 放大一點避免模糊邊緣露白 */
+      }
 
-    <div class="hero-buttons">
-      <a href="#quiz" class="btn-gold">3分鐘｜快速分析壓力類型</a>
-    </div>
-  </section>
+      /* 疊加一層漸層，增加深邃感與文字可讀性 */
+      .bg-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(
+          circle at center,
+          rgba(2, 6, 23, 0.4) 0%,
+          rgba(2, 6, 23, 0.95) 100%
+        );
+        z-index: -1;
+        pointer-events: none;
+      }
 
-  <!-- REALITY CHECK -->
-  <section class="reality-check reveal-on-scroll">
-    <h2 class="reality-title">這些深夜裡的焦慮<br>我們都聽見了</h2>
-    <div class="reality-grid">
-      <div class="reality-item">
-        <h4><span class="reality-tag">Team</span> ① 團隊議題</h4>
-        <p>每個月都在追現金流，而團隊在等你指揮。<br>只要離開公司，整個公司就像被按下暫停鍵。</p>
-      </div>
-      <div class="reality-item">
-        <h4><span class="reality-tag">Family</span> ② 家庭議題</h4>
-        <p>你在家裡的存在感，被手機裡的訊息取代。<br>關係正在疏遠，也找不回曾經的親密連結感。</p>
-      </div>
-      <div class="reality-item">
-        <h4><span class="reality-tag">Self</span> ③ 自我議題</h4>
-        <p>你撐住了所有角色，卻沒有一個時間讓你休息。<br>外表穩定，能量卻早已透支。</p>
-      </div>
-      <div class="reality-item">
-        <h4><span class="reality-tag">Succession</span> ④ 二代接班議題</h4>
-        <p>位置交給你了，但方向還是上一代在掌控。<br>你在接班，但經營主導權依然受到干預。</p>
-      </div>
-    </div>
-    
-    <!-- 懸浮白卡 -->
-    <div class="reality-cta-card">
-      <div class="reality-cta-icon">✨</div>
-      <div class="reality-cta-text">
-        <span class="text-chunk">光譜分析儀器，</span><span class="text-chunk">能將這些主觀的「情緒糾結」</span><br>
-        <span class="text-chunk">轉化為客觀的<span>「能量數據」</span>，</span><br class="mobile-break"><span class="text-chunk">讓你看見該如何疼惜自己。</span>
-      </div>
-      
-      <div style="margin-top: 30px; font-size: 18px; font-weight: 500; color: #60A5FA; line-height: 1.8; margin-bottom: 32px;">
-        <span class="text-chunk">這是一套結合光譜儀器</span><span class="text-chunk">與心商覺察的系統。</span><br>
-        <span class="text-chunk">不只為了讓企業活下去，</span><span class="text-chunk">更為了讓你像個人一樣，</span><span class="text-chunk">真正活出自己真實的樣貌。</span>
-      </div>
-      
-      <div class="hero-buttons">
-        <a href="#quiz" class="btn-gold">3分鐘｜快速分析壓力類型</a>
-      </div>
-    </div>
-  </section>
+      /* HEADER */
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 24px 0;
+        position: relative;
+        z-index: 10;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      }
 
-  <!-- QUIZ -->
-  <section id="quiz">
-    <div class="quiz-container reveal-on-scroll">
-      
-      <!-- 新增：啟動頁面 (稱呼輸入) -->
-      <div id="quizStartPanel">
-        <div class="quiz-intro-title">3分鐘|快速分析壓力類型</div>
-        <p class="quiz-intro-sub">請依照近 3 個月的真實狀態作答</p>
-        
-        <div style="max-width: 400px; margin: 40px auto; text-align: left;">
-           <label class="start-label">請問該如何稱呼您？</label>
-           <input type="text" id="userNameInput" class="start-input" placeholder="例：陳董事長、王執行長">
-           <div style="text-align:center;">
-             <button class="btn-gold" style="width:100%; border:none; cursor:pointer;" onclick="startQuiz()">開始檢測</button>
-           </div>
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-family: var(--font-heading);
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        color: var(--gold-light);
+        text-transform: uppercase;
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+      }
+
+      .logo-dot {
+        width: 8px;
+        height: 8px;
+        transform: rotate(45deg);
+        background: var(--gold-main);
+        box-shadow: 0 0 10px var(--gold-main);
+      }
+
+      /* --- 修改：HEADER CTA 樣式升級 (與 btn-gold 風格一致) --- */
+      .header-cta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        /* 採用金色漸層背景，確保視覺亮度 */
+        background: var(--gold-gradient);
+        color: #0f172a; /* 深色文字增加對比 */
+        font-weight: 700;
+        box-shadow: 0 0 20px rgba(184, 134, 11, 0.3);
+        border: none;
+
+        /* 尺寸調整為適合 Header 的大小 */
+        padding: 12px 28px;
+        border-radius: 2px;
+        font-size: 14px;
+
+        text-decoration: none;
+        letter-spacing: 0.05em;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+      }
+
+      /* 加入掃光動畫效果 */
+      .header-cta::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+        transition: 0.5s;
+      }
+
+      .header-cta:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0 30px rgba(184, 134, 11, 0.6);
+      }
+
+      .header-cta:hover::after {
+        left: 100%;
+      }
+
+      /* BIG HERO */
+      .big-hero {
+        padding: 120px 0 80px;
+        text-align: center;
+        position: relative;
+      }
+
+      /* Vision Tag (字體放大 + 流光動畫) */
+      .vision-tag {
+        display: inline-block;
+        color: var(--gold-light);
+        font-size: 22px; /* 放大字體 */
+        font-weight: 600;
+        margin-bottom: 40px;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        position: relative;
+        padding: 12px 30px; /* 增加內距 */
+        border: 1px solid var(--border-gold);
+        background: rgba(15, 23, 42, 0.4);
+        backdrop-filter: blur(10px);
+        border-radius: 50px;
+        overflow: hidden; /* 確保光澤不溢出 */
+        box-shadow: 0 0 20px rgba(212, 175, 55, 0.1);
+      }
+
+      /* 流光動畫 Pseudo-element */
+      .vision-tag::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 243, 200, 0.1),
+          rgba(255, 255, 255, 0.5),
+          rgba(255, 243, 200, 0.1),
+          transparent
+        );
+        transform: skewX(-25deg);
+        animation: shimmer 4s infinite;
+      }
+
+      @keyframes shimmer {
+        0% {
+          left: -100%;
+        }
+        30% {
+          left: 200%;
+        } /* 快速掃過 */
+        100% {
+          left: 200%;
+        } /* 停留一段時間 */
+      }
+
+      .pain-point {
+        font-family: var(--font-heading);
+        font-size: clamp(2.4rem, 5.5vw, 4.2rem);
+        font-weight: 500;
+        line-height: 1.4;
+        letter-spacing: 0.02em;
+        color: #ffffff; /* 在深色背景上改用純白 */
+        margin-bottom: 32px;
+        position: relative;
+        text-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      }
+
+      .pain-point.highlight {
+        font-weight: 700;
+        background: var(--gold-gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: 0 0 30px rgba(212, 175, 55, 0.3);
+      }
+
+      .hero-sub-text {
+        max-width: 720px;
+        margin: 50px auto 70px;
+        text-align: center;
+        position: relative;
+      }
+
+      .hero-quote-line {
+        font-family: var(--font-heading);
+        font-size: 22px;
+        font-weight: 400;
+        color: var(--text-gold);
+        margin-bottom: 40px;
+        display: block;
+        letter-spacing: 0.05em;
+        font-style: italic;
+        opacity: 0.9;
+      }
+
+      .hero-body-text {
+        font-size: 18px;
+        color: #e2e8f0; /* 淺灰白 */
+        line-height: 2;
+        font-weight: 300;
+        margin-bottom: 40px;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+      }
+
+      .hero-question-highlight {
+        font-family: var(--font-heading);
+        font-weight: 700;
+        color: var(--gold-light);
+        font-size: 1.5em;
+        display: block;
+        margin-top: 24px;
+        margin-bottom: 24px;
+        letter-spacing: 0.05em;
+        border-bottom: 1px solid var(--border-gold);
+        padding-bottom: 12px;
+        width: fit-content;
+        margin-left: auto;
+        margin-right: auto;
+        text-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
+      }
+
+      .hero-buttons {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        margin-top: 50px;
+      }
+
+      /* 金屬質感按鈕 */
+      .btn-gold {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--gold-gradient);
+        color: #0f172a;
+        padding: 20px 56px;
+        border-radius: 2px;
+        font-size: 18px;
+        font-weight: 700;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        letter-spacing: 0.1em;
+        box-shadow: 0 0 30px rgba(184, 134, 11, 0.3);
+        position: relative;
+        overflow: hidden;
+        cursor: pointer;
+      }
+      .btn-gold::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+        transition: 0.5s;
+      }
+      .btn-gold:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0 50px rgba(184, 134, 11, 0.6);
+      }
+      .btn-gold:hover::after {
+        left: 100%;
+      }
+
+      /* REALITY CHECK - 半透明磨砂質感 */
+      .reality-check {
+        background: rgba(15, 23, 42, 0.7); /* 半透明背景 */
+        backdrop-filter: blur(20px); /* 磨砂玻璃效果 */
+        -webkit-backdrop-filter: blur(20px);
+        color: #fff;
+        padding: 100px 40px 140px;
+        border-radius: 12px;
+        margin: 60px 0;
+        text-align: center;
+        position: relative;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      }
+
+      .reality-title {
+        font-family: var(--font-heading);
+        font-size: 32px;
+        font-weight: 600;
+        margin-bottom: 80px;
+        color: var(--gold-main);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .reality-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 60px;
+        text-align: left;
+        margin-bottom: 0;
+        max-width: 1000px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .reality-item {
+        padding: 0 0 0 30px;
+        border-left: 1px solid var(--border-gold);
+        transition: all 0.4s ease;
+      }
+      .reality-item:hover {
+        background: linear-gradient(90deg, rgba(212, 175, 55, 0.1), transparent);
+        padding-left: 40px;
+        border-color: var(--gold-light);
+      }
+
+      .reality-item h4 {
+        font-family: var(--font-heading);
+        font-size: 20px;
+        font-weight: 500;
+        margin-bottom: 16px;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        letter-spacing: 0.05em;
+      }
+
+      .reality-tag {
+        font-family: var(--font-body);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        color: var(--gold-main);
+        border: 1px solid var(--gold-main);
+        padding: 4px 8px;
+        border-radius: 0px;
+      }
+
+      .reality-item p {
+        font-size: 16px;
+        color: var(--text-sub);
+        line-height: 1.8;
+        font-weight: 300;
+        text-wrap: pretty;
+      }
+
+      /* 懸浮黑金卡 - 實色背景確保閱讀 */
+      .reality-cta-card {
+        background: #0f172a;
+        border-radius: 4px;
+        padding: 70px 50px;
+        max-width: 800px;
+        margin: 60px auto -180px;
+        position: relative;
+        z-index: 5;
+        box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.9);
+        border: 1px solid var(--border-gold);
+        text-align: center;
+      }
+
+      .reality-cta-card::before {
+        content: "";
+        position: absolute;
+        inset: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        pointer-events: none;
+      }
+
+      .reality-cta-icon {
+        font-size: 40px;
+        margin-bottom: 24px;
+        display: block;
+        color: var(--gold-main);
+        text-shadow: 0 0 20px rgba(212, 175, 55, 0.4);
+      }
+
+      .reality-cta-text {
+        font-family: var(--font-heading);
+        font-size: 26px;
+        font-weight: 600;
+        color: var(--text-main);
+        line-height: 1.6;
+        letter-spacing: 0.05em;
+      }
+
+      .reality-cta-text span {
+        color: var(--gold-light);
+        font-weight: 700;
+        border-bottom: 1px solid var(--gold-main);
+        padding-bottom: 4px;
+      }
+
+      /* Animation Utility */
+      .reveal-on-scroll {
+        opacity: 0;
+        transform: translateY(30px);
+        transition: all 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+      .reveal-on-scroll.is-visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      /* QUIZ AREA - Dark Mode */
+      .quiz-container {
+        background: rgba(15, 23, 42, 0.8);
+        backdrop-filter: blur(20px);
+        border-radius: 12px;
+        padding: 100px 60px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        margin-top: 220px;
+        position: relative;
+      }
+
+      .quiz-intro-title {
+        font-family: var(--font-heading);
+        font-size: 30px;
+        font-weight: 700;
+        text-align: center;
+        margin-bottom: 12px;
+        color: var(--gold-light);
+        letter-spacing: 0.1em;
+      }
+
+      .quiz-intro-sub {
+        text-align: center;
+        color: var(--text-sub);
+        margin-bottom: 60px;
+        font-size: 15px;
+        letter-spacing: 0.05em;
+      }
+
+      /* Start Panel */
+      #quizStartPanel {
+        text-align: center;
+        padding: 20px 0;
+      }
+      .start-input {
+        width: 100%;
+        padding: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 2px;
+        font-size: 18px;
+        margin-bottom: 40px;
+        outline: none;
+        transition: all 0.3s;
+        text-align: center;
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--gold-light);
+        font-family: var(--font-heading);
+      }
+      .start-input:focus {
+        border-color: var(--gold-main);
+        background: rgba(0, 0, 0, 0.2);
+        box-shadow: 0 0 15px rgba(212, 175, 55, 0.1);
+      }
+      .start-label {
+        display: block;
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-main);
+        margin-bottom: 24px;
+        letter-spacing: 0.1em;
+      }
+
+      .quiz-progress-track {
+        width: 100%;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.1);
+        margin-bottom: 60px;
+      }
+      .quiz-progress-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--gold-main);
+        transition: width 0.4s ease;
+        box-shadow: 0 0 10px var(--gold-main);
+      }
+
+      .quiz-question {
+        margin-bottom: 40px;
+        padding: 30px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .scale-pill {
+        display: block;
+        padding: 14px 0;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: transparent;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.2s;
+        text-align: center;
+        color: var(--text-sub);
+        border-radius: 2px;
+      }
+      .scale-option input:checked + .scale-pill {
+        background: var(--gold-main);
+        color: #000;
+        border-color: var(--gold-main);
+        font-weight: 700;
+      }
+
+      /* RESULT CARD */
+      .result-card {
+        background: var(--card-solid);
+        color: #fff;
+        border-radius: 12px;
+        padding: 60px;
+        margin-top: 60px;
+        display: none;
+        animation: fadeInUp 0.8s ease;
+        border: 1px solid var(--border-gold);
+      }
+      .result-title {
+        font-family: var(--font-heading);
+        font-size: 32px;
+        font-weight: 600;
+        color: var(--gold-light);
+        margin-bottom: 20px;
+        letter-spacing: 0.05em;
+      }
+      .result-body {
+        font-size: 16px;
+        line-height: 1.9;
+        opacity: 0.9;
+        margin: 30px 0 50px;
+        color: var(--text-main);
+        font-weight: 300;
+      }
+
+      /* SPECTRUM INTRO */
+      .spectrum-intro {
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: 8px;
+        padding: 40px;
+        margin-top: 40px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      .spectrum-title {
+        font-family: var(--font-heading);
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--gold-light);
+        margin-bottom: 30px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border-bottom: 1px solid rgba(198, 168, 124, 0.3);
+        padding-bottom: 10px;
+        width: fit-content;
+      }
+
+      .spectrum-comparison {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        margin-bottom: 40px;
+        background: rgba(0, 0, 0, 0.3);
+        padding: 30px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      .spectrum-card {
+        text-align: center;
+      }
+
+      .spectrum-img-placeholder {
+        width: 100%;
+        height: 320px;
+        background: #000;
+        border-radius: 4px;
+        margin-bottom: 20px;
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      /* 修改：改為 contain 以完整顯示光譜圖，避免被裁切 */
+      .spectrum-img-placeholder img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+
+      .spectrum-label {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: var(--text-main);
+        letter-spacing: 0.05em;
+      }
+      .spectrum-desc {
+        font-size: 13px;
+        color: var(--text-sub);
+        line-height: 1.5;
+        font-weight: 300;
+      }
+      .label-bad {
+        color: #f87171;
+      }
+      .label-good {
+        color: #60a5fa;
+      }
+
+      /* 2x2 Grid for Spectrum List */
+      .spectrum-list {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 40px;
+        margin-top: 40px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        padding-top: 40px;
+        text-align: left;
+      }
+      .spectrum-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        font-size: 15px;
+        color: var(--text-main);
+        font-weight: 300;
+      }
+      .spectrum-icon {
+        color: var(--gold-main);
+        font-size: 12px;
+        line-height: 2.2;
+        margin-top: 2px;
+      }
+      .spectrum-item strong {
+        color: var(--gold-light);
+        font-weight: 600;
+        margin-right: 4px;
+      }
+
+      /* BOOKING SECTION - High End Black */
+      .booking-section {
+        background: rgba(15, 23, 42, 0.8);
+        backdrop-filter: blur(20px);
+        border-radius: 12px;
+        padding: 100px 40px;
+        text-align: center;
+        box-shadow: var(--shadow-card);
+        margin-top: 100px;
+        border: 1px solid var(--border-gold);
+      }
+      .booking-title {
+        font-family: var(--font-heading);
+        font-size: 36px;
+        font-weight: 700;
+        margin-bottom: 30px;
+        letter-spacing: 0.05em;
+        /* 修改：使用金色漸層填充，增強視覺衝擊力 */
+        background: var(--gold-gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: 0 0 30px rgba(212, 175, 55, 0.3);
+      }
+
+      /* === 新增：聚光燈效果區塊 === */
+      .spotlight-effect {
+        position: relative;
+        display: inline-block;
+        max-width: 800px;
+        margin: 0 auto 40px;
+        padding: 40px;
+        /* Radial Gradient 模擬從正上方打下來的聚光燈 */
+        background: radial-gradient(
+          circle at center,
+          rgba(255, 255, 255, 0.05) 0%,
+          transparent 70%
+        );
+        border-radius: 50%; /* 柔和邊界 */
+      }
+      /* 讓聚光燈下的文字有點發光感 */
+      .spotlight-text {
+        color: #fff;
+        text-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+        position: relative;
+        z-index: 2;
+      }
+
+      /* === 心跳動畫 Keyframes === */
+      @keyframes heartbeat {
+        0% {
+          transform: scale(1);
+          box-shadow: 0 0 30px rgba(6, 199, 85, 0.3);
+        }
+        15% {
+          transform: scale(1.05);
+          box-shadow: 0 0 60px rgba(6, 199, 85, 0.6);
+        }
+        30% {
+          transform: scale(1);
+          box-shadow: 0 0 30px rgba(6, 199, 85, 0.3);
+        }
+        45% {
+          transform: scale(1.05);
+          box-shadow: 0 0 60px rgba(6, 199, 85, 0.6);
+        }
+        60% {
+          transform: scale(1);
+          box-shadow: 0 0 30px rgba(6, 199, 85, 0.3);
+        }
+        100% {
+          transform: scale(1);
+          box-shadow: 0 0 30px rgba(6, 199, 85, 0.3);
+        }
+      }
+
+      /* 應用心跳動畫 */
+      .btn-heartbeat {
+        animation: heartbeat 2.5s infinite ease-in-out; /* 稍慢一點比較優雅，但有雙重跳動感 */
+      }
+
+      .line-box {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-top: 3px solid var(--line-green);
+        border-radius: 4px;
+        padding: 60px 40px;
+        max-width: 680px;
+        margin: 50px auto 0;
+      }
+
+      .line-box-title {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--text-main);
+        margin-bottom: 20px;
+        letter-spacing: 0.05em;
+      }
+
+      .line-text {
+        color: var(--text-sub);
+        font-size: 16px;
+        line-height: 1.8;
+        margin-bottom: 40px;
+      }
+
+      /* LINE 專用按鈕 - 高級綠 */
+      .btn-line-cta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #06c755;
+        color: #fff;
+        padding: 20px 60px;
+        border-radius: 2px;
+        font-size: 20px;
+        font-weight: 600;
+        text-decoration: none;
+        box-shadow: 0 0 30px rgba(6, 199, 85, 0.2);
+        transition: all 0.3s ease;
+        letter-spacing: 0.05em;
+        min-width: 300px;
+      }
+
+      .btn-line-cta:hover {
+        background: #05a548;
+        /* hover 時暫停動畫或讓它更亮，這邊選擇增強亮度 */
+        box-shadow: 0 0 80px rgba(6, 199, 85, 0.8);
+      }
+
+      footer {
+        text-align: center;
+        color: var(--text-sub);
+        font-size: 12px;
+        margin-top: 100px;
+        padding-top: 30px;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+
+      /* 📱 MOBILE OPTIMIZATION */
+      @media (max-width: 768px) {
+        .page {
+          padding: 0 20px 80px;
+        }
+
+        .pain-point {
+          font-size: 2.4rem;
+          line-height: 1.3;
+          text-wrap: balance;
+        }
+
+        /* --- 修改：手機版 Vision Tag --- */
+        .vision-tag {
+          font-size: 16px; /* 手機版也放大 */
+          padding: 10px 24px;
+          width: auto;
+          border: 1px solid var(--border-gold);
+          color: var(--gold-light);
+          background: rgba(15, 23, 42, 0.8);
+        }
+
+        .big-hero {
+          padding: 80px 0 40px;
+        }
+        .hero-sub-text {
+          margin: 30px 0;
+        }
+        .hero-quote-line {
+          font-size: 18px;
+          line-height: 1.6;
+        }
+        .hero-body-text {
+          font-size: 16px;
+        }
+        .hero-question-highlight {
+          font-size: 1.3em;
+          margin-top: 16px;
+        }
+
+        .reality-check {
+          padding: 60px 24px 140px;
+          border-radius: 12px;
+        }
+        .reality-title {
+          font-size: 26px;
+          margin-bottom: 40px;
+        }
+        .reality-grid {
+          grid-template-columns: 1fr;
+          gap: 40px;
+        }
+        .reality-item {
+          padding: 0;
+          border-left: none;
+          border-top: 1px solid var(--border-gold);
+          padding-top: 20px;
+        }
+        .reality-item:hover {
+          padding-left: 0;
+          background: transparent;
+        }
+
+        .reality-cta-card {
+          margin: 0 0 -160px;
+          padding: 40px 24px;
+          border-radius: 8px;
+          border-top: 2px solid var(--gold-main);
+        }
+        .reality-cta-text {
+          font-size: 20px;
+        }
+
+        .quiz-container {
+          padding: 40px 24px;
+          margin-top: 180px;
+          border-radius: 12px;
+        }
+        .quiz-question {
+          padding: 0;
+          border-bottom: none;
+        }
+
+        .spectrum-comparison {
+          grid-template-columns: 1fr;
+          gap: 40px;
+        }
+        .spectrum-img-placeholder {
+          height: 220px;
+        }
+        .spectrum-list {
+          grid-template-columns: 1fr;
+          gap: 20px;
+        }
+
+        .booking-section {
+          padding: 60px 24px;
+          border-radius: 12px;
+        }
+        .booking-title {
+          font-size: 24px;
+        }
+        .line-box {
+          padding: 40px 24px;
+        }
+        .btn-line-cta {
+          width: 100%;
+          padding: 18px 24px;
+          font-size: 18px;
+        }
+
+        .spotlight-effect {
+          padding: 20px;
+          width: 100%;
+          border-radius: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bg-image"></div>
+    <div class="bg-overlay"></div>
+    <div class="bg-grid"></div>
+
+    <div class="page">
+      <header>
+        <div class="logo">
+          <div class="logo-dot"></div>
+          BOSS 心商學
         </div>
-      </div>
+        <a href="#booking" class="header-cta">預約光譜分析</a>
+      </header>
 
-      <!-- 測驗問題區塊 (預設隱藏) -->
-      <div id="quizQuestionsPanel" style="display:none;">
-        <div class="quiz-progress-track">
-          <div class="quiz-progress-fill" id="quizProgressFill"></div>
-        </div>
-  
-        <div id="quizRoot"></div>
-  
-        <div style="text-align:center; margin-top:60px;">
-          <button class="btn-gold" style="width:100%; max-width:400px; border:none; cursor:pointer;" onclick="calculateQuiz()">
-            查看我的能量類型與下一步
-          </button>
-          <div id="quizErrorBox" style="display:none; color:#F87171; margin-top:20px; font-weight:500; font-size:15px;">還有題目未完成，請完整作答以獲得準確結果。</div>
-        </div>
-      </div>
+      <!-- BIG HERO -->
+      <section class="big-hero reveal-on-scroll">
+        <div class="vision-tag">專門照顧老闆與二代的光譜分析系統</div>
 
-      <!-- RESULT BOX -->
-      <div id="quizResultBox" class="result-card">
-        <div style="text-transform:uppercase; font-size:12px; letter-spacing:0.2em; color:#94A3B8; margin-bottom:12px;">ANALYSIS RESULT</div>
-        <div class="result-title" id="quizResultTitle"></div>
-        <div style="font-size:18px; font-weight:500; color:#fff; margin-bottom:20px; letter-spacing:0.02em;" id="quizResultTagline"></div>
-        <div class="result-body" id="quizResultBody"></div>
-        
-        <!-- 光譜分析介紹區塊 -->
-        <div class="spectrum-intro">
-          <div class="spectrum-title">
-            <span style="font-size:24px; color:var(--gold-main);">🔬</span>
-            <span>下一步：眼見為憑，光譜儀器分析狀態</span>
+        <h1 class="pain-point delay-1">你照顧了全公司<br />卻忘了照顧你自己</h1>
+        <h1 class="pain-point highlight">
+          BOSS 心商學<br />用科學數據接住<span class="text-chunk">搖搖欲墜的你</span>
+        </h1>
+
+        <div class="hero-sub-text">
+          <span class="hero-quote-line"
+            >『在強者不被允許示弱的世界裡，這是唯一能讓你卸下武裝的地方。』</span
+          >
+
+          <p class="hero-body-text">
+            <span class="text-chunk">經營是一場孤獨的馬拉松</span><br class="mobile-break" /><span
+              class="text-chunk"
+              >當全世界都要求你飛得更高時</span
+            ><br />
+            我們只想問你：
+            <span class="hero-question-highlight">『你現在過的開心嗎？』</span>
+            <span class="hero-question-highlight">『你喜歡現在的自己嗎？』</span>
+            <span class="hero-question-highlight">『你還記得自己是誰嗎？』</span>
+          </p>
+        </div>
+
+        <div class="hero-buttons">
+          <a href="#quiz" class="btn-gold">3分鐘｜快速分析壓力類型</a>
+        </div>
+      </section>
+
+      <!-- REALITY CHECK -->
+      <section class="reality-check reveal-on-scroll">
+        <h2 class="reality-title">這些深夜裡的焦慮<br />我們都聽見了</h2>
+        <div class="reality-grid">
+          <div class="reality-item">
+            <h4><span class="reality-tag">Team</span> ① 團隊議題</h4>
+            <p>
+              每個月都在追現金流，而團隊在等你指揮。<br />只要離開公司，整個公司就像被按下暫停鍵。
+            </p>
           </div>
-          
-          <p style="font-size:16px; color:#CBD5E1; margin-bottom:40px; font-weight:300;">
-            我們常發現「主觀感覺」與「客觀數據」有巨大落差。以下是儀器實際拍攝到的兩種典型狀態，<strong>數據騙不了人</strong>：
+          <div class="reality-item">
+            <h4><span class="reality-tag">Family</span> ② 家庭議題</h4>
+            <p>
+              你在家裡的存在感，被手機裡的訊息取代。<br />關係正在疏遠，也找不回曾經的親密連結感。
+            </p>
+          </div>
+          <div class="reality-item">
+            <h4><span class="reality-tag">Self</span> ③ 自我議題</h4>
+            <p>你撐住了所有角色，卻沒有一個時間讓你休息。<br />外表穩定，能量卻早已透支。</p>
+          </div>
+          <div class="reality-item">
+            <h4><span class="reality-tag">Succession</span> ④ 二代接班議題</h4>
+            <p>位置交給你了，但方向還是上一代在掌控。<br />你在接班，但經營主導權依然受到干預。</p>
+          </div>
+        </div>
+
+        <!-- 懸浮白卡 -->
+        <div class="reality-cta-card">
+          <div class="reality-cta-icon">✨</div>
+          <div class="reality-cta-text">
+            <span class="text-chunk">光譜分析儀器，</span
+            ><span class="text-chunk">能將這些主觀的「情緒糾結」</span><br />
+            <span class="text-chunk">轉化為客觀的<span>「能量數據」</span>，</span
+            ><br class="mobile-break" /><span class="text-chunk">讓你看見該如何疼惜自己。</span>
+          </div>
+
+          <div
+            style="
+              margin-top: 30px;
+              font-size: 18px;
+              font-weight: 500;
+              color: #60a5fa;
+              line-height: 1.8;
+              margin-bottom: 32px;
+            "
+          >
+            <span class="text-chunk">這是一套結合光譜儀器</span
+            ><span class="text-chunk">與心商覺察的系統。</span><br />
+            <span class="text-chunk">不只為了讓企業活下去，</span
+            ><span class="text-chunk">更為了讓你像個人一樣，</span
+            ><span class="text-chunk">真正活出自己真實的樣貌。</span>
+          </div>
+
+          <div class="hero-buttons">
+            <a href="#quiz" class="btn-gold">3分鐘｜快速分析壓力類型</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- QUIZ -->
+      <section id="quiz">
+        <div class="quiz-container reveal-on-scroll">
+          <!-- 新增：啟動頁面 (稱呼輸入) -->
+          <div id="quizStartPanel">
+            <div class="quiz-intro-title">3分鐘|快速分析壓力類型</div>
+            <p class="quiz-intro-sub">請依照近 3 個月的真實狀態作答</p>
+
+            <div style="max-width: 400px; margin: 40px auto; text-align: left">
+              <label class="start-label">請問該如何稱呼您？</label>
+              <input
+                type="text"
+                id="userNameInput"
+                class="start-input"
+                placeholder="例：陳董事長、王執行長"
+              />
+              <div style="text-align: center">
+                <button
+                  class="btn-gold"
+                  style="width: 100%; border: none; cursor: pointer"
+                  onclick="startQuiz()"
+                >
+                  開始檢測
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 測驗問題區塊 (預設隱藏) -->
+          <div id="quizQuestionsPanel" style="display: none">
+            <div class="quiz-progress-track">
+              <div class="quiz-progress-fill" id="quizProgressFill"></div>
+            </div>
+
+            <div id="quizRoot"></div>
+
+            <div style="text-align: center; margin-top: 60px">
+              <button
+                class="btn-gold"
+                style="width: 100%; max-width: 400px; border: none; cursor: pointer"
+                onclick="calculateQuiz()"
+              >
+                查看我的能量類型與下一步
+              </button>
+              <div
+                id="quizErrorBox"
+                style="
+                  display: none;
+                  color: #f87171;
+                  margin-top: 20px;
+                  font-weight: 500;
+                  font-size: 15px;
+                "
+              >
+                還有題目未完成，請完整作答以獲得準確結果。
+              </div>
+            </div>
+          </div>
+
+          <!-- RESULT BOX -->
+          <div id="quizResultBox" class="result-card">
+            <div
+              style="
+                text-transform: uppercase;
+                font-size: 12px;
+                letter-spacing: 0.2em;
+                color: #94a3b8;
+                margin-bottom: 12px;
+              "
+            >
+              ANALYSIS RESULT
+            </div>
+            <div class="result-title" id="quizResultTitle"></div>
+            <div
+              style="
+                font-size: 18px;
+                font-weight: 500;
+                color: #fff;
+                margin-bottom: 20px;
+                letter-spacing: 0.02em;
+              "
+              id="quizResultTagline"
+            ></div>
+            <div class="result-body" id="quizResultBody"></div>
+
+            <!-- 光譜分析介紹區塊 -->
+            <div class="spectrum-intro">
+              <div class="spectrum-title">
+                <span style="font-size: 24px; color: var(--gold-main)">🔬</span>
+                <span>下一步：眼見為憑，光譜儀器分析狀態</span>
+              </div>
+
+              <p style="font-size: 16px; color: #cbd5e1; margin-bottom: 40px; font-weight: 300">
+                我們常發現「主觀感覺」與「客觀數據」有巨大落差。以下是儀器實際拍攝到的兩種典型狀態，<strong>數據騙不了人</strong>：
+              </p>
+
+              <!-- 📍 對比圖區塊 -->
+              <div class="spectrum-comparison">
+                <!-- 狀態 A：耗損 -->
+                <div class="spectrum-card">
+                  <div class="spectrum-img-placeholder">
+                    <!-- 替換為 Unsplash 抽象圖 -->
+                    <!-- 如果您有自己的圖片，請將 'src' 改為 '能量37.jpg' -->
+                    <img src="能量37.jpg" alt="能量耗損示意圖" />
+                  </div>
+                  <div class="spectrum-label label-bad">能量37</div>
+                  <p class="spectrum-desc">
+                    光圈破洞、邊緣鋸齒狀。<br />代表情緒內耗極大，長期過勞，<br />正在透支未來的健康存摺。
+                  </p>
+                </div>
+
+                <!-- 狀態 B：飽滿 -->
+                <div class="spectrum-card">
+                  <div class="spectrum-img-placeholder">
+                    <!-- 替換為 Unsplash 抽象圖 -->
+                    <!-- 如果您有自己的圖片，請將 'src' 改為 '能量60.jpg' -->
+                    <img src="能量60.jpg" alt="能量飽滿示意圖" />
+                  </div>
+                  <div class="spectrum-label label-good">能量60</div>
+                  <p class="spectrum-desc">
+                    光圈完整圓潤、色彩均勻。<br />代表決策核心穩定，界線清晰，<br />能有效承接高強度壓力。
+                  </p>
+                </div>
+              </div>
+
+              <div
+                style="
+                  font-size: 18px;
+                  font-weight: 600;
+                  color: #fff;
+                  margin-bottom: 24px;
+                  margin-top: 40px;
+                  letter-spacing: 0.05em;
+                "
+              >
+                光譜儀器可以幫你分析：
+              </div>
+
+              <!-- 2x2 Grid Spectrum List -->
+              <div class="spectrum-list" id="spectrumVerificationList">
+                <!-- Dynamic Content Will Be Injected Here via JS -->
+                <div class="spectrum-item">
+                  <div class="spectrum-icon">●</div>
+                  <div><strong>大腦過載值：</strong>你是真的在思考，還是在空轉？</div>
+                </div>
+                <div class="spectrum-item">
+                  <div class="spectrum-icon">●</div>
+                  <div><strong>情緒內耗區：</strong>焦慮到底來自家庭、事業還是人際？</div>
+                </div>
+                <div class="spectrum-item">
+                  <div class="spectrum-icon">●</div>
+                  <div><strong>身體機能庫存：</strong>你的油箱還剩多少油？</div>
+                </div>
+                <div class="spectrum-item">
+                  <div class="spectrum-icon">●</div>
+                  <div><strong>決策干擾源：</strong>是什麼卡住了你的直覺判斷？</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="hero-buttons" style="margin-top: 50px">
+              <a href="#booking" class="btn-gold">預約光譜分析，找出數據落差</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- BOOKING / LINE@ -->
+      <section id="booking" class="booking-section reveal-on-scroll">
+        <h2 class="booking-title">企業的發展<br />取決於老闆的內在能量狀態</h2>
+
+        <!-- 聚光燈效果區塊 -->
+        <div class="spotlight-effect">
+          <div class="spotlight-text" style="font-size: 18px; line-height: 1.8">
+            <!-- 修改：將顏色改為 var(--gold-light) 並加入下底線裝飾 -->
+            <span
+              style="
+                display: block;
+                font-size: 24px;
+                font-weight: 700;
+                color: var(--gold-light);
+                margin-bottom: 16px;
+                border-bottom: 1px solid rgba(212, 175, 55, 0.3);
+                padding-bottom: 8px;
+                display: inline-block;
+              "
+            >
+              給自己 30 分鐘，重新校準自己與企業的狀態。
+            </span>
+            <br />
+            <!-- 換行確保版面整齊 -->
+            <span style="display: block; margin-top: 16px"
+              >加入官方 LINE@，由專人協助您安排檢測時段。</span
+            >
+          </div>
+        </div>
+
+        <!-- 強化放大後的 Line Box -->
+        <div class="line-box">
+          <div class="line-box-title">立即預約體驗</div>
+
+          <p class="line-text">
+            請點擊下方按鈕加入好友，傳送訊息<strong>「我要體驗光譜分析」</strong>，<br />
+            我們將在 24 小時內與您聯繫
           </p>
 
-          <!-- 📍 對比圖區塊 -->
-          <div class="spectrum-comparison">
-            <!-- 狀態 A：耗損 -->
-            <div class="spectrum-card">
-              <div class="spectrum-img-placeholder">
-                <!-- 替換為 Unsplash 抽象圖 -->
-                <!-- 如果您有自己的圖片，請將 'src' 改為 '能量37.jpg' -->
-                <img src="能量37.jpg" alt="能量耗損示意圖">
-              </div>
-              <div class="spectrum-label label-bad">能量37</div>
-              <p class="spectrum-desc">光圈破洞、邊緣鋸齒狀。<br>代表情緒內耗極大，長期過勞，<br>正在透支未來的健康存摺。</p>
-            </div>
-            
-            <!-- 狀態 B：飽滿 -->
-            <div class="spectrum-card">
-              <div class="spectrum-img-placeholder">
-                <!-- 替換為 Unsplash 抽象圖 -->
-                <!-- 如果您有自己的圖片，請將 'src' 改為 '能量60.jpg' -->
-                <img src="能量60.jpg" alt="能量飽滿示意圖">
-              </div>
-              <div class="spectrum-label label-good">能量60
-              </div>
-              <p class="spectrum-desc">光圈完整圓潤、色彩均勻。<br>代表決策核心穩定，界線清晰，<br>能有效承接高強度壓力。</p>
-            </div>
-          </div>
+          <!-- Super Large Button with Heartbeat -->
+          <a
+            href="https://line.me/ti/p/@YourLineID"
+            target="_blank"
+            class="btn-line-cta btn-heartbeat"
+          >
+            <span style="margin-right: 12px; font-size: 28px">💬</span> 加入 LINE@ 預約
+          </a>
 
-          <div style="font-size:18px; font-weight:600; color:#fff; margin-bottom:24px; margin-top:40px; letter-spacing:0.05em;">光譜儀器可以幫你分析：</div>
-          
-          <!-- 2x2 Grid Spectrum List -->
-          <div class="spectrum-list" id="spectrumVerificationList">
-            <!-- Dynamic Content Will Be Injected Here via JS -->
-            <div class="spectrum-item"><div class="spectrum-icon">●</div><div><strong>大腦過載值：</strong>你是真的在思考，還是在空轉？</div></div>
-            <div class="spectrum-item"><div class="spectrum-icon">●</div><div><strong>情緒內耗區：</strong>焦慮到底來自家庭、事業還是人際？</div></div>
-            <div class="spectrum-item"><div class="spectrum-icon">●</div><div><strong>身體機能庫存：</strong>你的油箱還剩多少油？</div></div>
-            <div class="spectrum-item"><div class="spectrum-icon">●</div><div><strong>決策干擾源：</strong>是什麼卡住了你的直覺判斷？</div></div>
-          </div>
+          <p style="font-size: 13px; color: #86868b; margin-top: 30px">
+            您的身份與檢測數據將絕對保密，僅供顧問諮詢使用。
+          </p>
         </div>
+      </section>
 
-        <div class="hero-buttons" style="margin-top:50px;">
-          <a href="#booking" class="btn-gold">預約光譜分析，找出數據落差</a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- BOOKING / LINE@ -->
-  <section id="booking" class="booking-section reveal-on-scroll">
-    <h2 class="booking-title">企業的發展<br>取決於老闆的內在能量狀態</h2>
-    
-    <!-- 聚光燈效果區塊 -->
-    <div class="spotlight-effect">
-      <div class="spotlight-text" style="font-size:18px; line-height: 1.8;">
-        <!-- 修改：將顏色改為 var(--gold-light) 並加入下底線裝飾 -->
-        <span style="display:block; font-size:24px; font-weight:700; color:var(--gold-light); margin-bottom:16px; border-bottom: 1px solid rgba(212, 175, 55, 0.3); padding-bottom: 8px; display: inline-block;">
-          給自己 30 分鐘，重新校準自己與企業的狀態。
-        </span>
-        <br> <!-- 換行確保版面整齊 -->
-        <span style="display: block; margin-top: 16px;">加入官方 LINE@，由專人協助您安排檢測時段。</span>
-      </div>
+      <footer>&copy; BOSS心商學</footer>
     </div>
 
-    <!-- 強化放大後的 Line Box -->
-    <div class="line-box">
-      <div class="line-box-title">立即預約體驗</div>
-      
-      <p class="line-text">
-        請點擊下方按鈕加入好友，傳送訊息<strong>「我要體驗光譜分析」</strong>，<br>
-        我們將在 24 小時內與您聯繫
-      </p>
+    <script>
+      // Scroll Reveal Animation
+      document.addEventListener("DOMContentLoaded", () => {
+        const observer = new IntersectionObserver(
+          entries => {
+            entries.forEach(entry => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add("is-visible");
+              }
+            });
+          },
+          { threshold: 0.1 }
+        );
 
-      <!-- Super Large Button with Heartbeat -->
-      <a href="https://line.me/ti/p/@YourLineID" target="_blank" class="btn-line-cta btn-heartbeat">
-        <span style="margin-right:12px; font-size:28px;">💬</span> 加入 LINE@ 預約
-      </a>
-
-      <p style="font-size:13px; color:#86868b; margin-top:30px;">
-        您的身份與檢測數據將絕對保密，僅供顧問諮詢使用。
-      </p>
-    </div>
-  </section>
-
-  <footer>
-    &copy; BOSS心商學
-  </footer>
-</div>
-
-<script>
-  // Scroll Reveal Animation
-  document.addEventListener('DOMContentLoaded', () => {
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('is-visible');
-        }
+        document.querySelectorAll(".reveal-on-scroll").forEach(el => observer.observe(el));
       });
-    }, { threshold: 0.1 });
 
-    document.querySelectorAll('.reveal-on-scroll').forEach(el => observer.observe(el));
-  });
+      // Updated 35 Questions (7 Stages x 5 Questions)
+      const quizGroups = [
+        {
+          title: "第一部分",
+          items: [
+            "我對現階段的事業充滿了無比的熱情與衝勁，覺得沒什麼是做不到的。",
+            "即使每天工時很長，我依然覺得精神亢奮，不太需要休息。",
+            "我常覺得身邊的人跟不上我的腳步或願景，但我相信結果會證明一切。",
+            "對於風險，我傾向樂觀看待，認為船到橋頭自然直。",
+            "我享受這種全速奔跑的感覺，認為這就是創業該有的樣子。",
+          ],
+        },
+        {
+          title: "第二部分",
+          items: [
+            "夜深人靜時，我偶爾會懷疑自己當初的選擇是否正確。",
+            "我發現原本熟悉的成功模式似乎開始失靈，付出的努力與回報不成正比。",
+            "雖然身邊有人給建議，但我內心深處其實很難真正相信或執行。",
+            "我開始感到一種深層的孤獨，覺得沒人能真正理解我面臨的難題。",
+            "我有時會問自己：「這真的是我要的生活嗎？」",
+          ],
+        },
+        {
+          title: "第三部分",
+          items: [
+            "為了顧全大局，我習慣隱藏真實情緒，不在員工或家人面前示弱。",
+            "我常感到胸口悶、肩頸緊繃或莫名疲憊，卻找不出具體病因。",
+            "面對衝突或不如意，我越來越傾向沈默或迴避，懶得解釋。",
+            "我感覺內心累積了很多壓力，像個隨時會引爆的壓力鍋，只能靠意志力壓著。",
+            "下班後我常感到情緒麻木，對什麼事都提不起勁，只想放空。",
+          ],
+        },
+        {
+          title: "第四部分",
+          items: [
+            "我常覺得對不起家人或伴侶，因為工作犧牲了太多陪伴時間。",
+            "當公司或團隊出狀況，我的第一反應通常是責怪自己領導無方。",
+            "我覺得背負著太多人的期待（父母、員工、資方），這份虧欠感讓我窒息。",
+            "即使在休息，我也無法真正放鬆，腦中會有聲音批判自己不夠努力。",
+            "我覺得自己雖然是老闆，卻活得被各種責任綁架，沒有自我。",
+          ],
+        },
+        {
+          title: "第五部分",
+          items: [
+            "最近發生的突發狀況（財務、人事、家庭），讓我有種根基動搖的恐慌感。",
+            "我偶爾會閃過「乾脆放棄算了」或「把一切都毀掉」的衝動念頭。",
+            "我的身心狀態瀕臨極限，嚴重失眠或出現明顯的健康警訊。",
+            "我對公司的未來感到一片迷茫，看不到出路，充滿無力感。",
+            "我覺得自己像站在懸崖邊，再多一點壓力我就會徹底垮掉。",
+          ],
+        },
+        {
+          title: "第六部分",
+          items: [
+            "經歷了低潮，我開始意識到「向內求」可能比「向外拼」更關鍵。",
+            "我開始能接受事情的「不完美」，並試著放下過度的控制欲。",
+            "我發現當我調整內在心態後，原本卡住的外在事務似乎有了轉機。",
+            "我開始對身心靈、能量或生命哲學等領域產生前所未有的興趣。",
+            "我意識到企業的現況其實是我內在狀態的投射，並願意為此負責。",
+          ],
+        },
+        {
+          title: "第七部分",
+          items: [
+            "我開始能清晰區分「該做」與「不該做」的界線，不再被瑣事消耗。",
+            "最近身邊開始出現意想不到的貴人或資源，主動來協助我。",
+            "我重新找回了經營的熱情，但這次是平穩、自在且可持續的。",
+            "我與家人、團隊的關係開始修復，溝通變得真實且流暢。",
+            "我感覺自己正在建立一套新的生命與事業秩序，內心感到踏實。",
+          ],
+        },
+      ];
 
-  // Updated 35 Questions (7 Stages x 5 Questions)
-  const quizGroups = [
-    { 
-      title: "第一部分", 
-      items: [
-        "我對現階段的事業充滿了無比的熱情與衝勁，覺得沒什麼是做不到的。",
-        "即使每天工時很長，我依然覺得精神亢奮，不太需要休息。",
-        "我常覺得身邊的人跟不上我的腳步或願景，但我相信結果會證明一切。",
-        "對於風險，我傾向樂觀看待，認為船到橋頭自然直。",
-        "我享受這種全速奔跑的感覺，認為這就是創業該有的樣子。"
-      ] 
-    },
-    { 
-      title: "第二部分", 
-      items: [
-        "夜深人靜時，我偶爾會懷疑自己當初的選擇是否正確。",
-        "我發現原本熟悉的成功模式似乎開始失靈，付出的努力與回報不成正比。",
-        "雖然身邊有人給建議，但我內心深處其實很難真正相信或執行。",
-        "我開始感到一種深層的孤獨，覺得沒人能真正理解我面臨的難題。",
-        "我有時會問自己：「這真的是我要的生活嗎？」"
-      ] 
-    },
-    { 
-      title: "第三部分", 
-      items: [
-        "為了顧全大局，我習慣隱藏真實情緒，不在員工或家人面前示弱。",
-        "我常感到胸口悶、肩頸緊繃或莫名疲憊，卻找不出具體病因。",
-        "面對衝突或不如意，我越來越傾向沈默或迴避，懶得解釋。",
-        "我感覺內心累積了很多壓力，像個隨時會引爆的壓力鍋，只能靠意志力壓著。",
-        "下班後我常感到情緒麻木，對什麼事都提不起勁，只想放空。"
-      ] 
-    },
-    { 
-      title: "第四部分", 
-      items: [
-        "我常覺得對不起家人或伴侶，因為工作犧牲了太多陪伴時間。",
-        "當公司或團隊出狀況，我的第一反應通常是責怪自己領導無方。",
-        "我覺得背負著太多人的期待（父母、員工、資方），這份虧欠感讓我窒息。",
-        "即使在休息，我也無法真正放鬆，腦中會有聲音批判自己不夠努力。",
-        "我覺得自己雖然是老闆，卻活得被各種責任綁架，沒有自我。"
-      ] 
-    },
-    { 
-      title: "第五部分", 
-      items: [
-        "最近發生的突發狀況（財務、人事、家庭），讓我有種根基動搖的恐慌感。",
-        "我偶爾會閃過「乾脆放棄算了」或「把一切都毀掉」的衝動念頭。",
-        "我的身心狀態瀕臨極限，嚴重失眠或出現明顯的健康警訊。",
-        "我對公司的未來感到一片迷茫，看不到出路，充滿無力感。",
-        "我覺得自己像站在懸崖邊，再多一點壓力我就會徹底垮掉。"
-      ] 
-    },
-    { 
-      title: "第六部分", 
-      items: [
-        "經歷了低潮，我開始意識到「向內求」可能比「向外拼」更關鍵。",
-        "我開始能接受事情的「不完美」，並試著放下過度的控制欲。",
-        "我發現當我調整內在心態後，原本卡住的外在事務似乎有了轉機。",
-        "我開始對身心靈、能量或生命哲學等領域產生前所未有的興趣。",
-        "我意識到企業的現況其實是我內在狀態的投射，並願意為此負責。"
-      ] 
-    },
-    { 
-      title: "第七部分", 
-      items: [
-        "我開始能清晰區分「該做」與「不該做」的界線，不再被瑣事消耗。",
-        "最近身邊開始出現意想不到的貴人或資源，主動來協助我。",
-        "我重新找回了經營的熱情，但這次是平穩、自在且可持續的。",
-        "我與家人、團隊的關係開始修復，溝通變得真實且流暢。",
-        "我感覺自己正在建立一套新的生命與事業秩序，內心感到踏實。"
-      ] 
-    }
-  ];
+      const quizRoot = document.getElementById("quizRoot");
+      let qHtml = "";
+      // Total 35 questions
+      let totalQ = 35;
 
-  const quizRoot = document.getElementById("quizRoot");
-  let qHtml = "";
-  // Total 35 questions
-  let totalQ = 35; 
+      // Generate Questions
+      let qGlobalIndex = 0;
+      quizGroups.forEach((group, gIdx) => {
+        if (gIdx > 0) {
+          qHtml += `<div style="height: 40px; border-bottom: 1px solid #eee; margin-bottom: 40px;"></div>`;
+        }
 
-  // Generate Questions
-  let qGlobalIndex = 0;
-  quizGroups.forEach((group, gIdx) => {
-    if (gIdx > 0) {
-        qHtml += `<div style="height: 40px; border-bottom: 1px solid #eee; margin-bottom: 40px;"></div>`;
-    }
-    
-    group.items.forEach((item, iIdx) => {
-      const qNum = qGlobalIndex;
-      qHtml += `
+        group.items.forEach((item, iIdx) => {
+          const qNum = qGlobalIndex;
+          qHtml += `
         <div class="quiz-question">
           <div style="font-weight:600; margin-bottom:16px; font-size:16px; color:#ffffff;">${item}</div>
           <div class="scale-options" style="display:flex; gap:8px;">
-            ${[1,2,3,4,5].map(v => `
+            ${[1, 2, 3, 4, 5]
+              .map(
+                v => `
               <div class="scale-option" style="flex:1;">
                 <input type="radio" name="q${qNum}" id="q${qNum}_${v}" value="${v}" onchange="updateProgress()" style="display:none;">
                 <label class="scale-pill" for="q${qNum}_${v}">${v}</label>
               </div>
-            `).join('')}
+            `
+              )
+              .join("")}
           </div>
           <div style="display:flex; justify-content:space-between; font-size:13px; color:#ffffff; margin-top:10px; padding:0 4px;">
             <span>並非如此</span><span>總是如此</span>
           </div>
         </div>
       `;
-      qGlobalIndex++;
-    });
-  });
-  quizRoot.innerHTML = qHtml;
+          qGlobalIndex++;
+        });
+      });
+      quizRoot.innerHTML = qHtml;
 
-  // New Global Variable for User Name and Result
-  let userName = "";
-  let currentResultTitle = "";
-  
-  // Function to handle Start Quiz
-  function startQuiz() {
-    const input = document.getElementById("userNameInput");
-    if (!input.value.trim()) {
-      alert("請輸入您的稱呼以開始檢測");
-      return;
-    }
-    userName = input.value.trim();
-    
-    // UI Transition
-    document.getElementById("quizStartPanel").style.display = "none";
-    document.getElementById("quizQuestionsPanel").style.display = "block";
-    
-    // Scroll to top of questions smoothly
-    document.getElementById("quizQuestionsPanel").scrollIntoView({ behavior: 'smooth' });
-  }
+      // New Global Variable for User Name and Result
+      let userName = "";
+      let currentResultTitle = "";
 
-  function updateProgress() {
-    const checked = document.querySelectorAll('input[type="radio"]:checked').length;
-    document.getElementById("quizProgressFill").style.width = (checked / totalQ * 100) + "%";
-  }
+      // Function to handle Start Quiz
+      function startQuiz() {
+        const input = document.getElementById("userNameInput");
+        if (!input.value.trim()) {
+          alert("請輸入您的稱呼以開始檢測");
+          return;
+        }
+        userName = input.value.trim();
 
-  function calculateQuiz() {
-    const checked = document.querySelectorAll('input[type="radio"]:checked');
-    if(checked.length < totalQ) {
-      document.getElementById("quizErrorBox").style.display = "block";
-      return;
-    }
-    document.getElementById("quizErrorBox").style.display = "none";
-    
-    // Collect scores
-    let scores = Array.from(checked).map(c => parseInt(c.value));
-    const sums = [0,0,0,0,0,0,0]; 
-    
-    scores.forEach((s, i) => {
-        sums[Math.floor(i / 5)] += s;
-    });
+        // UI Transition
+        document.getElementById("quizStartPanel").style.display = "none";
+        document.getElementById("quizQuestionsPanel").style.display = "block";
 
-    const totalScore = scores.reduce((a, b) => a + b, 0);
+        // Scroll to top of questions smoothly
+        document.getElementById("quizQuestionsPanel").scrollIntoView({ behavior: "smooth" });
+      }
 
-    let title="", desc="", body="";
-    let verificationPoints = []; // New dynamic verification points
-    let maxScore = -1;
-    let maxStageIndex = -1;
-    
-    sums.forEach((val, idx) => {
-        if (val >= maxScore) {
+      function updateProgress() {
+        const checked = document.querySelectorAll('input[type="radio"]:checked').length;
+        document.getElementById("quizProgressFill").style.width = (checked / totalQ) * 100 + "%";
+      }
+
+      function calculateQuiz() {
+        const checked = document.querySelectorAll('input[type="radio"]:checked');
+        if (checked.length < totalQ) {
+          document.getElementById("quizErrorBox").style.display = "block";
+          return;
+        }
+        document.getElementById("quizErrorBox").style.display = "none";
+
+        // Collect scores
+        let scores = Array.from(checked).map(c => parseInt(c.value));
+        const sums = [0, 0, 0, 0, 0, 0, 0];
+
+        scores.forEach((s, i) => {
+          sums[Math.floor(i / 5)] += s;
+        });
+
+        const totalScore = scores.reduce((a, b) => a + b, 0);
+
+        let title = "",
+          desc = "",
+          body = "";
+        let verificationPoints = []; // New dynamic verification points
+        let maxScore = -1;
+        let maxStageIndex = -1;
+
+        sums.forEach((val, idx) => {
+          if (val >= maxScore) {
             maxScore = val;
             maxStageIndex = idx;
-        }
-    });
+          }
+        });
 
-    if (totalScore <= 60) {
-       title = "☁️ 迷霧隱藏型（冷感防禦狀態）";
-       desc = "「過度平靜」反而是一種警訊。";
-       body = "您的測驗分數異常低，顯示出幾乎沒有壓力的狀態。在我們服務企業主的經驗中，這通常有兩種極端可能：一，您是極少數達到完美平衡的經營者；二（更常見的情況），長期高壓已經啟動了「麻痺機制」，身體切斷了痛感訊號以保護自己。這種「無感」往往是更大身心風暴的前兆。強烈建議透過光譜儀器，客觀驗證你的「平靜」是否真實。";
-       verificationPoints = [
-         { title: "感知斷層掃描", desc: "你的平靜是修煉，還是神經系統的麻痺？" },
-         { title: "潛意識壓力源", desc: "大腦說沒事，身體卻在大叫的地方在哪？" },
-         { title: "能量流動阻塞", desc: "情緒出口是否被無意識地封死？" },
-         { title: "身心解離指數", desc: "你的靈魂是否還在身體裡？" }
-       ];
-    } else {
-        switch (maxStageIndex) {
+        if (totalScore <= 60) {
+          title = "☁️ 迷霧隱藏型（冷感防禦狀態）";
+          desc = "「過度平靜」反而是一種警訊。";
+          body =
+            "您的測驗分數異常低，顯示出幾乎沒有壓力的狀態。在我們服務企業主的經驗中，這通常有兩種極端可能：一，您是極少數達到完美平衡的經營者；二（更常見的情況），長期高壓已經啟動了「麻痺機制」，身體切斷了痛感訊號以保護自己。這種「無感」往往是更大身心風暴的前兆。強烈建議透過光譜儀器，客觀驗證你的「平靜」是否真實。";
+          verificationPoints = [
+            { title: "感知斷層掃描", desc: "你的平靜是修煉，還是神經系統的麻痺？" },
+            { title: "潛意識壓力源", desc: "大腦說沒事，身體卻在大叫的地方在哪？" },
+            { title: "能量流動阻塞", desc: "情緒出口是否被無意識地封死？" },
+            { title: "身心解離指數", desc: "你的靈魂是否還在身體裡？" },
+          ];
+        } else {
+          switch (maxStageIndex) {
             case 0: // Combustion
-                title = "🔥 燃燒期（熱情過載狀態）";
-                desc = "像一顆停不下來的陀螺，用燃燒生命換取進度。";
-                body = "您擁有強大的執行力與願景，像是一具高效能引擎。但數據顯示，您的「冷卻系統」可能跟不上衝刺速度。這類型的隱憂在於「突然的過勞」或「決策疲勞」。建議透過光譜檢測，找出強制關機的平衡點，別讓熱情燒盡了健康。";
-                verificationPoints = [
-                      { title: "腎上腺素庫存", desc: "你是靠熱情在衝，還是靠透支腎上腺素？" },
-                      { title: "交感神經亢奮度", desc: "大腦是否已經忘記怎麼「關機」？" },
-                      { title: "心臟負荷係數", desc: "熱血背後，心血管系統承受了多少代價？" },
-                      { title: "睡眠修復品質", desc: "睡著了，但身體真的有在充電嗎？" }
-                ];
-                break;
+              title = "🔥 燃燒期（熱情過載狀態）";
+              desc = "像一顆停不下來的陀螺，用燃燒生命換取進度。";
+              body =
+                "您擁有強大的執行力與願景，像是一具高效能引擎。但數據顯示，您的「冷卻系統」可能跟不上衝刺速度。這類型的隱憂在於「突然的過勞」或「決策疲勞」。建議透過光譜檢測，找出強制關機的平衡點，別讓熱情燒盡了健康。";
+              verificationPoints = [
+                { title: "腎上腺素庫存", desc: "你是靠熱情在衝，還是靠透支腎上腺素？" },
+                { title: "交感神經亢奮度", desc: "大腦是否已經忘記怎麼「關機」？" },
+                { title: "心臟負荷係數", desc: "熱血背後，心血管系統承受了多少代價？" },
+                { title: "睡眠修復品質", desc: "睡著了，但身體真的有在充電嗎？" },
+              ];
+              break;
             case 1: // Doubt
-                title = "❓ 懷疑期（價值迷航狀態）";
-                desc = "熟悉的羅盤失靈了，正在迷霧中尋找航道。";
-                body = "您正處於新舊模式的轉換點，過去的成功經驗似乎不再適用，讓您產生了自我懷疑。這不是能力問題，而是「升級」前的陣痛。您需要透過光譜分析，釐清是外在環境變了，還是內在的直覺訊號被雜訊干擾了。";
-                verificationPoints = [
-                      { title: "頂輪直覺清晰度", desc: "干擾你判斷的雜訊，來自恐懼還是事實？" },
-                      { title: "眉心輪洞察力", desc: "你看見的是願景，還是被焦慮扭曲的幻象？" },
-                      { title: "能量場穩定度", desc: "為什麼別人的三言兩語就能動搖你？" },
-                      { title: "決策消耗值", desc: "做一個決定，耗費了你多少無謂的心力？" }
-                ];
-                break;
+              title = "❓ 懷疑期（價值迷航狀態）";
+              desc = "熟悉的羅盤失靈了，正在迷霧中尋找航道。";
+              body =
+                "您正處於新舊模式的轉換點，過去的成功經驗似乎不再適用，讓您產生了自我懷疑。這不是能力問題，而是「升級」前的陣痛。您需要透過光譜分析，釐清是外在環境變了，還是內在的直覺訊號被雜訊干擾了。";
+              verificationPoints = [
+                { title: "頂輪直覺清晰度", desc: "干擾你判斷的雜訊，來自恐懼還是事實？" },
+                { title: "眉心輪洞察力", desc: "你看見的是願景，還是被焦慮扭曲的幻象？" },
+                { title: "能量場穩定度", desc: "為什麼別人的三言兩語就能動搖你？" },
+                { title: "決策消耗值", desc: "做一個決定，耗費了你多少無謂的心力？" },
+              ];
+              break;
             case 2: // Suppression
-                title = "🌫️ 壓抑期（情緒承載狀態）";
-                desc = "表面波瀾不驚，內在卻是即將滿溢的水庫。";
-                body = "為了顧全大局，您習慣了「忍耐」與「沈默」。但這些未被釋放的情緒毒素，正在侵蝕您的生理健康與決策直覺。光譜儀能精準圈出您體內的「情緒淤積區」，讓您看見那些被壓抑的能量去了哪裡。";
-                verificationPoints = [
-                      { title: "喉輪表達阻塞", desc: "那些吞下去的話，在身體裡變成了什麼毒素？" },
-                      { title: "情緒內傷地圖", desc: "忍耐的代價，具體反映在哪些器官上？" },
-                      { title: "甲狀腺能量檢測", desc: "有苦難言，是否正在影響你的代謝系統？" },
-                      { title: "心輪封閉指數", desc: "為了武裝自己，你關閉了多少感受能力？" }
-                ];
-                break;
+              title = "🌫️ 壓抑期（情緒承載狀態）";
+              desc = "表面波瀾不驚，內在卻是即將滿溢的水庫。";
+              body =
+                "為了顧全大局，您習慣了「忍耐」與「沈默」。但這些未被釋放的情緒毒素，正在侵蝕您的生理健康與決策直覺。光譜儀能精準圈出您體內的「情緒淤積區」，讓您看見那些被壓抑的能量去了哪裡。";
+              verificationPoints = [
+                { title: "喉輪表達阻塞", desc: "那些吞下去的話，在身體裡變成了什麼毒素？" },
+                { title: "情緒內傷地圖", desc: "忍耐的代價，具體反映在哪些器官上？" },
+                { title: "甲狀腺能量檢測", desc: "有苦難言，是否正在影響你的代謝系統？" },
+                { title: "心輪封閉指數", desc: "為了武裝自己，你關閉了多少感受能力？" },
+              ];
+              break;
             case 3: // Self-blame
-                title = "💔 自責期（關係沈重狀態）";
-                desc = "背負著所有人的期待，卻唯獨忘了放過自己。";
-                body = "您是個極具責任感的領導者，但這份責任感變成了沈重的枷鎖。您將團隊與家人的問題都歸咎於自己，導致能量場呈現「過度抓取」與「內縮」的狀態。我們需要協助您釋放這些不屬於您的業力，找回輕盈。";
-                verificationPoints = [
-                      { title: "肩頸責任承載", desc: "你肩膀上的酸痛，背負了誰的業力？" },
-                      { title: "心輪能量過載", desc: "過度的慈悲與愧疚，如何壓垮你的心臟？" },
-                      { title: "界線破損程度", desc: "你的能量場是否破洞，讓情緒不斷外洩？" },
-                      { title: "自我攻擊指數", desc: "你的內在對話，正在如何攻擊自己的細胞？" }
-                ];
-                break;
+              title = "💔 自責期（關係沈重狀態）";
+              desc = "背負著所有人的期待，卻唯獨忘了放過自己。";
+              body =
+                "您是個極具責任感的領導者，但這份責任感變成了沈重的枷鎖。您將團隊與家人的問題都歸咎於自己，導致能量場呈現「過度抓取」與「內縮」的狀態。我們需要協助您釋放這些不屬於您的業力，找回輕盈。";
+              verificationPoints = [
+                { title: "肩頸責任承載", desc: "你肩膀上的酸痛，背負了誰的業力？" },
+                { title: "心輪能量過載", desc: "過度的慈悲與愧疚，如何壓垮你的心臟？" },
+                { title: "界線破損程度", desc: "你的能量場是否破洞，讓情緒不斷外洩？" },
+                { title: "自我攻擊指數", desc: "你的內在對話，正在如何攻擊自己的細胞？" },
+              ];
+              break;
             case 4: // Collapse
-                title = "⚠️ 崩潰期（紅色警戒狀態）";
-                desc = "身心警報大作，這是一場關於「生存」的保衛戰。";
-                body = "這是一個危險的訊號。您的身心靈可能已經到達了極限臨界點。失眠、焦慮、想放棄的念頭不是軟弱，是身體在求救。請務必正視這個狀態，您現在最需要的不是更多策略，而是一次深度的能量修復與暫停。";
-                verificationPoints = [
-                      { title: "海底輪生存安全感", desc: "根基動搖的恐懼，具體耗損了哪裡的元氣？" },
-                      { title: "自律神經失調指數", desc: "你的身體是否處於「失控」的邊緣？" },
-                      { title: "免疫系統防禦力", desc: "長期高壓下，身體防線還剩多少？" },
-                      { title: "極限臨界點預警", desc: "離身心強制關機，還有多遠？" }
-                ];
-                break;
+              title = "⚠️ 崩潰期（紅色警戒狀態）";
+              desc = "身心警報大作，這是一場關於「生存」的保衛戰。";
+              body =
+                "這是一個危險的訊號。您的身心靈可能已經到達了極限臨界點。失眠、焦慮、想放棄的念頭不是軟弱，是身體在求救。請務必正視這個狀態，您現在最需要的不是更多策略，而是一次深度的能量修復與暫停。";
+              verificationPoints = [
+                { title: "海底輪生存安全感", desc: "根基動搖的恐懼，具體耗損了哪裡的元氣？" },
+                { title: "自律神經失調指數", desc: "你的身體是否處於「失控」的邊緣？" },
+                { title: "免疫系統防禦力", desc: "長期高壓下，身體防線還剩多少？" },
+                { title: "極限臨界點預警", desc: "離身心強制關機，還有多遠？" },
+              ];
+              break;
             case 5: // Awakening
-                title = "✨ 覺醒期（內在轉化狀態）";
-                desc = "黑暗過後的第一道曙光，您看見了不一樣的世界。";
-                body = "恭喜您，您已經開始意識到「向內求」的力量。您正處於意識擴展的階段，這時候的光譜檢測，能協助您驗證內在的轉變，並將這份覺知轉化為具體的領導智慧，帶領企業進入下一個維度。";
-                verificationPoints = [
-                      { title: "頂輪宇宙連結", desc: "你的靈感是來自焦慮，還是更高維度的下載？" },
-                      { title: "松果體活化度", desc: "內在視野開啟後，你的感知力提升了多少？" },
-                      { title: "能量流動順暢度", desc: "從「用力」到「順流」，身體學會了嗎？" },
-                      { title: "心腦諧振頻率", desc: "理智與直覺，是否達到了完美的同步？" }
-                ];
-                break;
+              title = "✨ 覺醒期（內在轉化狀態）";
+              desc = "黑暗過後的第一道曙光，您看見了不一樣的世界。";
+              body =
+                "恭喜您，您已經開始意識到「向內求」的力量。您正處於意識擴展的階段，這時候的光譜檢測，能協助您驗證內在的轉變，並將這份覺知轉化為具體的領導智慧，帶領企業進入下一個維度。";
+              verificationPoints = [
+                { title: "頂輪宇宙連結", desc: "你的靈感是來自焦慮，還是更高維度的下載？" },
+                { title: "松果體活化度", desc: "內在視野開啟後，你的感知力提升了多少？" },
+                { title: "能量流動順暢度", desc: "從「用力」到「順流」，身體學會了嗎？" },
+                { title: "心腦諧振頻率", desc: "理智與直覺，是否達到了完美的同步？" },
+              ];
+              break;
             case 6: // Reconstruction
-                title = "🏗️ 重構期（新秩序建立狀態）";
-                desc = "瓦解後的重生，您正在打造更具韌性的生命系統。";
-                body = "您已經走過了最艱難的路段，現在正處於資源整合與新秩序建立的黃金期。您的能量場正在重組，變得更穩定且開放。這時候做光譜檢測，能協助您確認新的能量管道是否暢通，加速新局面的開展。";
-                verificationPoints = [
-                      { title: "海底輪落地執行力", desc: "新秩序的建立，根基扎得夠深嗎？" },
-                      { title: "太陽神經叢自信", desc: "重建後的自信，是虛張聲勢還是真實力量？" },
-                      { title: "丹田氣場飽滿度", desc: "推動新局，你的底氣足夠支撐擴張嗎？" },
-                      { title: "財富能量通道", desc: "新的商業模式，是否與你的能量場共振？" }
-                ];
-                break;
+              title = "🏗️ 重構期（新秩序建立狀態）";
+              desc = "瓦解後的重生，您正在打造更具韌性的生命系統。";
+              body =
+                "您已經走過了最艱難的路段，現在正處於資源整合與新秩序建立的黃金期。您的能量場正在重組，變得更穩定且開放。這時候做光譜檢測，能協助您確認新的能量管道是否暢通，加速新局面的開展。";
+              verificationPoints = [
+                { title: "海底輪落地執行力", desc: "新秩序的建立，根基扎得夠深嗎？" },
+                { title: "太陽神經叢自信", desc: "重建後的自信，是虛張聲勢還是真實力量？" },
+                { title: "丹田氣場飽滿度", desc: "推動新局，你的底氣足夠支撐擴張嗎？" },
+                { title: "財富能量通道", desc: "新的商業模式，是否與你的能量場共振？" },
+              ];
+              break;
+          }
         }
-    }
 
-    currentResultTitle = title;
-    const res = document.getElementById("quizResultBox");
-    
-    // Update Title with User Name
-    document.getElementById("quizResultTitle").innerText = `${userName}，您的初步檢測結果：${title}`;
-    
-    document.getElementById("quizResultTagline").innerText = desc;
-    document.getElementById("quizResultBody").innerText = body;
-    
-    // Update Verification Points
-    const spectrumList = document.getElementById("spectrumVerificationList");
-    let listHtml = "";
-    verificationPoints.forEach(p => {
-        listHtml += `
+        currentResultTitle = title;
+        const res = document.getElementById("quizResultBox");
+
+        // Update Title with User Name
+        document.getElementById("quizResultTitle").innerText =
+          `${userName}，您的初步檢測結果：${title}`;
+
+        document.getElementById("quizResultTagline").innerText = desc;
+        document.getElementById("quizResultBody").innerText = body;
+
+        // Update Verification Points
+        const spectrumList = document.getElementById("spectrumVerificationList");
+        let listHtml = "";
+        verificationPoints.forEach(p => {
+          listHtml += `
             <div class="spectrum-item">
               <div class="spectrum-icon">●</div>
               <div><strong>${p.title}：</strong>${p.desc}</div>
             </div>
         `;
-    });
-    spectrumList.innerHTML = listHtml;
-    
-    res.style.display = "block";
-    res.scrollIntoView({ behavior: 'smooth' });
-  }
-</script>
+        });
+        spectrumList.innerHTML = listHtml;
 
-</body>
+        res.style.display = "block";
+        res.scrollIntoView({ behavior: "smooth" });
+      }
+    </script>
+  </body>
 </html>
