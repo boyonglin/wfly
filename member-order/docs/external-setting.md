@@ -8,3 +8,4 @@
 - LINE Developers
   - LINE Login
   - Messaging API
+  - LINE Pay

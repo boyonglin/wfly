@@ -52,6 +52,47 @@ const CONFIG = {
   },
 
   // =============================================
+  // 4-2. LINE Pay 設定
+  // =============================================
+  LINE_PAY: {
+    // 是否啟用 LINE Pay
+    ENABLED: true,
+
+    // Sandbox 測試模式
+    // true = 使用 sandbox-api-pay.line.me（測試環境）
+    // false = 使用 api-pay.line.me（正式環境）
+    SANDBOX: true,
+
+    // Channel ID（僅供參考，實際 API 呼叫由 GAS 處理）
+    CHANNEL_ID: "2008938618",
+
+    // 【請填入】部署好的 LINE Pay GAS URL
+    // 部署步驟：
+    // 1. 將 gas-line-pay.txt 程式碼貼到 GAS
+    // 2. 設定腳本屬性：LINEPAY_CHANNEL_ID、LINEPAY_CHANNEL_SECRET
+    // 3. 部署 > 新增部署 > 網頁應用程式 > 任何人皆可存取
+    // 4. 複製部署後的 URL 貼到這裡
+    ENDPOINT:
+      "https://script.google.com/macros/s/AKfycbw-JNFvMYGdTCJY3jc9AeAKVV4N-B8VL53Lr2d4V8kMRIaMAdHq7IEr2MmQJk9i9uuZ9g/exec",
+
+    // 回傳網址設定（根據環境自動判斷）
+    getConfirmUrl: () => {
+      const isLocal =
+        window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost";
+      return isLocal
+        ? "http://127.0.0.1:5500/member-order/order-success.html"
+        : "https://boyonglin.github.io/wfly/member-order/order-success.html";
+    },
+    getCancelUrl: () => {
+      const isLocal =
+        window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost";
+      return isLocal
+        ? "http://127.0.0.1:5500/member-order/order-form.html"
+        : "https://boyonglin.github.io/wfly/member-order/order-form.html";
+    },
+  },
+
+  // =============================================
   // 5. LINE 官方帳號資訊 & API 代理設定
   // =============================================
   LINE: {
