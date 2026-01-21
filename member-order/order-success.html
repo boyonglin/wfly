@@ -31,7 +31,8 @@
     <!-- 4. 引入自訂樣式 -->
     <link rel="stylesheet" href="styles.css" />
 
-    <!-- 5. 引入設定檔 (必須在 React 之前載入) -->
+    <!-- 5. 引入設定檔 (config-api.js 必須在 config.js 之前載入) -->
+    <script src="config-api.js"></script>
     <script src="config.js"></script>
 
     <!-- 6. 引入 LINE Login SDK -->
@@ -169,6 +170,7 @@
                 setRestored(true);
 
                 // 如果有 LINE Pay transactionId，執行確認付款
+                // LINE Pay API 本身有防重複機制（return code 1152, 1198）
                 if (
                   transactionId &&
                   parsedOrder.paymentMethod === "linepay" &&
@@ -200,7 +202,7 @@
         // LINE Pay 確認付款
         // =============================================
         const confirmLinePay = async (transactionId, order) => {
-          if (!LINE_PAY?.ENDPOINT) {
+          if (!LINE_PAY.ENDPOINT) {
             setLinePayError("LINE Pay 未設定");
             return;
           }
@@ -238,24 +240,6 @@
               localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
               setOrderResult(updatedOrder);
               setLinePayConfirmed(true);
-
-              // 同步付款狀態到 Google Sheets
-              try {
-                await fetch(GOOGLE_SCRIPT_URL, {
-                  method: "POST",
-                  mode: "cors",
-                  headers: { "Content-Type": "text/plain" },
-                  body: JSON.stringify({
-                    action: "updatePaymentStatus",
-                    orderId: order.id,
-                    paymentStatus: "paid",
-                  }),
-                });
-                console.log("Payment status synced to Google Sheets");
-              } catch (syncError) {
-                console.error("Failed to sync payment status:", syncError);
-                // 不影響前端顯示，只記錄錯誤
-              }
             } else {
               throw new Error(result.error || "付款確認失敗");
             }

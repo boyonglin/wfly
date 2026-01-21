@@ -34,7 +34,8 @@
     <!-- 4. 引入自訂樣式 -->
     <link rel="stylesheet" href="styles.css" />
 
-    <!-- 5. 引入設定檔 (必須在 React 之前載入) -->
+    <!-- 5. 引入設定檔 (config-api.js 必須在 config.js 之前載入) -->
+    <script src="config-api.js"></script>
     <script src="config.js"></script>
   </head>
   <body class="bg-[#f5f5f7]">
@@ -144,7 +145,7 @@
 
         // 付款方式選擇（bank: 銀行轉帳, linepay: LINE Pay）
         const [paymentMethod, setPaymentMethod] = useState(
-          LINE_PAY?.ENABLED && LINE_PAY?.ENDPOINT ? "linepay" : "bank"
+          LINE_PAY.ENABLED && LINE_PAY.ENDPOINT ? "linepay" : "bank"
         );
 
         // 自定義下拉選單狀態
@@ -610,7 +611,6 @@
             signature: finalOrder.signature,
             // 付款相關欄位
             paymentMethod: finalOrder.paymentMethod || "", // bank 或 linepay
-            paymentStatus: finalOrder.paymentStatus === "paid" ? "paid" : "", // 只有確認付款才填 paid，否則空值
           };
 
           console.log("Sending to Google Sheets:", payload);
@@ -707,7 +707,6 @@
             signature: signatureData,
             deadline: deadline,
             paymentMethod: paymentMethod, // 付款方式
-            paymentStatus: paymentMethod === "linepay" ? "pending_linepay" : "pending_bank", // 付款狀態
           };
 
           try {
@@ -720,7 +719,7 @@
           }
 
           // LINE Pay 付款流程
-          if (paymentMethod === "linepay" && LINE_PAY?.ENABLED && LINE_PAY?.ENDPOINT) {
+          if (paymentMethod === "linepay" && LINE_PAY.ENABLED && LINE_PAY.ENDPOINT) {
             try {
               // 產生商品名稱
               const productNames = Object.entries(cart)
@@ -754,11 +753,26 @@
               const response = await fetch(
                 `${LINE_PAY.ENDPOINT}?action=linePayRequest&data=${encodeURIComponent(payload)}`
               );
-              const result = await response.json();
+              // ⚠️ 先取得原始文字，用正則將 transactionId 的數字轉為字串
+              // 避免 JSON.parse 時大數字（19位）失去精度
+              const responseText = await response.text();
+              console.log("[LINE Pay Debug] Raw response:", responseText);
+              const fixedText = responseText.replace(
+                /"transactionId"\s*:\s*(\d+)/g,
+                '"transactionId":"$1"'
+              );
+              console.log("[LINE Pay Debug] Fixed response:", fixedText);
+              const result = JSON.parse(fixedText);
+              console.log(
+                "[LINE Pay Debug] Parsed transactionId:",
+                result.transactionId,
+                "type:",
+                typeof result.transactionId
+              );
 
               if (result.success && result.paymentUrl) {
                 // 儲存訂單資訊（含 LINE Pay transactionId）
-                finalOrder.linePayTransactionId = result.transactionId;
+                finalOrder.linePayTransactionId = String(result.transactionId);
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(finalOrder));
                 localStorage.removeItem(DRAFT_KEY);
 
@@ -771,9 +785,14 @@
             } catch (err) {
               console.error("LINE Pay Error:", err);
               alert(`LINE Pay 付款失敗：${err.message}\n\n將改為銀行轉帳方式`);
-              // 失敗時改為銀行轉帳
+              // 失敗時改為銀行轉帳，並更新 Google Sheets
               finalOrder.paymentMethod = "bank";
-              finalOrder.paymentStatus = "pending_bank";
+              finalOrder.isUpdate = true; // 標記為更新模式
+              try {
+                await sendToGoogleSheets(finalOrder);
+              } catch (updateErr) {
+                console.error("Failed to update payment method:", updateErr);
+              }
             }
           }
 
@@ -1485,7 +1504,7 @@
                 </h3>
                 <div className="space-y-2 sm:space-y-3">
                   {/* LINE Pay 選項 */}
-                  {LINE_PAY?.ENABLED && (
+                  {LINE_PAY.ENABLED && (
                     <label
                       className={`flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border-2 cursor-pointer transition-all ${
                         paymentMethod === "linepay"
@@ -1571,7 +1590,7 @@
                 </div>
 
                 {/* LINE Pay 未設定提示 */}
-                {LINE_PAY?.ENABLED && !LINE_PAY?.ENDPOINT && paymentMethod === "linepay" && (
+                {LINE_PAY.ENABLED && !LINE_PAY.ENDPOINT && paymentMethod === "linepay" && (
                   <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-700">
                     ⚠️ LINE Pay 尚未設定完成，請先完成 GAS 部署並填入 ENDPOINT
                   </div>

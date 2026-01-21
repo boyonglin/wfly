@@ -35,41 +35,13 @@ function doPost(e) {
     const sheet = ss.getSheets()[0];
 
     // =============================================
-    // 處理付款狀態更新請求
-    // =============================================
-    if (data.action === 'updatePaymentStatus' && data.orderId) {
-      const lastRow = sheet.getLastRow();
-      if (lastRow > 1) {
-        const orderIdColumn = sheet.getRange(2, 2, lastRow - 1, 1).getValues(); // B欄是 orderId
-        for (let i = 0; i < orderIdColumn.length; i++) {
-          if (orderIdColumn[i][0] === data.orderId) {
-            const foundRow = i + 2;
-            // V欄 (第22欄) 是付款狀態
-            const paymentStatusText = data.paymentStatus === 'paid' ? '已付款' : '';
-            sheet.getRange(foundRow, 22).setValue(paymentStatusText);
-            Logger.log('Updated payment status for order ' + data.orderId + ' at row ' + foundRow);
-            return ContentService.createTextOutput(
-              JSON.stringify({ status: 'ok', action: 'paymentStatusUpdated', row: foundRow })
-            ).setMimeType(ContentService.MimeType.JSON);
-          }
-        }
-      }
-      // 找不到訂單
-      return ContentService.createTextOutput(
-        JSON.stringify({ status: 'error', message: 'Order not found: ' + data.orderId })
-      ).setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // =============================================
     // 處理新增/更新訂單請求
     // =============================================
     const itemsText = data.itemsSummary || JSON.stringify(data.items);
 
-    // 付款方式處理：bank → 銀行轉帳, linepay → LINE Pay，否則空值
+    // 付款方式處理：bank → 銀行轉帳, linepay → LINE Pay
     const paymentMethodText = data.paymentMethod === 'bank' ? '銀行轉帳' :
                               data.paymentMethod === 'linepay' ? 'LINE Pay' : '';
-    // 付款狀態處理：只有 paid 才顯示「已付款」，否則空值
-    const paymentStatusText = data.paymentStatus === 'paid' ? '已付款' : '';
 
     // 準備要寫入的資料列
     const rowData = [
@@ -93,8 +65,7 @@ function doPost(e) {
       itemsText,
       data.total,
       data.signature,
-      paymentMethodText,   // 付款方式（銀行轉帳 / LINE Pay / 空值）
-      paymentStatusText    // 付款狀態（已付款 / 空值）
+      paymentMethodText
     ];
 
     // 如果是更新模式，找到原訂單並覆寫

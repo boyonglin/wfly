@@ -115,7 +115,7 @@ function linePayRequest(orderId, amount, productName, confirmUrl, cancelUrl, san
     if (result.returnCode === '0000') {
       return {
         success: true,
-        transactionId: result.info.transactionId,
+        transactionId: String(result.info.transactionId),
         paymentUrl: result.info.paymentUrl.web
       };
     } else {
