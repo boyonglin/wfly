@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WFLY Projects</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 18px;
+            opacity: 0.9;
+        }
+
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .project-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .project-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .project-card h2 {
+            color: #667eea;
+            margin-bottom: 12px;
+            font-size: 24px;
+        }
+
+        .project-card p {
+            color: #666;
+            line-height: 1.6;
+            flex-grow: 1;
+            margin-bottom: 16px;
+        }
+
+        .project-link {
+            display: inline-block;
+            color: #667eea;
+            font-weight: 600;
+            text-decoration: none;
+            border-bottom: 2px solid #667eea;
+            transition: all 0.3s ease;
+        }
+
+        .project-link:hover {
+            color: #764ba2;
+            border-bottom-color: #764ba2;
+        }
+
+        .emoji {
+            font-size: 32px;
+            margin-bottom: 12px;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 32px;
+            }
+
+            .projects-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✨ WFLY Projects</h1>
+            <p>Welcome to our project showcase</p>
+        </div>
+
+        <div class="projects-grid">
+            <!-- BOSS心商學 -->
+            <a href="BOSS心商學/boss.html" class="project-card" style="text-decoration: none;">
+                <div class="emoji">👔</div>
+                <h2>BOSS心商學</h2>
+                <p>探索商業情商課程和資源，提升領導力和溝通技巧。</p>
+                <span class="project-link">進入項目 →</span>
+            </a>
+
+            <!-- 會員訂單系統 -->
+            <a href="member-order/index.html" class="project-card" style="text-decoration: none;">
+                <div class="emoji">🛒</div>
+                <h2>會員訂單系統</h2>
+                <p>整合 LINE 登入的會員訂單管理系統，支援表單填寫和訂單成功頁面。</p>
+                <span class="project-link">進入項目 →</span>
+            </a>
+
+            <!-- 大安系統報價單 -->
+            <a href="大安報價單/quotation.html" class="project-card" style="text-decoration: none;">
+                <div class="emoji">💰</div>
+                <h2>大安系統報價單</h2>
+                <p>專業的報價單生成系統，用於快速建立和管理客戶報價。</p>
+                <span class="project-link">進入項目 →</span>
+            </a>
+
+            <!-- 軌跡圖產生器 -->
+            <a href="軌跡圖產生器/path-gen-web.html" class="project-card" style="text-decoration: none;">
+                <div class="emoji">🗺️</div>
+                <h2>軌跡圖產生器</h2>
+                <p>生成和視覺化軌跡圖，支援網頁版和行動版。</p>
+                <span class="project-link">進入項目 →</span>
+            </a>
+        </div>
+    </div>
+</body>
+</html>
