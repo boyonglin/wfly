@@ -1,524 +1,1461 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <title>多模式軌跡圖 (防遮擋安全版)</title>
-    
+
     <!-- 引入 React 核心 -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    
+
     <!-- 引入 Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
+
     <!-- 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- 引入 JSZip -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <!-- 引入 Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
 
     <style>
-        html, body, #root {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            overflow: hidden; /* 禁止最外層捲動，交給內部容器 */
-        }
-        body { 
-            font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif; 
-            background-color: #f3f4f6;
-        }
-        .font-serif { 
-            font-family: "Noto Serif TC", "PMingLiU", serif; 
-        }
-        
-        /* 畫布互動模式 */
-        .canvas-drag-mode {
-            touch-action: none !important; 
-            cursor: move;
-        }
-        .canvas-scroll-mode {
-            touch-action: pan-x pan-y !important; /* 允許手指捲動 */
-            cursor: default;
-        }
+      html,
+      body,
+      #root {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden; /* 禁止最外層捲動，交給內部容器 */
+      }
+      body {
+        font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
+        background-color: #f3f4f6;
+      }
+      .font-serif {
+        font-family: "Noto Serif TC", "PMingLiU", serif;
+      }
 
-        /* 關鍵修正：確保內容可捲動且不被切斷 */
-        .scroll-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center; /* 水平置中 */
-            justify-content: flex-start; /* 垂直靠上，避免切頭 */
-            overflow: auto;
-            -webkit-overflow-scrolling: touch;
-            width: 100%;
-            height: 100%;
-            padding-top: 40px; /* 頂部強制留白，防遮擋 */
-            padding-bottom: 100px; /* 底部強制留白 */
-        }
+      /* 畫布互動模式 */
+      .canvas-drag-mode {
+        touch-action: none !important;
+        cursor: move;
+      }
+      .canvas-scroll-mode {
+        touch-action: pan-x pan-y !important; /* 允許手指捲動 */
+        cursor: default;
+      }
 
-        canvas {
-            margin: auto; /* 在 Flex 容器中自動置中 */
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-        }
+      /* 關鍵修正：確保內容可捲動且不被切斷 */
+      .scroll-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center; /* 水平置中 */
+        justify-content: flex-start; /* 垂直靠上，避免切頭 */
+        overflow: auto;
+        -webkit-overflow-scrolling: touch;
+        width: 100%;
+        height: 100%;
+        padding-top: 40px; /* 頂部強制留白，防遮擋 */
+        padding-bottom: 100px; /* 底部強制留白 */
+      }
 
-        @keyframes pulse-blue {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
-            50% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+      canvas {
+        margin: auto; /* 在 Flex 容器中自動置中 */
+        box-shadow:
+          0 10px 25px -5px rgba(0, 0, 0, 0.1),
+          0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      }
+
+      @keyframes pulse-blue {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
         }
-        .download-ready {
-            animation: pulse-blue 2s infinite;
+        50% {
+          box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
         }
+      }
+      .download-ready {
+        animation: pulse-blue 2s infinite;
+      }
     </style>
-</head>
-<body class="text-gray-800">
-
+  </head>
+  <body class="text-gray-800">
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useRef, useEffect, useMemo } = React;
+      const { useState, useRef, useEffect, useMemo } = React;
 
-        // --- 設定標記 ---
-        const PRELOADED_IMAGES = { name: null, address: null, company: null }; // --IMAGE_DATA_MARKER--
-        const PRELOADED_LAYOUTS = null; // --LAYOUT_DATA_MARKER--
+      // --- 設定標記 ---
+      const PRELOADED_IMAGES = { name: null, address: null, company: null }; // --IMAGE_DATA_MARKER--
+      const PRELOADED_LAYOUTS = null; // --LAYOUT_DATA_MARKER--
 
-        // --- 圖示組件 ---
-        const IconBase = ({ children, className }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                {children}
-            </svg>
+      // --- 圖示組件 ---
+      const IconBase = ({ children, className }) => (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={className}
+        >
+          {children}
+        </svg>
+      );
+      const Upload = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" x2="12" y1="3" y2="15" />
+        </IconBase>
+      );
+      const Plus = ({ className }) => (
+        <IconBase className={className}>
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </IconBase>
+      );
+      const Trash2 = ({ className }) => (
+        <IconBase className={className}>
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          <line x1="10" y1="11" x2="10" y2="17" />
+          <line x1="14" y1="11" x2="14" y2="17" />
+        </IconBase>
+      );
+      const Users = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </IconBase>
+      );
+      const Settings = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.35a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+          <circle cx="12" cy="12" r="3" />
+        </IconBase>
+      );
+      const Layout = ({ className }) => (
+        <IconBase className={className}>
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <line x1="3" y1="9" x2="21" y2="9" />
+          <line x1="9" y1="21" x2="9" y2="9" />
+        </IconBase>
+      );
+      const Type = ({ className }) => (
+        <IconBase className={className}>
+          <polyline points="4 7 4 4 20 4 20 7" />
+          <line x1="9" y1="20" x2="15" y2="20" />
+          <line x1="12" y1="4" x2="12" y2="20" />
+        </IconBase>
+      );
+      const MousePointer2 = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z" />
+        </IconBase>
+      );
+      const Loader2 = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+        </IconBase>
+      );
+      const FileArchive = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M4 22V4c0-.5.2-1 .6-1.4C5 2.2 5.5 2 6 2h13.5L20 22Z" />
+          <path d="M10 2v20" />
+          <path d="M20 12h-2" />
+          <path d="M20 7h-2" />
+          <path d="M20 17h-2" />
+          <path d="M4 12h2" />
+          <path d="M4 7h2" />
+          <path d="M4 17h2" />
+        </IconBase>
+      );
+      const MapPin = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+          <circle cx="12" cy="10" r="3" />
+        </IconBase>
+      );
+      const Building2 = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
+          <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
+          <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
+          <path d="M10 6h4" />
+          <path d="M10 10h4" />
+          <path d="M10 14h4" />
+          <path d="M10 18h4" />
+        </IconBase>
+      );
+      const User = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </IconBase>
+      );
+      const FileText = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+          <line x1="10" y1="9" x2="8" y2="9" />
+        </IconBase>
+      );
+      const X = ({ className }) => (
+        <IconBase className={className}>
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </IconBase>
+      );
+      const Check = ({ className }) => (
+        <IconBase className={className}>
+          <polyline points="20 6 9 17 4 12" />
+        </IconBase>
+      );
+      const FolderOpen = ({ className }) => (
+        <IconBase className={className}>
+          <path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-3.25 7a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2" />
+        </IconBase>
+      );
+      const Gift = ({ className }) => (
+        <IconBase className={className}>
+          <polyline points="20 12 20 22 4 22 4 12" />
+          <rect x="2" y="7" width="20" height="5" />
+          <line x1="12" y1="22" x2="12" y2="7" />
+          <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" />
+          <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+        </IconBase>
+      );
+      const Download = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" x2="12" y1="15" y2="3" />
+        </IconBase>
+      );
+      const ImageIcon = ({ className }) => (
+        <IconBase className={className}>
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <polyline points="21 15 16 10 5 21" />
+        </IconBase>
+      );
+      const Share2 = ({ className }) => (
+        <IconBase className={className}>
+          <circle cx="18" cy="5" r="3" />
+          <circle cx="6" cy="12" r="3" />
+          <circle cx="18" cy="19" r="3" />
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </IconBase>
+      );
+      const Edit = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+        </IconBase>
+      );
+      const Eye = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+          <circle cx="12" cy="12" r="3" />
+        </IconBase>
+      );
+      const MoveIcon = ({ className }) => (
+        <IconBase className={className}>
+          <polyline points="5 9 2 12 5 15" />
+          <polyline points="9 5 12 2 15 5" />
+          <polyline points="19 9 22 12 19 15" />
+          <polyline points="15 19 12 22 9 19" />
+          <line x1="2" y1="12" x2="22" y2="12" />
+          <line x1="12" y1="2" x2="12" y2="22" />
+        </IconBase>
+      );
+      const Hand = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0" />
+          <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2" />
+          <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8" />
+          <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+        </IconBase>
+      );
+      const Maximize = ({ className }) => (
+        <IconBase className={className}>
+          <polyline points="15 3 21 3 21 9" />
+          <polyline points="9 21 3 21 3 15" />
+          <line x1="21" y1="3" x2="14" y2="10" />
+          <line x1="3" y1="21" x2="10" y2="14" />
+        </IconBase>
+      );
+
+      function App() {
+        const MODES = {
+          name: {
+            id: "name",
+            label: "姓名軌跡",
+            icon: <User className="w-4 h-4" />,
+            fields: { main: "姓名", sub: "關係" },
+            defaultLayout: {
+              main: { x: 300, y: 400, size: 60, color: "#000000", vertical: true },
+              sub: { x: 800, y: 50, size: 30, color: "#000000", vertical: false },
+              date: { x: 800, y: 100, size: 30, color: "#000000", vertical: false },
+              services: { x: 800, y: 150, size: 30, color: "#000000", vertical: false },
+            },
+          },
+          address: {
+            id: "address",
+            label: "地址軌跡",
+            icon: <MapPin className="w-4 h-4" />,
+            fields: { main: "地址", sub: "備註/居住者" },
+            defaultLayout: {
+              main: { x: 200, y: 300, size: 50, color: "#000000", vertical: true },
+              sub: { x: 700, y: 50, size: 30, color: "#000000", vertical: false },
+              date: { x: 700, y: 100, size: 30, color: "#000000", vertical: false },
+              services: { x: 700, y: 150, size: 30, color: "#000000", vertical: false },
+            },
+          },
+          company: {
+            id: "company",
+            label: "企業軌跡",
+            icon: <Building2 className="w-4 h-4" />,
+            fields: { main: "企業名稱", sub: "統編/負責人" },
+            defaultLayout: {
+              main: { x: 300, y: 350, size: 55, color: "#000000", vertical: true },
+              sub: { x: 750, y: 50, size: 30, color: "#000000", vertical: false },
+              date: { x: 750, y: 100, size: 30, color: "#000000", vertical: false },
+              services: { x: 750, y: 150, size: 30, color: "#000000", vertical: false },
+            },
+          },
+        };
+
+        const [currentMode, setCurrentMode] = useState("name");
+        const [showImportModal, setShowImportModal] = useState(false);
+        const [showDownloadModal, setShowDownloadModal] = useState(false);
+        const [generatedResults, setGeneratedResults] = useState([]);
+        const [importText, setImportText] = useState("");
+        const [customerName, setCustomerName] = useState("");
+        const [modeImages, setModeImages] = useState(PRELOADED_IMAGES);
+        const [dataStore, setDataStore] = useState({
+          name: {
+            entries: [{ id: 1, mainText: "", subText: "" }],
+            global: { date: "", services: "" },
+            selectedId: 1,
+          },
+          address: {
+            entries: [{ id: 1, mainText: "", subText: "" }],
+            global: { date: "", services: "" },
+            selectedId: 1,
+          },
+          company: {
+            entries: [{ id: 1, mainText: "", subText: "" }],
+            global: { date: "", services: "" },
+            selectedId: 1,
+          },
+        });
+        const [layouts, setLayouts] = useState(
+          PRELOADED_LAYOUTS || {
+            name: MODES.name.defaultLayout,
+            address: MODES.address.defaultLayout,
+            company: MODES.company.defaultLayout,
+          }
         );
-        const Upload = ({ className }) => <IconBase className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></IconBase>;
-        const Plus = ({ className }) => <IconBase className={className}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></IconBase>;
-        const Trash2 = ({ className }) => <IconBase className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></IconBase>;
-        const Users = ({ className }) => <IconBase className={className}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></IconBase>;
-        const Settings = ({ className }) => <IconBase className={className}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.35a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></IconBase>;
-        const Layout = ({ className }) => <IconBase className={className}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></IconBase>;
-        const Type = ({ className }) => <IconBase className={className}><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></IconBase>;
-        const MousePointer2 = ({ className }) => <IconBase className={className}><path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/></IconBase>;
-        const Loader2 = ({ className }) => <IconBase className={className}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></IconBase>;
-        const FileArchive = ({ className }) => <IconBase className={className}><path d="M4 22V4c0-.5.2-1 .6-1.4C5 2.2 5.5 2 6 2h13.5L20 22Z"/><path d="M10 2v20"/><path d="M20 12h-2"/><path d="M20 7h-2"/><path d="M20 17h-2"/><path d="M4 12h2"/><path d="M4 7h2"/><path d="M4 17h2"/></IconBase>;
-        const MapPin = ({ className }) => <IconBase className={className}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></IconBase>;
-        const Building2 = ({ className }) => <IconBase className={className}><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></IconBase>;
-        const User = ({ className }) => <IconBase className={className}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></IconBase>;
-        const FileText = ({ className }) => <IconBase className={className}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></IconBase>;
-        const X = ({ className }) => <IconBase className={className}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></IconBase>;
-        const Check = ({ className }) => <IconBase className={className}><polyline points="20 6 9 17 4 12"/></IconBase>;
-        const FolderOpen = ({ className }) => <IconBase className={className}><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-3.25 7a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></IconBase>;
-        const Gift = ({ className }) => <IconBase className={className}><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></IconBase>;
-        const Download = ({ className }) => <IconBase className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></IconBase>;
-        const ImageIcon = ({ className }) => <IconBase className={className}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></IconBase>;
-        const Share2 = ({ className }) => <IconBase className={className}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></IconBase>;
-        const Edit = ({ className }) => <IconBase className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></IconBase>;
-        const Eye = ({ className }) => <IconBase className={className}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></IconBase>;
-        const MoveIcon = ({ className }) => <IconBase className={className}><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="19 9 22 12 19 15"/><polyline points="15 19 12 22 9 19"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></IconBase>;
-        const Hand = ({ className }) => <IconBase className={className}><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></IconBase>;
-        const Maximize = ({ className }) => <IconBase className={className}><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></IconBase>;
+        const [mobileTab, setMobileTab] = useState("preview");
+        const [isTouchDragMode, setIsTouchDragMode] = useState(false);
+        const [editModalOpen, setEditModalOpen] = useState(false);
+        const [editData, setEditData] = useState({ key: "", value: "" });
+        const [isFitWidth, setIsFitWidth] = useState(false);
 
-        function App() {
-            const MODES = {
-                name: { id: 'name', label: '姓名軌跡', icon: <User className="w-4 h-4" />, fields: { main: '姓名', sub: '關係' }, defaultLayout: { main: { x: 300, y: 400, size: 60, color: '#000000', vertical: true }, sub: { x: 800, y: 50, size: 30, color: '#000000', vertical: false }, date: { x: 800, y: 100, size: 30, color: '#000000', vertical: false }, services: { x: 800, y: 150, size: 30, color: '#000000', vertical: false } } },
-                address: { id: 'address', label: '地址軌跡', icon: <MapPin className="w-4 h-4" />, fields: { main: '地址', sub: '備註/居住者' }, defaultLayout: { main: { x: 200, y: 300, size: 50, color: '#000000', vertical: true }, sub: { x: 700, y: 50, size: 30, color: '#000000', vertical: false }, date: { x: 700, y: 100, size: 30, color: '#000000', vertical: false }, services: { x: 700, y: 150, size: 30, color: '#000000', vertical: false } } },
-                company: { id: 'company', label: '企業軌跡', icon: <Building2 className="w-4 h-4" />, fields: { main: '企業名稱', sub: '統編/負責人' }, defaultLayout: { main: { x: 300, y: 350, size: 55, color: '#000000', vertical: true }, sub: { x: 750, y: 50, size: 30, color: '#000000', vertical: false }, date: { x: 750, y: 100, size: 30, color: '#000000', vertical: false }, services: { x: 750, y: 150, size: 30, color: '#000000', vertical: false } } }
-            };
+        const currentImageSrc = modeImages[currentMode];
+        const modeConfig = MODES[currentMode];
+        const currentLayout = layouts[currentMode];
+        const currentData = dataStore[currentMode];
+        const entries = currentData.entries;
+        const globalFields = currentData.global;
+        const currentEntryId = currentData.selectedId;
+        const hasAnyImage = useMemo(
+          () => Object.values(modeImages).some(img => img !== null),
+          [modeImages]
+        );
+        const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+        const canvasRef = useRef(null);
+        const fileInputRef = useRef(null);
+        const [draggingKey, setDraggingKey] = useState(null);
+        const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+        const [activeTab, setActiveTab] = useState("data");
+        const [isGenerating, setIsGenerating] = useState(false);
+        const [progress, setProgress] = useState(0);
+        const [manualDownloadUrl, setManualDownloadUrl] = useState(null);
+        const [manualDownloadName, setManualDownloadName] = useState("");
+        const lastTapTimeRef = useRef(0);
 
-            const [currentMode, setCurrentMode] = useState('name');
-            const [showImportModal, setShowImportModal] = useState(false);
-            const [showDownloadModal, setShowDownloadModal] = useState(false);
-            const [generatedResults, setGeneratedResults] = useState([]);
-            const [importText, setImportText] = useState('');
-            const [customerName, setCustomerName] = useState(''); 
-            const [modeImages, setModeImages] = useState(PRELOADED_IMAGES);
-            const [dataStore, setDataStore] = useState({
-                name: { entries: [{ id: 1, mainText: '', subText: '' }], global: { date: '', services: '' }, selectedId: 1 },
-                address: { entries: [{ id: 1, mainText: '', subText: '' }], global: { date: '', services: '' }, selectedId: 1 },
-                company: { entries: [{ id: 1, mainText: '', subText: '' }], global: { date: '', services: '' }, selectedId: 1 }
+        const handleModeChange = modeId => setCurrentMode(modeId);
+        const updateLayout = (key, newProps) =>
+          setLayouts(prev => ({
+            ...prev,
+            [currentMode]: {
+              ...prev[currentMode],
+              [key]: { ...prev[currentMode][key], ...newProps },
+            },
+          }));
+        const updateCurrentDataStore = updates =>
+          setDataStore(prev => ({ ...prev, [currentMode]: { ...prev[currentMode], ...updates } }));
+        const handleGlobalFieldChange = (field, value) =>
+          updateCurrentDataStore({ global: { ...globalFields, [field]: value } });
+        const handleSelectEntry = id => updateCurrentDataStore({ selectedId: id });
+
+        const handleExportSelf = () => {
+          if (!hasAnyImage) {
+            alert("請先上傳至少一張底圖，才能進行打包。");
+            return;
+          }
+          try {
+            let htmlContent = document.documentElement.outerHTML;
+            const imagesJson = JSON.stringify(modeImages);
+            const imgMarkerRegex = /const PRELOADED_IMAGES = .* \/\/ --IMAGE_DATA_MARKER--/;
+            const imgReplacement = `const PRELOADED_IMAGES = ${imagesJson}; // --IMAGE_DATA_MARKER--`;
+            const layoutsJson = JSON.stringify(layouts);
+            const layoutMarkerRegex = /const PRELOADED_LAYOUTS = .* \/\/ --LAYOUT_DATA_MARKER--/;
+            const layoutReplacement = `const PRELOADED_LAYOUTS = ${layoutsJson}; // --LAYOUT_DATA_MARKER--`;
+            if (!htmlContent.match(imgMarkerRegex)) {
+              alert("打包失敗：找不到程式碼中的標記點。");
+              return;
+            }
+            let newHtmlContent = htmlContent.replace(imgMarkerRegex, imgReplacement);
+            newHtmlContent = newHtmlContent.replace(layoutMarkerRegex, layoutReplacement);
+            const blob = new Blob([newHtmlContent], { type: "text/html" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `軌跡圖系統_已固定底圖與排版_${new Date().toISOString().slice(0, 10)}.html`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            alert("打包成功！\n\n新檔案已下載。您可以直接將該檔案上傳到網頁空間或傳送給夥伴。");
+          } catch (e) {
+            console.error(e);
+            alert("打包過程發生錯誤：" + e.message);
+          }
+        };
+
+        const parseAndImportData = () => {
+          if (!importText.trim()) return;
+          const lines = importText.split("\n");
+          const newNameEntries = [],
+            newAddressEntries = [],
+            newCompanyEntries = [];
+          let lastType = null,
+            detectedCustomerName = null;
+          const regexGeneric = /^(.*?)[：:]\s*(.*)$/;
+
+          lines.forEach(line => {
+            const cleanLine = line.trim();
+            if (!cleanLine) return;
+            let key = "",
+              value = "";
+            let matched = false;
+            const genericMatch = cleanLine.match(regexGeneric);
+            if (genericMatch) {
+              key = genericMatch[1].trim();
+              value = genericMatch[2].trim();
+              if (!value) return;
+            } else {
+              if (
+                (lastType === "address" || lastType === "company") &&
+                !cleanLine.includes("：") &&
+                !cleanLine.includes(":")
+              ) {
+                if (lastType === "address" && newAddressEntries.length > 0)
+                  newAddressEntries[newAddressEntries.length - 1].mainText += " " + cleanLine;
+              }
+              return;
+            }
+            if (
+              key.includes("公司") ||
+              key.includes("企業") ||
+              value.toLowerCase().includes("ltd") ||
+              value.includes("有限公司") ||
+              value.includes("股份有限公司")
+            ) {
+              newCompanyEntries.push({
+                id: Date.now() + Math.random(),
+                mainText: value,
+                subText: key.replace(/[：:]/g, ""),
+              });
+              lastType = "company";
+              matched = true;
+            } else if (
+              key.includes("地址") ||
+              key.includes("住址") ||
+              key.includes("居住") ||
+              key.includes("戶籍") ||
+              key.includes("通訊") ||
+              value.match(/[縣市區路街巷弄號樓]/) ||
+              value.toLowerCase().includes("box")
+            ) {
+              newAddressEntries.push({
+                id: Date.now() + Math.random(),
+                mainText: value,
+                subText: key,
+              });
+              lastType = "address";
+              matched = true;
+            } else if (key.match(/(高管|主管|經理|幹部|董事|監察|負責人)/)) {
+              newNameEntries.push({
+                id: Date.now() + Math.random(),
+                mainText: value,
+                subText: key,
+              });
+              lastType = null;
+              matched = true;
+            } else {
+              newNameEntries.push({
+                id: Date.now() + Math.random(),
+                mainText: value,
+                subText: key,
+              });
+              if (key.includes("本人") || key.includes("客戶") || key.includes("申請人"))
+                detectedCustomerName = value;
+              lastType = null;
+              matched = true;
+            }
+          });
+
+          if (
+            newNameEntries.length === 0 &&
+            newAddressEntries.length === 0 &&
+            newCompanyEntries.length === 0
+          ) {
+            alert("⚠️ 匯入失敗：無法辨識任何資料。\n請確認格式為「標籤：內容」。");
+            return;
+          }
+          setDataStore(prev => ({
+            name: {
+              ...prev.name,
+              entries: newNameEntries.length > 0 ? newNameEntries : prev.name.entries,
+              selectedId: newNameEntries.length > 0 ? newNameEntries[0].id : prev.name.selectedId,
+            },
+            address: {
+              ...prev.address,
+              entries: newAddressEntries.length > 0 ? newAddressEntries : prev.address.entries,
+              selectedId:
+                newAddressEntries.length > 0 ? newAddressEntries[0].id : prev.address.selectedId,
+            },
+            company: {
+              ...prev.company,
+              entries: newCompanyEntries.length > 0 ? newCompanyEntries : prev.company.entries,
+              selectedId:
+                newCompanyEntries.length > 0 ? newCompanyEntries[0].id : prev.company.selectedId,
+            },
+          }));
+          if (detectedCustomerName) setCustomerName(detectedCustomerName);
+          setShowImportModal(false);
+          setImportText("");
+          alert(`✅ 智慧匯入成功！`);
+        };
+
+        const splitText = (text, maxLength = 15) => {
+          if (!text) return [];
+          const explicitLines = text.split("\n");
+          let finalLines = [];
+          explicitLines.forEach(line => {
+            if (line.length <= maxLength) {
+              finalLines.push(line);
+            } else {
+              for (let i = 0; i < line.length; i += maxLength) {
+                finalLines.push(line.substring(i, i + maxLength));
+              }
+            }
+          });
+          return finalLines;
+        };
+
+        const drawContent = (
+          ctx,
+          img,
+          entry,
+          layoutConfig,
+          globalFieldsData,
+          isPreview = false,
+          activeKey = null
+        ) => {
+          if (!img || img.width === 0) return;
+          if (ctx.canvas.width !== img.width) ctx.canvas.width = img.width;
+          if (ctx.canvas.height !== img.height) ctx.canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+
+          const currentEntry = entry;
+          const textData = {
+            main: currentEntry.mainText,
+            sub: currentEntry.subText,
+            date: globalFieldsData.date,
+            services: globalFieldsData.services,
+          };
+          const labels = {
+            main: modeConfig.fields.main,
+            sub: modeConfig.fields.sub,
+            date: "盤點日期",
+            services: "Services",
+          };
+
+          Object.keys(layoutConfig).forEach(key => {
+            const config = layoutConfig[key];
+            const rawText = textData[key] || "";
+            const lines = splitText(rawText);
+            ctx.font = `bold ${config.size}px "Noto Serif TC", "Microsoft JhengHei", "PMingLiU", serif`;
+            ctx.fillStyle = config.color;
+            ctx.textBaseline = "top";
+            let cursorX = config.x;
+            let cursorY = config.y;
+            const lineGap = config.size * 1.1;
+
+            lines.forEach((line, lineIndex) => {
+              if (config.vertical) {
+                let charY = cursorY;
+                for (let i = 0; i < line.length; i++) {
+                  const char = line[i];
+                  const isAscii = char.charCodeAt(0) < 128;
+                  const offsetX = isAscii && config.size > 20 ? config.size * 0.25 : 0;
+                  ctx.fillText(char, cursorX + lineIndex * lineGap + offsetX, charY);
+                  charY += lineGap;
+                }
+              } else {
+                ctx.fillText(line, cursorX, cursorY + lineIndex * lineGap);
+              }
             });
-            const [layouts, setLayouts] = useState(PRELOADED_LAYOUTS || { name: MODES.name.defaultLayout, address: MODES.address.defaultLayout, company: MODES.company.defaultLayout });
-            const [mobileTab, setMobileTab] = useState('preview');
-            const [isTouchDragMode, setIsTouchDragMode] = useState(false);
-            const [editModalOpen, setEditModalOpen] = useState(false);
-            const [editData, setEditData] = useState({ key: '', value: '' });
-            const [isFitWidth, setIsFitWidth] = useState(false);
 
-            const currentImageSrc = modeImages[currentMode];
-            const modeConfig = MODES[currentMode];
-            const currentLayout = layouts[currentMode];
-            const currentData = dataStore[currentMode];
-            const entries = currentData.entries;
-            const globalFields = currentData.global;
-            const currentEntryId = currentData.selectedId;
-            const hasAnyImage = useMemo(() => Object.values(modeImages).some(img => img !== null), [modeImages]);
-            const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-            const canvasRef = useRef(null);
-            const fileInputRef = useRef(null);
-            const [draggingKey, setDraggingKey] = useState(null);
-            const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-            const [activeTab, setActiveTab] = useState('data'); 
-            const [isGenerating, setIsGenerating] = useState(false);
-            const [progress, setProgress] = useState(0);
-            const [manualDownloadUrl, setManualDownloadUrl] = useState(null);
-            const [manualDownloadName, setManualDownloadName] = useState('');
-            const lastTapTimeRef = useRef(0);
+            if (isPreview && activeTab === "layout" && mobileTab === "preview") {
+              let width, height;
+              if (config.vertical) {
+                width = lines.length * lineGap;
+                const maxLen = Math.max(0, ...lines.map(l => l.length));
+                height = maxLen * lineGap;
+              } else {
+                const metrics = lines.map(l => ctx.measureText(l).width);
+                width = Math.max(0, ...metrics);
+                height = lines.length * lineGap;
+              }
+              ctx.strokeStyle =
+                activeKey === key
+                  ? "#4f46e5"
+                  : isTouchDragMode
+                    ? "rgba(79, 70, 229, 0.6)"
+                    : "rgba(156, 163, 175, 0.4)";
+              ctx.lineWidth = 2;
+              ctx.setLineDash([5, 5]);
+              ctx.strokeRect(config.x - 5, config.y - 5, width + 10, height + 10);
+              ctx.setLineDash([]);
+              ctx.font = "14px sans-serif";
+              ctx.fillStyle =
+                activeKey === key ? "#4f46e5" : isTouchDragMode ? "#4f46e5" : "#9ca3af";
+              ctx.fillText(labels[key], config.x, config.y - 20);
+            }
+          });
+        };
 
-            const handleModeChange = (modeId) => setCurrentMode(modeId);
-            const updateLayout = (key, newProps) => setLayouts(prev => ({ ...prev, [currentMode]: { ...prev[currentMode], [key]: { ...prev[currentMode][key], ...newProps } } }));
-            const updateCurrentDataStore = (updates) => setDataStore(prev => ({ ...prev, [currentMode]: { ...prev[currentMode], ...updates } }));
-            const handleGlobalFieldChange = (field, value) => updateCurrentDataStore({ global: { ...globalFields, [field]: value } });
-            const handleSelectEntry = (id) => updateCurrentDataStore({ selectedId: id });
+        const getPointerPos = e => {
+          const rect = canvasRef.current.getBoundingClientRect();
+          const scaleX = canvasRef.current.width / rect.width;
+          const scaleY = canvasRef.current.height / rect.height;
+          let clientX = e.clientX,
+            clientY = e.clientY;
+          if (e.touches && e.touches.length > 0) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+          } else if (e.nativeEvent && e.nativeEvent.touches && e.nativeEvent.touches.length > 0) {
+            clientX = e.nativeEvent.touches[0].clientX;
+            clientY = e.nativeEvent.touches[0].clientY;
+          }
+          return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+        };
 
-            const handleExportSelf = () => {
-                if (!hasAnyImage) { alert('請先上傳至少一張底圖，才能進行打包。'); return; }
-                try {
-                    let htmlContent = document.documentElement.outerHTML;
-                    const imagesJson = JSON.stringify(modeImages);
-                    const imgMarkerRegex = /const PRELOADED_IMAGES = .* \/\/ --IMAGE_DATA_MARKER--/;
-                    const imgReplacement = `const PRELOADED_IMAGES = ${imagesJson}; // --IMAGE_DATA_MARKER--`;
-                    const layoutsJson = JSON.stringify(layouts);
-                    const layoutMarkerRegex = /const PRELOADED_LAYOUTS = .* \/\/ --LAYOUT_DATA_MARKER--/;
-                    const layoutReplacement = `const PRELOADED_LAYOUTS = ${layoutsJson}; // --LAYOUT_DATA_MARKER--`;
-                    if (!htmlContent.match(imgMarkerRegex)) { alert("打包失敗：找不到程式碼中的標記點。"); return; }
-                    let newHtmlContent = htmlContent.replace(imgMarkerRegex, imgReplacement);
-                    newHtmlContent = newHtmlContent.replace(layoutMarkerRegex, layoutReplacement);
-                    const blob = new Blob([newHtmlContent], { type: 'text/html' });
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a'); link.href = url; link.download = `軌跡圖系統_已固定底圖與排版_${new Date().toISOString().slice(0,10)}.html`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
-                    alert('打包成功！\n\n新檔案已下載。您可以直接將該檔案上傳到網頁空間或傳送給夥伴。');
-                } catch (e) { console.error(e); alert("打包過程發生錯誤：" + e.message); }
+        const checkHit = (x, y) => {
+          const ctx = canvasRef.current.getContext("2d");
+          const keys = Object.keys(currentLayout);
+          const currentEntry = entries.find(e => e.id === currentEntryId) || entries[0];
+          const textValues = {
+            main: currentEntry.mainText,
+            sub: currentEntry.subText,
+            date: globalFields.date,
+            services: globalFields.services,
+          };
+          for (let key of keys) {
+            const config = currentLayout[key];
+            const text = textValues[key] || "";
+            const lines = splitText(text);
+            const lineGap = config.size * 1.1;
+            let width, height;
+            if (config.vertical) {
+              width = lines.length * lineGap;
+              const maxLen = Math.max(0, ...lines.map(l => l.length));
+              height = maxLen * lineGap;
+            } else {
+              ctx.font = `bold ${config.size}px "Noto Serif TC"`;
+              const metrics = lines.map(l => ctx.measureText(l).width);
+              width = Math.max(0, ...metrics);
+              height = lines.length * lineGap;
+            }
+            if (x >= config.x && x <= config.x + width && y >= config.y && y <= config.y + height) {
+              return key;
+            }
+          }
+          return null;
+        };
+
+        const handlePointerDown = e => {
+          const now = Date.now();
+          const DOUBLE_TAP_DELAY = 300;
+          if (now - lastTapTimeRef.current < DOUBLE_TAP_DELAY) {
+            const pos = getPointerPos(e);
+            const hitKey = checkHit(pos.x, pos.y);
+            if (hitKey) {
+              let val = "";
+              if (hitKey === "main") val = entries.find(en => en.id === currentEntryId).mainText;
+              else if (hitKey === "sub") val = entries.find(en => en.id === currentEntryId).subText;
+              else if (hitKey === "date") val = globalFields.date;
+              else if (hitKey === "services") val = globalFields.services;
+              setEditData({ key: hitKey, value: val });
+              setEditModalOpen(true);
+              return;
+            }
+          }
+          lastTapTimeRef.current = now;
+
+          if (!isTouchDragMode && mobileTab === "preview") return;
+          if (activeTab !== "layout" || !canvasRef.current) return;
+
+          const pos = getPointerPos(e);
+          const hit = checkHit(pos.x, pos.y);
+          if (hit) {
+            setDraggingKey(hit);
+            const config = currentLayout[hit];
+            setDragOffset({ x: pos.x - config.x, y: pos.y - config.y });
+          }
+        };
+
+        const handlePointerMove = e => {
+          if (!isTouchDragMode && mobileTab === "preview") return;
+          if (!draggingKey) return;
+          if (e.cancelable) e.preventDefault();
+          const pos = getPointerPos(e);
+          updateLayout(draggingKey, { x: pos.x - dragOffset.x, y: pos.y - dragOffset.y });
+        };
+        const handlePointerUp = () => setDraggingKey(null);
+
+        useEffect(() => {
+          if (!currentImageSrc || !canvasRef.current) return;
+          const canvas = canvasRef.current;
+          const ctx = canvas.getContext("2d");
+          const img = new Image();
+          img.src = currentImageSrc;
+          const currentEntry = entries.find(e => e.id === currentEntryId) || entries[0];
+          const render = () => {
+            setCanvasSize({ width: img.width, height: img.height });
+            drawContent(ctx, img, currentEntry, currentLayout, globalFields, true, draggingKey);
+          };
+          if (img.complete) render();
+          else img.onload = render;
+        }, [
+          currentImageSrc,
+          currentData,
+          currentLayout,
+          activeTab,
+          draggingKey,
+          currentMode,
+          mobileTab,
+          isTouchDragMode,
+        ]);
+
+        const handleEditSave = () => {
+          const { key, value } = editData;
+          if (key === "main") updateEntry(currentEntryId, "mainText", value);
+          else if (key === "sub") updateEntry(currentEntryId, "subText", value);
+          else if (key === "date") handleGlobalFieldChange("date", value);
+          else if (key === "services") handleGlobalFieldChange("services", value);
+          setEditModalOpen(false);
+        };
+
+        const handleImageUpload = e => {
+          const file = e.target.files[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = event => {
+              setModeImages(prev => ({ ...prev, [currentMode]: event.target.result }));
             };
+            reader.readAsDataURL(file);
+          }
+          e.target.value = "";
+        };
+        const handleRemoveImage = () => {
+          if (window.confirm(`確定要移除「${modeConfig.label}」的底圖嗎？`)) {
+            setModeImages(prev => ({ ...prev, [currentMode]: null }));
+          }
+        };
+        const addEntry = () => {
+          const newId = Math.max(...entries.map(e => e.id), 0) + 1;
+          updateCurrentDataStore({
+            entries: [...entries, { id: newId, mainText: "", subText: "" }],
+            selectedId: newId,
+          });
+        };
+        const removeEntry = id => {
+          if (entries.length <= 1) return;
+          const newEntries = entries.filter(e => e.id !== id);
+          let newSelectedId = currentEntryId;
+          if (currentEntryId === id) newSelectedId = newEntries[0].id;
+          updateCurrentDataStore({ entries: newEntries, selectedId: newSelectedId });
+        };
+        const updateEntry = (id, field, value) => {
+          updateCurrentDataStore({
+            entries: entries.map(e => (e.id === id ? { ...e, [field]: value } : e)),
+          });
+        };
+        const clearEntries = () => {
+          if (window.confirm(`確定要清空「${modeConfig.label}」的所有資料嗎？`)) {
+            updateCurrentDataStore({
+              entries: [{ id: 1, mainText: "", subText: "" }],
+              selectedId: 1,
+            });
+          }
+        };
 
-            const parseAndImportData = () => {
-                if (!importText.trim()) return;
-                const lines = importText.split('\n');
-                const newNameEntries = [], newAddressEntries = [], newCompanyEntries = [];
-                let lastType = null, detectedCustomerName = null;
-                const regexGeneric = /^(.*?)[：:]\s*(.*)$/;
+        const handleDownloadCurrent = () => {
+          if (!canvasRef.current || !currentData) return;
+          const currentEntry = entries.find(e => e.id === currentEntryId);
+          const safeName = currentEntry
+            ? currentEntry.mainText.replace(/[\/\\:*?"<>|]/g, "_")
+            : "軌跡圖";
+          const dataUrl = canvasRef.current.toDataURL("image/jpeg", 0.9);
+          const link = document.createElement("a");
+          link.download = `${safeName}_${modeConfig.label}.jpg`;
+          link.href = dataUrl;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        };
 
-                lines.forEach(line => {
-                    const cleanLine = line.trim(); if (!cleanLine) return;
-                    let key = "", value = ""; let matched = false;
-                    const genericMatch = cleanLine.match(regexGeneric);
-                    if (genericMatch) { key = genericMatch[1].trim(); value = genericMatch[2].trim(); if (!value) return; } 
-                    else {
-                        if ((lastType === 'address' || lastType === 'company') && !cleanLine.includes('：') && !cleanLine.includes(':')) {
-                             if (lastType === 'address' && newAddressEntries.length > 0) newAddressEntries[newAddressEntries.length - 1].mainText += ' ' + cleanLine;
-                        }
-                        return; 
-                    }
-                    if (key.includes('公司') || key.includes('企業') || value.toLowerCase().includes('ltd') || value.includes('有限公司') || value.includes('股份有限公司')) {
-                        newCompanyEntries.push({ id: Date.now() + Math.random(), mainText: value, subText: key.replace(/[：:]/g, '') }); lastType = 'company'; matched = true;
-                    }
-                    else if (key.includes('地址') || key.includes('住址') || key.includes('居住') || key.includes('戶籍') || key.includes('通訊') || value.match(/[縣市區路街巷弄號樓]/) || value.toLowerCase().includes('box')) {
-                        newAddressEntries.push({ id: Date.now() + Math.random(), mainText: value, subText: key }); lastType = 'address'; matched = true;
-                    }
-                    else if (key.match(/(高管|主管|經理|幹部|董事|監察|負責人)/)) {
-                        newNameEntries.push({ id: Date.now() + Math.random(), mainText: value, subText: key }); lastType = null; matched = true;
-                    }
-                    else {
-                        newNameEntries.push({ id: Date.now() + Math.random(), mainText: value, subText: key });
-                        if (key.includes('本人') || key.includes('客戶') || key.includes('申請人')) detectedCustomerName = value;
-                        lastType = null; matched = true;
-                    }
-                });
+        const handleGenerateImages = async () => {
+          if (!hasAnyImage) {
+            alert("請至少上傳一張底圖或等待組件載入...");
+            return;
+          }
+          setIsGenerating(true);
+          setProgress(0);
+          setGeneratedResults([]);
+          try {
+            const results = [];
+            const modeKeys = Object.keys(MODES);
+            let totalItems = 0;
+            Object.keys(MODES).forEach(k => {
+              if (modeImages[k]) totalItems += dataStore[k].entries.length;
+            });
+            let processed = 0;
+            for (let m = 0; m < modeKeys.length; m++) {
+              const modeKey = modeKeys[m];
+              const imgSrc = modeImages[modeKey];
+              if (!imgSrc) continue;
+              const data = dataStore[modeKey];
+              const layout = layouts[modeKey];
+              const config = MODES[modeKey];
+              const img = new Image();
+              img.src = imgSrc;
+              await new Promise(r => {
+                if (img.complete) r();
+                else img.onload = r;
+              });
+              const tempCanvas = document.createElement("canvas");
+              const ctx = tempCanvas.getContext("2d");
+              for (let i = 0; i < data.entries.length; i++) {
+                const entry = data.entries[i];
+                drawContent(ctx, img, entry, layout, data.global, false);
+                const blob = await new Promise(resolve =>
+                  tempCanvas.toBlob(resolve, "image/jpeg", 0.9)
+                );
+                const url = URL.createObjectURL(blob);
+                const name = `${entry.mainText.replace(/[\/\\:*?"<>|]/g, "_")}_${config.label}.jpg`;
+                results.push({ url, name, blob });
+                processed++;
+                setProgress(Math.round((processed / totalItems) * 100));
+                await new Promise(r => setTimeout(r, 10));
+              }
+            }
+            setGeneratedResults(results);
+            setShowDownloadModal(true);
+          } catch (e) {
+            console.error(e);
+            alert(`生成失敗：${e.message}`);
+          } finally {
+            setIsGenerating(false);
+            setProgress(0);
+          }
+        };
 
-                if (newNameEntries.length === 0 && newAddressEntries.length === 0 && newCompanyEntries.length === 0) {
-                    alert("⚠️ 匯入失敗：無法辨識任何資料。\n請確認格式為「標籤：內容」。");
-                    return;
-                }
-                setDataStore(prev => ({
-                    name: { ...prev.name, entries: newNameEntries.length > 0 ? newNameEntries : prev.name.entries, selectedId: newNameEntries.length > 0 ? newNameEntries[0].id : prev.name.selectedId },
-                    address: { ...prev.address, entries: newAddressEntries.length > 0 ? newAddressEntries : prev.address.entries, selectedId: newAddressEntries.length > 0 ? newAddressEntries[0].id : prev.address.selectedId },
-                    company: { ...prev.company, entries: newCompanyEntries.length > 0 ? newCompanyEntries : prev.company.entries, selectedId: newCompanyEntries.length > 0 ? newCompanyEntries[0].id : prev.company.selectedId }
-                }));
-                if (detectedCustomerName) setCustomerName(detectedCustomerName);
-                setShowImportModal(false); setImportText(''); alert(`✅ 智慧匯入成功！`);
-            };
+        const handleShareAll = async () => {
+          if (!navigator.share) {
+            alert("您的瀏覽器不支援直接分享多檔案，請使用下方的列表手動下載。");
+            return;
+          }
+          const filesArray = generatedResults.map(
+            item => new File([item.blob], item.name, { type: "image/jpeg" })
+          );
+          if (navigator.canShare && navigator.canShare({ files: filesArray })) {
+            try {
+              await navigator.share({
+                files: filesArray,
+                title: "軌跡圖生成結果",
+                text: `這是 ${customerName} 的軌跡圖檔案`,
+              });
+            } catch (error) {
+              console.log("分享取消或失敗", error);
+            }
+          } else {
+            alert("您的裝置不支援一次分享這麼多圖片，請嘗試分批或使用下方列表手動下載。");
+          }
+        };
 
-            const splitText = (text, maxLength = 15) => {
-                if (!text) return [];
-                const explicitLines = text.split('\n');
-                let finalLines = [];
-                explicitLines.forEach(line => {
-                    if (line.length <= maxLength) { finalLines.push(line); } else { for (let i = 0; i < line.length; i += maxLength) { finalLines.push(line.substring(i, i + maxLength)); } }
-                });
-                return finalLines;
-            };
-
-            const drawContent = (ctx, img, entry, layoutConfig, globalFieldsData, isPreview = false, activeKey = null) => {
-                if (!img || img.width === 0) return;
-                if (ctx.canvas.width !== img.width) ctx.canvas.width = img.width;
-                if (ctx.canvas.height !== img.height) ctx.canvas.height = img.height;
-                ctx.drawImage(img, 0, 0);
-                
-                const currentEntry = entry;
-                const textData = { main: currentEntry.mainText, sub: currentEntry.subText, date: globalFieldsData.date, services: globalFieldsData.services };
-                const labels = { main: modeConfig.fields.main, sub: modeConfig.fields.sub, date: '盤點日期', services: 'Services' };
-                
-                Object.keys(layoutConfig).forEach(key => {
-                    const config = layoutConfig[key];
-                    const rawText = textData[key] || '';
-                    const lines = splitText(rawText);
-                    ctx.font = `bold ${config.size}px "Noto Serif TC", "Microsoft JhengHei", "PMingLiU", serif`;
-                    ctx.fillStyle = config.color;
-                    ctx.textBaseline = 'top';
-                    let cursorX = config.x; let cursorY = config.y; const lineGap = config.size * 1.1;
-
-                    lines.forEach((line, lineIndex) => {
-                        if (config.vertical) {
-                            let charY = cursorY;
-                            for (let i = 0; i < line.length; i++) {
-                                const char = line[i];
-                                const isAscii = char.charCodeAt(0) < 128;
-                                const offsetX = isAscii && config.size > 20 ? config.size * 0.25 : 0;
-                                ctx.fillText(char, cursorX + (lineIndex * lineGap) + offsetX, charY);
-                                charY += lineGap;
-                            }
-                        } else {
-                            ctx.fillText(line, cursorX, cursorY + (lineIndex * lineGap));
-                        }
-                    });
-
-                    if (isPreview && activeTab === 'layout' && mobileTab === 'preview') {
-                        let width, height;
-                        if (config.vertical) {
-                            width = lines.length * lineGap;
-                            const maxLen = Math.max(0, ...lines.map(l => l.length));
-                            height = maxLen * lineGap;
-                        } else {
-                            const metrics = lines.map(l => ctx.measureText(l).width);
-                            width = Math.max(0, ...metrics);
-                            height = lines.length * lineGap;
-                        }
-                        ctx.strokeStyle = activeKey === key ? '#4f46e5' : (isTouchDragMode ? 'rgba(79, 70, 229, 0.6)' : 'rgba(156, 163, 175, 0.4)'); 
-                        ctx.lineWidth = 2; ctx.setLineDash([5, 5]); 
-                        ctx.strokeRect(config.x - 5, config.y - 5, width + 10, height + 10); ctx.setLineDash([]);
-                        ctx.font = '14px sans-serif'; ctx.fillStyle = activeKey === key ? '#4f46e5' : (isTouchDragMode ? '#4f46e5' : '#9ca3af'); 
-                        ctx.fillText(labels[key], config.x, config.y - 20);
-                    }
-                });
-            };
-
-            const getPointerPos = (e) => {
-                const rect = canvasRef.current.getBoundingClientRect(); 
-                const scaleX = canvasRef.current.width / rect.width; 
-                const scaleY = canvasRef.current.height / rect.height;
-                let clientX = e.clientX, clientY = e.clientY; 
-                if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; } 
-                else if (e.nativeEvent && e.nativeEvent.touches && e.nativeEvent.touches.length > 0) { clientX = e.nativeEvent.touches[0].clientX; clientY = e.nativeEvent.touches[0].clientY; }
-                return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
-            };
-
-            const checkHit = (x, y) => {
-                const ctx = canvasRef.current.getContext('2d');
-                const keys = Object.keys(currentLayout);
-                const currentEntry = entries.find(e => e.id === currentEntryId) || entries[0];
-                const textValues = { main: currentEntry.mainText, sub: currentEntry.subText, date: globalFields.date, services: globalFields.services };
-                for (let key of keys) {
-                    const config = currentLayout[key]; const text = textValues[key] || ''; const lines = splitText(text); const lineGap = config.size * 1.1;
-                    let width, height;
-                    if (config.vertical) { width = lines.length * lineGap; const maxLen = Math.max(0, ...lines.map(l => l.length)); height = maxLen * lineGap; } 
-                    else { ctx.font = `bold ${config.size}px "Noto Serif TC"`; const metrics = lines.map(l => ctx.measureText(l).width); width = Math.max(0, ...metrics); height = lines.length * lineGap; }
-                    if (x >= config.x && x <= config.x + width && y >= config.y && y <= config.y + height) { return key; }
-                }
-                return null;
-            };
-
-            const handlePointerDown = (e) => {
-                const now = Date.now();
-                const DOUBLE_TAP_DELAY = 300;
-                if (now - lastTapTimeRef.current < DOUBLE_TAP_DELAY) {
-                    const pos = getPointerPos(e); const hitKey = checkHit(pos.x, pos.y);
-                    if (hitKey) {
-                        let val = '';
-                        if (hitKey === 'main') val = entries.find(en => en.id === currentEntryId).mainText;
-                        else if (hitKey === 'sub') val = entries.find(en => en.id === currentEntryId).subText;
-                        else if (hitKey === 'date') val = globalFields.date;
-                        else if (hitKey === 'services') val = globalFields.services;
-                        setEditData({ key: hitKey, value: val }); setEditModalOpen(true); return; 
-                    }
-                }
-                lastTapTimeRef.current = now;
-
-                if (!isTouchDragMode && mobileTab === 'preview') return;
-                if (activeTab !== 'layout' || !canvasRef.current) return;
-                
-                const pos = getPointerPos(e);
-                const hit = checkHit(pos.x, pos.y);
-                if (hit) { setDraggingKey(hit); const config = currentLayout[hit]; setDragOffset({ x: pos.x - config.x, y: pos.y - config.y }); }
-            };
-
-            const handlePointerMove = (e) => { 
-                if (!isTouchDragMode && mobileTab === 'preview') return; 
-                if (!draggingKey) return; 
-                if (e.cancelable) e.preventDefault(); 
-                const pos = getPointerPos(e); 
-                updateLayout(draggingKey, { x: pos.x - dragOffset.x, y: pos.y - dragOffset.y }); 
-            };
-            const handlePointerUp = () => setDraggingKey(null);
-
-            useEffect(() => {
-                if (!currentImageSrc || !canvasRef.current) return;
-                const canvas = canvasRef.current;
-                const ctx = canvas.getContext('2d');
-                const img = new Image(); img.src = currentImageSrc;
-                const currentEntry = entries.find(e => e.id === currentEntryId) || entries[0];
-                const render = () => { setCanvasSize({ width: img.width, height: img.height }); drawContent(ctx, img, currentEntry, currentLayout, globalFields, true, draggingKey); };
-                if (img.complete) render(); else img.onload = render;
-            }, [currentImageSrc, currentData, currentLayout, activeTab, draggingKey, currentMode, mobileTab, isTouchDragMode]);
-
-            const handleEditSave = () => {
-                const { key, value } = editData;
-                if (key === 'main') updateEntry(currentEntryId, 'mainText', value);
-                else if (key === 'sub') updateEntry(currentEntryId, 'subText', value);
-                else if (key === 'date') handleGlobalFieldChange('date', value);
-                else if (key === 'services') handleGlobalFieldChange('services', value);
-                setEditModalOpen(false);
-            };
-
-            const handleImageUpload = (e) => { const file = e.target.files[0]; if (file) { const reader = new FileReader(); reader.onload = (event) => { setModeImages(prev => ({ ...prev, [currentMode]: event.target.result })); }; reader.readAsDataURL(file); } e.target.value = ''; };
-            const handleRemoveImage = () => { if (window.confirm(`確定要移除「${modeConfig.label}」的底圖嗎？`)) { setModeImages(prev => ({ ...prev, [currentMode]: null })); } };
-            const addEntry = () => { const newId = Math.max(...entries.map(e => e.id), 0) + 1; updateCurrentDataStore({ entries: [...entries, { id: newId, mainText: '', subText: '' }], selectedId: newId }); };
-            const removeEntry = (id) => { if (entries.length <= 1) return; const newEntries = entries.filter(e => e.id !== id); let newSelectedId = currentEntryId; if (currentEntryId === id) newSelectedId = newEntries[0].id; updateCurrentDataStore({ entries: newEntries, selectedId: newSelectedId }); };
-            const updateEntry = (id, field, value) => { updateCurrentDataStore({ entries: entries.map(e => e.id === id ? { ...e, [field]: value } : e) }); };
-            const clearEntries = () => { if(window.confirm(`確定要清空「${modeConfig.label}」的所有資料嗎？`)) { updateCurrentDataStore({ entries: [{ id: 1, mainText: '', subText: '' }], selectedId: 1 }); } };
-            
-            const handleDownloadCurrent = () => {
-                if (!canvasRef.current || !currentData) return;
-                const currentEntry = entries.find(e => e.id === currentEntryId);
-                const safeName = currentEntry ? currentEntry.mainText.replace(/[\/\\:*?"<>|]/g, "_") : "軌跡圖";
-                const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.9);
-                const link = document.createElement('a'); link.download = `${safeName}_${modeConfig.label}.jpg`; link.href = dataUrl;
-                document.body.appendChild(link); link.click(); document.body.removeChild(link);
-            };
-
-            const handleGenerateImages = async () => {
-                if (!hasAnyImage) { alert("請至少上傳一張底圖或等待組件載入..."); return; }
-                setIsGenerating(true); setProgress(0); setGeneratedResults([]);
-                try {
-                    const results = []; const modeKeys = Object.keys(MODES); let totalItems = 0; Object.keys(MODES).forEach(k => { if (modeImages[k]) totalItems += dataStore[k].entries.length; }); let processed = 0;
-                    for (let m = 0; m < modeKeys.length; m++) {
-                        const modeKey = modeKeys[m]; const imgSrc = modeImages[modeKey]; if (!imgSrc) continue;
-                        const data = dataStore[modeKey]; const layout = layouts[modeKey]; const config = MODES[modeKey];
-                        const img = new Image(); img.src = imgSrc; await new Promise(r => { if (img.complete) r(); else img.onload = r; });
-                        const tempCanvas = document.createElement('canvas'); const ctx = tempCanvas.getContext('2d');
-                        for (let i = 0; i < data.entries.length; i++) {
-                            const entry = data.entries[i];
-                            drawContent(ctx, img, entry, layout, data.global, false);
-                            const blob = await new Promise((resolve) => tempCanvas.toBlob(resolve, 'image/jpeg', 0.9));
-                            const url = URL.createObjectURL(blob);
-                            const name = `${entry.mainText.replace(/[\/\\:*?"<>|]/g, "_")}_${config.label}.jpg`;
-                            results.push({ url, name, blob });
-                            processed++; setProgress(Math.round((processed / totalItems) * 100)); await new Promise(r => setTimeout(r, 10));
-                        }
-                    }
-                    setGeneratedResults(results); setShowDownloadModal(true);
-                } catch (e) { console.error(e); alert(`生成失敗：${e.message}`); } finally { setIsGenerating(false); setProgress(0); }
-            };
-
-            const handleShareAll = async () => {
-                if (!navigator.share) { alert("您的瀏覽器不支援直接分享多檔案，請使用下方的列表手動下載。"); return; }
-                const filesArray = generatedResults.map(item => new File([item.blob], item.name, { type: 'image/jpeg' }));
-                if (navigator.canShare && navigator.canShare({ files: filesArray })) { try { await navigator.share({ files: filesArray, title: '軌跡圖生成結果', text: `這是 ${customerName} 的軌跡圖檔案` }); } catch (error) { console.log('分享取消或失敗', error); } } else { alert("您的裝置不支援一次分享這麼多圖片，請嘗試分批或使用下方列表手動下載。"); }
-            };
-
-            return (
-                <div className="h-full flex flex-col font-sans text-gray-800">
-                    {/* Edit Modal */}
-                    {editModalOpen && (
-                        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 space-y-4">
-                                <h3 className="text-lg font-bold">編輯內容</h3>
-                                <p className="text-xs text-gray-500">提示：您可以按下 Enter 鍵來強制換行。系統也會在超過 15 字時自動換行。</p>
-                                <textarea className="w-full border p-2 rounded h-32" value={editData.value} onChange={(e) => setEditData({...editData, value: e.target.value})} />
-                                <div className="flex justify-end gap-2"><button onClick={() => setEditModalOpen(false)} className="px-4 py-2 text-gray-600">取消</button><button onClick={handleEditSave} className="px-4 py-2 bg-indigo-600 text-white rounded">儲存</button></div>
-                            </div>
-                        </div>
-                    )}
-                    {showDownloadModal && (
-                        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
-                                <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-xl"><h3 className="text-lg font-bold text-gray-800 flex items-center gap-2"><ImageIcon className="w-5 h-5 text-indigo-600" />圖片生成中心 ({generatedResults.length} 張)</h3><button onClick={() => setShowDownloadModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-6 h-6" /></button></div>
-                                <div className="p-4 bg-blue-50 border-b border-blue-100 text-sm text-blue-800 flex flex-col sm:flex-row justify-between items-center gap-3"><span>💡 手機用戶：點擊「分享/儲存全部」可一次存入相簿，或長按下方圖片個別儲存。</span>{navigator.share && (<button onClick={handleShareAll} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow transition whitespace-nowrap"><Share2 className="w-4 h-4" /> 分享/儲存全部</button>)}</div>
-                                <div className="p-4 flex-1 overflow-y-auto bg-gray-100 grid grid-cols-2 md:grid-cols-3 gap-4">{generatedResults.map((item, idx) => (<div key={idx} className="bg-white p-2 rounded-lg shadow flex flex-col gap-2 group"><div className="aspect-[3/4] bg-gray-200 rounded overflow-hidden relative"><img src={item.url} alt={item.name} className="w-full h-full object-contain" /></div><div className="text-xs font-bold text-gray-600 truncate">{item.name}</div><a href={item.url} download={item.name} className="flex items-center justify-center gap-1 w-full py-2 bg-gray-100 hover:bg-indigo-50 text-indigo-600 font-bold rounded text-xs transition border border-gray-200"><Download className="w-3 h-3" /> 下載此張</a></div>))}</div>
-                                <div className="p-3 text-center text-xs text-gray-400 bg-white rounded-b-xl">提示：如果「分享全部」沒反應，請使用單張下載。</div>
-                            </div>
-                        </div>
-                    )}
-                    {showImportModal && (<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]"><div className="p-4 border-b border-gray-100 flex justify-between items-center"><h3 className="text-lg font-bold text-gray-800 flex items-center gap-2"><FileText className="w-5 h-5 text-indigo-600" />智慧資料匯入</h3><button onClick={() => setShowImportModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button></div><div className="p-4 flex-1 overflow-hidden flex flex-col gap-2"><div className="bg-blue-50 text-blue-800 text-sm p-3 rounded-lg border border-blue-100"><p className="font-bold mb-1">使用說明：</p><p>請貼入資料。系統會自動根據關鍵字分配到對應軌跡圖。</p></div><textarea className="flex-1 w-full border border-gray-300 rounded-lg p-4 font-mono text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none" placeholder={`範例：\n爸爸姓名：陳秉豐\n爸媽家住址：台中市...\n公司名稱：鈞豐...`} value={importText} onChange={(e) => setImportText(e.target.value)} style={{ minHeight: '300px' }}/></div><div className="p-4 border-t border-gray-100 flex justify-end gap-2 bg-gray-50 rounded-b-xl"><button onClick={() => setShowImportModal(false)} className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-200 rounded-lg transition">取消</button><button onClick={parseAndImportData} disabled={!importText.trim()} className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-md transition disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"><Check className="w-4 h-4" /> 開始解析並匯入</button></div></div></div>)}
-                    
-                    {/* Header: Always visible */}
-                    <header className="bg-white shadow-sm z-10 px-4 py-3 flex-none border-b border-gray-200">
-                        <div className="max-w-7xl mx-auto flex flex-col xl:flex-row justify-between items-center gap-4">
-                            <div className="flex w-full xl:w-auto bg-gray-100 p-1 rounded-lg lg:hidden"><button onClick={() => setMobileTab('editor')} className={`flex-1 py-2 flex items-center justify-center gap-2 text-sm font-bold rounded-md transition ${mobileTab === 'editor' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}><Edit className="w-4 h-4" /> 編輯資料</button><button onClick={() => setMobileTab('preview')} className={`flex-1 py-2 flex items-center justify-center gap-2 text-sm font-bold rounded-md transition ${mobileTab === 'preview' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}><Eye className="w-4 h-4" /> 預覽圖片</button></div>
-                            <div className="hidden lg:flex items-center gap-4 w-full xl:w-auto"><h1 className="text-xl font-bold text-gray-900 flex items-center gap-2 whitespace-nowrap"><Users className="w-6 h-6 text-indigo-600" />多模式軌跡生成</h1><div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-200"><FolderOpen className="w-4 h-4 text-gray-400 ml-2" /><input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="客戶/專案名稱" className="bg-transparent border-none text-sm font-bold text-gray-700 focus:ring-0 focus:outline-none w-32 placeholder-gray-400"/><div className="h-4 w-px bg-gray-300 mx-1"></div><div className="flex bg-gray-200 p-0.5 rounded-md">{Object.values(MODES).map(mode => (<button key={mode.id} onClick={() => handleModeChange(mode.id)} className={`flex items-center gap-2 px-3 py-1 rounded text-xs font-medium transition-all whitespace-nowrap ${currentMode === mode.id ? 'bg-white shadow text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}>{mode.icon}{mode.label}</button>))}</div></div></div>
-                            <div className="flex gap-2 w-full lg:w-auto justify-end overflow-x-auto pb-1 lg:pb-0"><button onClick={handleExportSelf} className="hidden lg:flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 transition shadow-md whitespace-nowrap"><Gift className="w-4 h-4" /> 匯出系統</button><button onClick={() => setShowImportModal(true)} className="flex items-center gap-2 px-3 py-2 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-50 transition shadow-sm whitespace-nowrap"><FileText className="w-4 h-4" /> 智慧匯入</button><button onClick={handleGenerateImages} disabled={!hasAnyImage || isGenerating} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white shadow-md transition-all min-w-[140px] justify-center whitespace-nowrap ${!hasAnyImage ? 'bg-gray-300 cursor-not-allowed' : isGenerating ? 'bg-indigo-400 cursor-wait' : 'bg-indigo-600 hover:bg-indigo-700'}`}>{isGenerating ? <><Loader2 className="w-4 h-4 animate-spin" /> {progress}%</> : <><ImageIcon className="w-4 h-4" /> 批量生成</>}</button></div>
-                        </div>
-                        <div className="lg:hidden mt-2 flex items-center justify-between gap-2 overflow-x-auto pb-1"><div className="flex bg-gray-100 p-1 rounded-lg">{Object.values(MODES).map(mode => (<button key={mode.id} onClick={() => handleModeChange(mode.id)} className={`flex-1 flex items-center justify-center px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${currentMode === mode.id ? 'bg-white shadow text-indigo-600' : 'text-gray-500'}`}>{mode.label}</button>))}</div><div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded border border-gray-200 shrink-0"><FolderOpen className="w-3 h-3 text-gray-400" /><input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="bg-transparent border-none text-xs font-bold text-gray-700 focus:ring-0 focus:outline-none w-20" placeholder="客戶名"/></div></div>
-                    </header>
-                    <main className="flex-1 overflow-hidden relative flex flex-col lg:flex-row">
-                        <div className={`flex-1 lg:flex-none lg:w-96 flex flex-col bg-white border-r border-gray-200 h-full overflow-hidden ${mobileTab === 'editor' ? 'flex' : 'hidden lg:flex'}`}>
-                            <div className="p-4 border-b border-gray-200 bg-gray-50 flex-none"><div className="grid grid-cols-2 gap-3"><div><label className="text-xs text-gray-500 mb-1 block">盤點日期</label><input type="text" value={globalFields.date} onChange={(e) => handleGlobalFieldChange('date', e.target.value)} className="w-full px-2 py-1.5 text-sm border rounded bg-white focus:ring-1 focus:ring-indigo-500 outline-none"/></div><div><label className="text-xs text-gray-500 mb-1 block">Services</label><input type="text" value={globalFields.services} onChange={(e) => handleGlobalFieldChange('services', e.target.value)} className="w-full px-2 py-1.5 text-sm border rounded bg-white focus:ring-1 focus:ring-indigo-500 outline-none"/></div></div></div>
-                            <div className="p-2 bg-gray-100 flex-none"><div className="flex bg-gray-200 p-1 rounded-lg"><button onClick={() => setActiveTab('data')} className={`flex-1 py-2 text-sm font-medium rounded-md flex justify-center items-center gap-2 transition ${activeTab === 'data' ? 'bg-white shadow text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}><Layout className="w-4 h-4" /> 資料列表</button><button onClick={() => setActiveTab('layout')} className={`flex-1 py-2 text-sm font-medium rounded-md flex justify-center items-center gap-2 transition ${activeTab === 'layout' ? 'bg-white shadow text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}><MousePointer2 className="w-4 h-4" /> 排版設定</button></div></div>
-                            <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-20">
-                                {activeTab === 'data' && (<div className="space-y-3"><div className="flex justify-between items-center"><span className="text-xs font-bold text-gray-500">共 {entries.length} 筆資料</span><div className="flex gap-2"><button onClick={clearEntries} className="text-red-400 hover:bg-red-50 p-1 rounded text-xs flex items-center gap-1">清空</button><button onClick={addEntry} className="text-indigo-600 hover:bg-indigo-50 p-1 rounded text-xs flex items-center gap-1"><Plus className="w-3 h-3" /> 新增</button></div></div>{entries.map((entry, index) => (<div key={entry.id} onClick={() => handleSelectEntry(entry.id)} className={`group flex items-center gap-2 p-3 rounded-lg border transition cursor-pointer ${currentEntryId === entry.id ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200' : 'border-gray-200 hover:border-indigo-300'}`}><div className="text-gray-400 font-mono text-xs w-6">{index + 1}.</div><div className="flex-1 grid grid-cols-2 gap-2"><div><label className="text-[10px] text-gray-400 block mb-0.5">{modeConfig.fields.main}</label><input type="text" value={entry.mainText} onChange={(e) => updateEntry(entry.id, 'mainText', e.target.value)} className="w-full bg-transparent border-b border-gray-300 focus:border-indigo-500 outline-none text-sm font-medium px-0 py-0.5" placeholder={modeConfig.fields.main}/></div><div><label className="text-[10px] text-gray-400 block mb-0.5">{modeConfig.fields.sub}</label><input type="text" value={entry.subText} onChange={(e) => updateEntry(entry.id, 'subText', e.target.value)} className="w-full bg-transparent border-b border-gray-300 focus:border-indigo-500 outline-none text-sm text-gray-600 px-0 py-0.5" placeholder={modeConfig.fields.sub}/></div></div><button onClick={(e) => { e.stopPropagation(); removeEntry(entry.id); }} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div>))}<button onClick={addEntry} className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-400 rounded-lg hover:border-indigo-400 hover:text-indigo-500 transition flex justify-center items-center gap-2 mt-2"><Plus className="w-4 h-4" /> 新增下一筆</button></div>)}
-                                {activeTab === 'layout' && (<div className="space-y-6"><div className="bg-blue-50 border border-blue-200 text-blue-800 text-xs p-3 rounded-lg">當前調整的是「{modeConfig.label}」的排版設定。</div>{[{ key: 'main', label: modeConfig.fields.main }, { key: 'sub', label: modeConfig.fields.sub }, { key: 'date', label: '盤點日期' }, { key: 'services', label: 'Services' }].map((item) => (<div key={item.key} className="space-y-2 border-b border-gray-100 pb-4 last:border-0"><div className="flex items-center justify-between"><span className="font-bold text-sm text-gray-700 flex items-center gap-2"><Type className="w-4 h-4 text-gray-400" />{item.label}</span><div className="flex items-center gap-2"><input type="color" value={currentLayout[item.key].color} onChange={(e) => updateLayout(item.key, { color: e.target.value })} className="w-6 h-6 rounded border-0 cursor-pointer p-0"/><button onClick={() => updateLayout(item.key, { vertical: !currentLayout[item.key].vertical })} className={`text-xs px-2 py-1 rounded border ${currentLayout[item.key].vertical ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-gray-100 text-gray-600'}`}>{currentLayout[item.key].vertical ? '直排' : '橫排'}</button></div></div><div className="grid grid-cols-2 gap-4"><div><label className="text-xs text-gray-400">字體大小 ({currentLayout[item.key].size}px)</label><input type="range" min="10" max="150" value={currentLayout[item.key].size} onChange={(e) => updateLayout(item.key, { size: Number(e.target.value) })} className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-2"/></div></div></div>))}</div>)}
-                            </div>
-                        </div>
-                        <div className={`flex-1 bg-gray-100 flex flex-col relative h-full overflow-hidden ${mobileTab === 'preview' ? 'flex' : 'hidden lg:flex'}`}>
-                            {currentImageSrc && (
-                                <div className="flex-none bg-white border-b border-gray-200 p-2 flex items-center justify-between z-10 gap-2 overflow-x-auto">
-                                    <div className="flex bg-gray-100 rounded-lg p-0.5 border border-gray-200 shrink-0">
-                                        <button onClick={() => setIsTouchDragMode(false)} className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold transition ${!isTouchDragMode ? 'bg-white text-indigo-600 shadow' : 'text-gray-500'}`}><Hand className="w-4 h-4" /> 捲動</button>
-                                        <button onClick={() => setIsTouchDragMode(true)} className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold transition ${isTouchDragMode ? 'bg-white text-indigo-600 shadow' : 'text-gray-500'}`}><MoveIcon className="w-4 h-4" /> 拖曳</button>
-                                    </div>
-                                    <div className="flex bg-gray-100 rounded-lg p-0.5 border border-gray-200 shrink-0">
-                                        <button onClick={() => setIsFitWidth(false)} className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold transition ${!isFitWidth ? 'bg-white text-indigo-600 shadow' : 'text-gray-500'}`} title="1:1 原圖大小"><Maximize className="w-4 h-4" /> 原圖</button>
-                                        <button onClick={() => setIsFitWidth(true)} className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold transition ${isFitWidth ? 'bg-white text-indigo-600 shadow' : 'text-gray-500'}`} title="縮放至寬度"><Layout className="w-4 h-4" /> 縮放</button>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button onClick={handleDownloadCurrent} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg shadow border border-blue-500 text-xs font-bold flex items-center gap-2 transition whitespace-nowrap"><Download className="w-3 h-3" /> 下載</button>
-                                        <button onClick={() => fileInputRef.current.click()} className="bg-white hover:bg-gray-100 text-gray-600 hover:text-indigo-600 px-3 py-1.5 rounded-lg shadow border border-gray-200 text-xs font-bold flex items-center gap-2 transition whitespace-nowrap"><Upload className="w-3 h-3" /> 更換</button>
-                                        <button onClick={handleRemoveImage} className="bg-white hover:bg-gray-100 text-gray-600 hover:text-red-600 px-3 py-1.5 rounded-lg shadow border border-gray-200 text-xs font-bold flex items-center gap-2 transition whitespace-nowrap"><Trash2 className="w-3 h-3" /> 移除</button>
-                                    </div>
-                                </div>
-                            )}
-                            <div className="scroll-container bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] no-scrollbar">
-                                {!currentImageSrc ? (
-                                    <div onClick={() => fileInputRef.current.click()} className="text-center p-8 lg:p-12 border-4 border-dashed border-gray-300 rounded-3xl cursor-pointer hover:bg-gray-100 hover:border-indigo-400 transition group max-w-sm m-auto">
-                                        <Upload className="w-12 h-12 text-gray-300 group-hover:text-indigo-400 mx-auto mb-4" /><h3 className="text-lg font-bold text-gray-600 group-hover:text-indigo-600">上傳底圖</h3><p className="text-gray-400 mt-2 text-sm">請上傳「{modeConfig.label}」空白圖</p>
-                                    </div>
-                                ) : (
-                                    <canvas 
-                                        ref={canvasRef} 
-                                        onMouseDown={handlePointerDown} 
-                                        onMouseMove={handlePointerMove} 
-                                        onMouseUp={handlePointerUp} 
-                                        onMouseLeave={handlePointerUp}
-                                        onTouchStart={handlePointerDown}
-                                        onTouchMove={handlePointerMove}
-                                        onTouchEnd={handlePointerUp}
-                                        onTouchCancel={handlePointerUp}
-                                        className={`shadow-2xl bg-white ${isTouchDragMode ? 'canvas-drag-mode' : 'canvas-scroll-mode'}`} 
-                                        style={{ 
-                                            maxWidth: isFitWidth ? '100%' : 'none',
-                                            height: 'auto',
-                                            objectFit: 'contain'
-                                        }}
-                                    />
-                                )}
-                            </div>
-                            {isTouchDragMode && currentImageSrc && (<div className="absolute top-16 left-1/2 -translate-x-1/2 bg-indigo-600/90 text-white text-xs px-4 py-1.5 rounded-full pointer-events-none shadow-lg animate-pulse z-20 flex items-center gap-2"><MoveIcon className="w-3 h-3" /> 拖曳模式開啟中</div>)}
-                        </div>
-                    </main>
-                    <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+        return (
+          <div className="h-full flex flex-col font-sans text-gray-800">
+            {/* Edit Modal */}
+            {editModalOpen && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 space-y-4">
+                  <h3 className="text-lg font-bold">編輯內容</h3>
+                  <p className="text-xs text-gray-500">
+                    提示：您可以按下 Enter 鍵來強制換行。系統也會在超過 15 字時自動換行。
+                  </p>
+                  <textarea
+                    className="w-full border p-2 rounded h-32"
+                    value={editData.value}
+                    onChange={e => setEditData({ ...editData, value: e.target.value })}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setEditModalOpen(false)}
+                      className="px-4 py-2 text-gray-600"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={handleEditSave}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded"
+                    >
+                      儲存
+                    </button>
+                  </div>
                 </div>
-            );
-        }
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+              </div>
+            )}
+            {showDownloadModal && (
+              <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
+                  <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-xl">
+                    <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                      <ImageIcon className="w-5 h-5 text-indigo-600" />
+                      圖片生成中心 ({generatedResults.length} 張)
+                    </h3>
+                    <button
+                      onClick={() => setShowDownloadModal(false)}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+                  <div className="p-4 bg-blue-50 border-b border-blue-100 text-sm text-blue-800 flex flex-col sm:flex-row justify-between items-center gap-3">
+                    <span>
+                      💡 手機用戶：點擊「分享/儲存全部」可一次存入相簿，或長按下方圖片個別儲存。
+                    </span>
+                    {navigator.share && (
+                      <button
+                        onClick={handleShareAll}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow transition whitespace-nowrap"
+                      >
+                        <Share2 className="w-4 h-4" /> 分享/儲存全部
+                      </button>
+                    )}
+                  </div>
+                  <div className="p-4 flex-1 overflow-y-auto bg-gray-100 grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {generatedResults.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-white p-2 rounded-lg shadow flex flex-col gap-2 group"
+                      >
+                        <div className="aspect-[3/4] bg-gray-200 rounded overflow-hidden relative">
+                          <img
+                            src={item.url}
+                            alt={item.name}
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                        <div className="text-xs font-bold text-gray-600 truncate">{item.name}</div>
+                        <a
+                          href={item.url}
+                          download={item.name}
+                          className="flex items-center justify-center gap-1 w-full py-2 bg-gray-100 hover:bg-indigo-50 text-indigo-600 font-bold rounded text-xs transition border border-gray-200"
+                        >
+                          <Download className="w-3 h-3" /> 下載此張
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="p-3 text-center text-xs text-gray-400 bg-white rounded-b-xl">
+                    提示：如果「分享全部」沒反應，請使用單張下載。
+                  </div>
+                </div>
+              </div>
+            )}
+            {showImportModal && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+                  <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+                    <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-indigo-600" />
+                      智慧資料匯入
+                    </h3>
+                    <button
+                      onClick={() => setShowImportModal(false)}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="p-4 flex-1 overflow-hidden flex flex-col gap-2">
+                    <div className="bg-blue-50 text-blue-800 text-sm p-3 rounded-lg border border-blue-100">
+                      <p className="font-bold mb-1">使用說明：</p>
+                      <p>請貼入資料。系統會自動根據關鍵字分配到對應軌跡圖。</p>
+                    </div>
+                    <textarea
+                      className="flex-1 w-full border border-gray-300 rounded-lg p-4 font-mono text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                      placeholder={`範例：\n爸爸姓名：陳秉豐\n爸媽家住址：台中市...\n公司名稱：鈞豐...`}
+                      value={importText}
+                      onChange={e => setImportText(e.target.value)}
+                      style={{ minHeight: "300px" }}
+                    />
+                  </div>
+                  <div className="p-4 border-t border-gray-100 flex justify-end gap-2 bg-gray-50 rounded-b-xl">
+                    <button
+                      onClick={() => setShowImportModal(false)}
+                      className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-200 rounded-lg transition"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={parseAndImportData}
+                      disabled={!importText.trim()}
+                      className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-md transition disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <Check className="w-4 h-4" /> 開始解析並匯入
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Header: Always visible */}
+            <header className="bg-white shadow-sm z-10 px-4 py-3 flex-none border-b border-gray-200">
+              <div className="max-w-7xl mx-auto flex flex-col xl:flex-row justify-between items-center gap-4">
+                <div className="flex w-full xl:w-auto bg-gray-100 p-1 rounded-lg lg:hidden">
+                  <button
+                    onClick={() => setMobileTab("editor")}
+                    className={`flex-1 py-2 flex items-center justify-center gap-2 text-sm font-bold rounded-md transition ${mobileTab === "editor" ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500"}`}
+                  >
+                    <Edit className="w-4 h-4" /> 編輯資料
+                  </button>
+                  <button
+                    onClick={() => setMobileTab("preview")}
+                    className={`flex-1 py-2 flex items-center justify-center gap-2 text-sm font-bold rounded-md transition ${mobileTab === "preview" ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500"}`}
+                  >
+                    <Eye className="w-4 h-4" /> 預覽圖片
+                  </button>
+                </div>
+                <div className="hidden lg:flex items-center gap-4 w-full xl:w-auto">
+                  <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2 whitespace-nowrap">
+                    <Users className="w-6 h-6 text-indigo-600" />
+                    多模式軌跡生成
+                  </h1>
+                  <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-200">
+                    <FolderOpen className="w-4 h-4 text-gray-400 ml-2" />
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={e => setCustomerName(e.target.value)}
+                      placeholder="客戶/專案名稱"
+                      className="bg-transparent border-none text-sm font-bold text-gray-700 focus:ring-0 focus:outline-none w-32 placeholder-gray-400"
+                    />
+                    <div className="h-4 w-px bg-gray-300 mx-1"></div>
+                    <div className="flex bg-gray-200 p-0.5 rounded-md">
+                      {Object.values(MODES).map(mode => (
+                        <button
+                          key={mode.id}
+                          onClick={() => handleModeChange(mode.id)}
+                          className={`flex items-center gap-2 px-3 py-1 rounded text-xs font-medium transition-all whitespace-nowrap ${currentMode === mode.id ? "bg-white shadow text-indigo-600" : "text-gray-500 hover:text-gray-700"}`}
+                        >
+                          {mode.icon}
+                          {mode.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2 w-full lg:w-auto justify-end overflow-x-auto pb-1 lg:pb-0">
+                  <button
+                    onClick={handleExportSelf}
+                    className="hidden lg:flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 transition shadow-md whitespace-nowrap"
+                  >
+                    <Gift className="w-4 h-4" /> 匯出系統
+                  </button>
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="flex items-center gap-2 px-3 py-2 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-50 transition shadow-sm whitespace-nowrap"
+                  >
+                    <FileText className="w-4 h-4" /> 智慧匯入
+                  </button>
+                  <button
+                    onClick={handleGenerateImages}
+                    disabled={!hasAnyImage || isGenerating}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white shadow-md transition-all min-w-[140px] justify-center whitespace-nowrap ${!hasAnyImage ? "bg-gray-300 cursor-not-allowed" : isGenerating ? "bg-indigo-400 cursor-wait" : "bg-indigo-600 hover:bg-indigo-700"}`}
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" /> {progress}%
+                      </>
+                    ) : (
+                      <>
+                        <ImageIcon className="w-4 h-4" /> 批量生成
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+              <div className="lg:hidden mt-2 flex items-center justify-between gap-2 overflow-x-auto pb-1">
+                <div className="flex bg-gray-100 p-1 rounded-lg">
+                  {Object.values(MODES).map(mode => (
+                    <button
+                      key={mode.id}
+                      onClick={() => handleModeChange(mode.id)}
+                      className={`flex-1 flex items-center justify-center px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${currentMode === mode.id ? "bg-white shadow text-indigo-600" : "text-gray-500"}`}
+                    >
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded border border-gray-200 shrink-0">
+                  <FolderOpen className="w-3 h-3 text-gray-400" />
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={e => setCustomerName(e.target.value)}
+                    className="bg-transparent border-none text-xs font-bold text-gray-700 focus:ring-0 focus:outline-none w-20"
+                    placeholder="客戶名"
+                  />
+                </div>
+              </div>
+            </header>
+            <main className="flex-1 overflow-hidden relative flex flex-col lg:flex-row">
+              <div
+                className={`flex-1 lg:flex-none lg:w-96 flex flex-col bg-white border-r border-gray-200 h-full overflow-hidden ${mobileTab === "editor" ? "flex" : "hidden lg:flex"}`}
+              >
+                <div className="p-4 border-b border-gray-200 bg-gray-50 flex-none">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">盤點日期</label>
+                      <input
+                        type="text"
+                        value={globalFields.date}
+                        onChange={e => handleGlobalFieldChange("date", e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm border rounded bg-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Services</label>
+                      <input
+                        type="text"
+                        value={globalFields.services}
+                        onChange={e => handleGlobalFieldChange("services", e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm border rounded bg-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="p-2 bg-gray-100 flex-none">
+                  <div className="flex bg-gray-200 p-1 rounded-lg">
+                    <button
+                      onClick={() => setActiveTab("data")}
+                      className={`flex-1 py-2 text-sm font-medium rounded-md flex justify-center items-center gap-2 transition ${activeTab === "data" ? "bg-white shadow text-indigo-600" : "text-gray-500 hover:text-gray-700"}`}
+                    >
+                      <Layout className="w-4 h-4" /> 資料列表
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("layout")}
+                      className={`flex-1 py-2 text-sm font-medium rounded-md flex justify-center items-center gap-2 transition ${activeTab === "layout" ? "bg-white shadow text-indigo-600" : "text-gray-500 hover:text-gray-700"}`}
+                    >
+                      <MousePointer2 className="w-4 h-4" /> 排版設定
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-20">
+                  {activeTab === "data" && (
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-gray-500">
+                          共 {entries.length} 筆資料
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={clearEntries}
+                            className="text-red-400 hover:bg-red-50 p-1 rounded text-xs flex items-center gap-1"
+                          >
+                            清空
+                          </button>
+                          <button
+                            onClick={addEntry}
+                            className="text-indigo-600 hover:bg-indigo-50 p-1 rounded text-xs flex items-center gap-1"
+                          >
+                            <Plus className="w-3 h-3" /> 新增
+                          </button>
+                        </div>
+                      </div>
+                      {entries.map((entry, index) => (
+                        <div
+                          key={entry.id}
+                          onClick={() => handleSelectEntry(entry.id)}
+                          className={`group flex items-center gap-2 p-3 rounded-lg border transition cursor-pointer ${currentEntryId === entry.id ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200" : "border-gray-200 hover:border-indigo-300"}`}
+                        >
+                          <div className="text-gray-400 font-mono text-xs w-6">{index + 1}.</div>
+                          <div className="flex-1 grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-gray-400 block mb-0.5">
+                                {modeConfig.fields.main}
+                              </label>
+                              <input
+                                type="text"
+                                value={entry.mainText}
+                                onChange={e => updateEntry(entry.id, "mainText", e.target.value)}
+                                className="w-full bg-transparent border-b border-gray-300 focus:border-indigo-500 outline-none text-sm font-medium px-0 py-0.5"
+                                placeholder={modeConfig.fields.main}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 block mb-0.5">
+                                {modeConfig.fields.sub}
+                              </label>
+                              <input
+                                type="text"
+                                value={entry.subText}
+                                onChange={e => updateEntry(entry.id, "subText", e.target.value)}
+                                className="w-full bg-transparent border-b border-gray-300 focus:border-indigo-500 outline-none text-sm text-gray-600 px-0 py-0.5"
+                                placeholder={modeConfig.fields.sub}
+                              />
+                            </div>
+                          </div>
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              removeEntry(entry.id);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 p-1"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={addEntry}
+                        className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-400 rounded-lg hover:border-indigo-400 hover:text-indigo-500 transition flex justify-center items-center gap-2 mt-2"
+                      >
+                        <Plus className="w-4 h-4" /> 新增下一筆
+                      </button>
+                    </div>
+                  )}
+                  {activeTab === "layout" && (
+                    <div className="space-y-6">
+                      <div className="bg-blue-50 border border-blue-200 text-blue-800 text-xs p-3 rounded-lg">
+                        當前調整的是「{modeConfig.label}」的排版設定。
+                      </div>
+                      {[
+                        { key: "main", label: modeConfig.fields.main },
+                        { key: "sub", label: modeConfig.fields.sub },
+                        { key: "date", label: "盤點日期" },
+                        { key: "services", label: "Services" },
+                      ].map(item => (
+                        <div
+                          key={item.key}
+                          className="space-y-2 border-b border-gray-100 pb-4 last:border-0"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-sm text-gray-700 flex items-center gap-2">
+                              <Type className="w-4 h-4 text-gray-400" />
+                              {item.label}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="color"
+                                value={currentLayout[item.key].color}
+                                onChange={e => updateLayout(item.key, { color: e.target.value })}
+                                className="w-6 h-6 rounded border-0 cursor-pointer p-0"
+                              />
+                              <button
+                                onClick={() =>
+                                  updateLayout(item.key, {
+                                    vertical: !currentLayout[item.key].vertical,
+                                  })
+                                }
+                                className={`text-xs px-2 py-1 rounded border ${currentLayout[item.key].vertical ? "bg-indigo-100 text-indigo-700 border-indigo-200" : "bg-gray-100 text-gray-600"}`}
+                              >
+                                {currentLayout[item.key].vertical ? "直排" : "橫排"}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="text-xs text-gray-400">
+                                字體大小 ({currentLayout[item.key].size}px)
+                              </label>
+                              <input
+                                type="range"
+                                min="10"
+                                max="150"
+                                value={currentLayout[item.key].size}
+                                onChange={e =>
+                                  updateLayout(item.key, { size: Number(e.target.value) })
+                                }
+                                className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-2"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div
+                className={`flex-1 bg-gray-100 flex flex-col relative h-full overflow-hidden ${mobileTab === "preview" ? "flex" : "hidden lg:flex"}`}
+              >
+                {currentImageSrc && (
+                  <div className="flex-none bg-white border-b border-gray-200 p-2 flex items-center justify-between z-10 gap-2 overflow-x-auto">
+                    <div className="flex bg-gray-100 rounded-lg p-0.5 border border-gray-200 shrink-0">
+                      <button
+                        onClick={() => setIsTouchDragMode(false)}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold transition ${!isTouchDragMode ? "bg-white text-indigo-600 shadow" : "text-gray-500"}`}
+                      >
+                        <Hand className="w-4 h-4" /> 捲動
+                      </button>
+                      <button
+                        onClick={() => setIsTouchDragMode(true)}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold transition ${isTouchDragMode ? "bg-white text-indigo-600 shadow" : "text-gray-500"}`}
+                      >
+                        <MoveIcon className="w-4 h-4" /> 拖曳
+                      </button>
+                    </div>
+                    <div className="flex bg-gray-100 rounded-lg p-0.5 border border-gray-200 shrink-0">
+                      <button
+                        onClick={() => setIsFitWidth(false)}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold transition ${!isFitWidth ? "bg-white text-indigo-600 shadow" : "text-gray-500"}`}
+                        title="1:1 原圖大小"
+                      >
+                        <Maximize className="w-4 h-4" /> 原圖
+                      </button>
+                      <button
+                        onClick={() => setIsFitWidth(true)}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold transition ${isFitWidth ? "bg-white text-indigo-600 shadow" : "text-gray-500"}`}
+                        title="縮放至寬度"
+                      >
+                        <Layout className="w-4 h-4" /> 縮放
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleDownloadCurrent}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg shadow border border-blue-500 text-xs font-bold flex items-center gap-2 transition whitespace-nowrap"
+                      >
+                        <Download className="w-3 h-3" /> 下載
+                      </button>
+                      <button
+                        onClick={() => fileInputRef.current.click()}
+                        className="bg-white hover:bg-gray-100 text-gray-600 hover:text-indigo-600 px-3 py-1.5 rounded-lg shadow border border-gray-200 text-xs font-bold flex items-center gap-2 transition whitespace-nowrap"
+                      >
+                        <Upload className="w-3 h-3" /> 更換
+                      </button>
+                      <button
+                        onClick={handleRemoveImage}
+                        className="bg-white hover:bg-gray-100 text-gray-600 hover:text-red-600 px-3 py-1.5 rounded-lg shadow border border-gray-200 text-xs font-bold flex items-center gap-2 transition whitespace-nowrap"
+                      >
+                        <Trash2 className="w-3 h-3" /> 移除
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <div className="scroll-container bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] no-scrollbar">
+                  {!currentImageSrc ? (
+                    <div
+                      onClick={() => fileInputRef.current.click()}
+                      className="text-center p-8 lg:p-12 border-4 border-dashed border-gray-300 rounded-3xl cursor-pointer hover:bg-gray-100 hover:border-indigo-400 transition group max-w-sm m-auto"
+                    >
+                      <Upload className="w-12 h-12 text-gray-300 group-hover:text-indigo-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-bold text-gray-600 group-hover:text-indigo-600">
+                        上傳底圖
+                      </h3>
+                      <p className="text-gray-400 mt-2 text-sm">
+                        請上傳「{modeConfig.label}」空白圖
+                      </p>
+                    </div>
+                  ) : (
+                    <canvas
+                      ref={canvasRef}
+                      onMouseDown={handlePointerDown}
+                      onMouseMove={handlePointerMove}
+                      onMouseUp={handlePointerUp}
+                      onMouseLeave={handlePointerUp}
+                      onTouchStart={handlePointerDown}
+                      onTouchMove={handlePointerMove}
+                      onTouchEnd={handlePointerUp}
+                      onTouchCancel={handlePointerUp}
+                      className={`shadow-2xl bg-white ${isTouchDragMode ? "canvas-drag-mode" : "canvas-scroll-mode"}`}
+                      style={{
+                        maxWidth: isFitWidth ? "100%" : "none",
+                        height: "auto",
+                        objectFit: "contain",
+                      }}
+                    />
+                  )}
+                </div>
+                {isTouchDragMode && currentImageSrc && (
+                  <div className="absolute top-16 left-1/2 -translate-x-1/2 bg-indigo-600/90 text-white text-xs px-4 py-1.5 rounded-full pointer-events-none shadow-lg animate-pulse z-20 flex items-center gap-2">
+                    <MoveIcon className="w-3 h-3" /> 拖曳模式開啟中
+                  </div>
+                )}
+              </div>
+            </main>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept="image/*"
+              onChange={handleImageUpload}
+            />
+          </div>
+        );
+      }
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
     </script>
-</body>
+  </body>
 </html>

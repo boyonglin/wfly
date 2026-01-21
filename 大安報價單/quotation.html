@@ -1,307 +1,415 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hyphen for the Arts - 空間報價單系統</title>
-    
+
     <!-- 引入必要的函式庫 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    
+
     <!-- 字體設定 -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Noto+Sans+TC:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Noto+Sans+TC:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
 
     <style>
-        /* 全局字體 */
-        body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #f0f0f0; color: #1a1a1a; }
-        .font-mono { font-family: 'Space Mono', monospace; }
-        
-        /* 報價單紙張樣式 (A4) */
+      /* 全局字體 */
+      body {
+        font-family: "Inter", "Noto Sans TC", sans-serif;
+        background-color: #f0f0f0;
+        color: #1a1a1a;
+      }
+      .font-mono {
+        font-family: "Space Mono", monospace;
+      }
+
+      /* 報價單紙張樣式 (A4) */
+      .quote-paper {
+        width: 210mm;
+        min-height: 297mm;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        background-color: #ffffff;
+        margin: 0 auto;
+        position: relative;
+        padding: 12mm 15mm;
+        overflow: hidden; /* 確保浮水印不超出邊界 */
+        z-index: 1;
+      }
+
+      /* 浮水印設定 */
+      .quote-paper::before {
+        content: "hyphen";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(-45deg);
+        font-size: 8rem;
+        font-weight: 900;
+        color: rgba(0, 0, 0, 0.03); /* 極淡的灰色，不干擾閱讀 */
+        z-index: -1;
+        pointer-events: none;
+        white-space: nowrap;
+        font-family: "Inter", sans-serif;
+        letter-spacing: -0.05em;
+      }
+
+      /* 確保內容在浮水印之上 */
+      .quote-content-layer {
+        position: relative;
+        z-index: 2;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      /* 滾動條樣式 */
+      .custom-scroll::-webkit-scrollbar {
+        width: 6px;
+      }
+      .custom-scroll::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scroll::-webkit-scrollbar-thumb {
+        background-color: #e5e5e5;
+        border-radius: 3px;
+      }
+
+      /* 輸入框通用樣式 */
+      .input-group label {
+        font-size: 10px;
+        color: #6b7280;
+        margin-bottom: 0.25rem;
+        display: block;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-weight: 500;
+      }
+      .input-field {
+        width: 100%;
+        background: transparent;
+        border: 1px solid #e5e5e5;
+        padding: 0.5rem;
+        font-size: 0.875rem;
+        border-radius: 0.125rem;
+        transition: all 0.2s;
+      }
+      .input-field:focus {
+        border-color: #000;
+        outline: none;
+      }
+
+      /* 列印專用設定 */
+      @media print {
+        @page {
+          size: A4;
+          margin: 0;
+        }
+        body {
+          background-color: white;
+          -webkit-print-color-adjust: exact;
+        }
+        .no-print {
+          display: none !important;
+        }
+        .preview-pane {
+          width: 100% !important;
+          padding: 0 !important;
+          background: white !important;
+          display: block !important;
+          height: auto !important;
+          overflow: visible !important;
+        }
         .quote-paper {
-            width: 210mm;
-            min-height: 297mm;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
-            background-color: #ffffff;
-            margin: 0 auto;
-            position: relative;
-            padding: 12mm 15mm;
-            overflow: hidden; /* 確保浮水印不超出邊界 */
-            z-index: 1;
+          box-shadow: none;
+          margin: 0;
+          width: 100%;
+          height: 297mm;
+          page-break-after: always;
         }
-
-        /* 浮水印設定 */
+        /* 確保列印時浮水印可見 */
         .quote-paper::before {
-            content: "hyphen";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) rotate(-45deg);
-            font-size: 8rem;
-            font-weight: 900;
-            color: rgba(0, 0, 0, 0.03); /* 極淡的灰色，不干擾閱讀 */
-            z-index: -1;
-            pointer-events: none;
-            white-space: nowrap;
-            font-family: 'Inter', sans-serif;
-            letter-spacing: -0.05em;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
         }
-
-        /* 確保內容在浮水印之上 */
-        .quote-content-layer {
-            position: relative;
-            z-index: 2;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
-
-        /* 滾動條樣式 */
-        .custom-scroll::-webkit-scrollbar { width: 6px; }
-        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
-        .custom-scroll::-webkit-scrollbar-thumb { background-color: #e5e5e5; border-radius: 3px; }
-
-        /* 輸入框通用樣式 */
-        .input-group label {
-            font-size: 10px;
-            color: #6b7280;
-            margin-bottom: 0.25rem;
-            display: block;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            font-weight: 500;
-        }
-        .input-field {
-            width: 100%;
-            background: transparent;
-            border: 1px solid #e5e5e5;
-            padding: 0.5rem;
-            font-size: 0.875rem;
-            border-radius: 0.125rem;
-            transition: all 0.2s;
-        }
-        .input-field:focus {
-            border-color: #000;
-            outline: none;
-        }
-
-        /* 列印專用設定 */
-        @media print {
-            @page { size: A4; margin: 0; }
-            body { background-color: white; -webkit-print-color-adjust: exact; }
-            .no-print { display: none !important; }
-            .preview-pane { 
-                width: 100% !important; 
-                padding: 0 !important; 
-                background: white !important;
-                display: block !important;
-                height: auto !important;
-                overflow: visible !important;
-            }
-            .quote-paper {
-                box-shadow: none;
-                margin: 0;
-                width: 100%;
-                height: 297mm;
-                page-break-after: always;
-            }
-            /* 確保列印時浮水印可見 */
-            .quote-paper::before {
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-            }
-        }
+      }
     </style>
-</head>
-<body class="flex flex-col lg:flex-row h-screen overflow-hidden">
-
+  </head>
+  <body class="flex flex-col lg:flex-row h-screen overflow-hidden">
     <!-- 左側：控制面板 (No Print) -->
-    <div class="w-full lg:w-1/3 bg-white border-r border-gray-200 overflow-y-auto no-print flex flex-col z-10 custom-scroll shadow-xl lg:shadow-none">
-        <div class="p-6 border-b border-gray-100 sticky top-0 bg-white/95 backdrop-blur z-20 flex justify-between items-center">
-            <div>
-                <h2 class="text-xl font-bold tracking-tight mb-1">Quote Generator</h2>
-                <p class="text-xs text-gray-500 uppercase tracking-widest">hyphen for the arts</p>
-            </div>
-            <!-- Removed "New Quote" button -->
+    <div
+      class="w-full lg:w-1/3 bg-white border-r border-gray-200 overflow-y-auto no-print flex flex-col z-10 custom-scroll shadow-xl lg:shadow-none"
+    >
+      <div
+        class="p-6 border-b border-gray-100 sticky top-0 bg-white/95 backdrop-blur z-20 flex justify-between items-center"
+      >
+        <div>
+          <h2 class="text-xl font-bold tracking-tight mb-1">Quote Generator</h2>
+          <p class="text-xs text-gray-500 uppercase tracking-widest">hyphen for the arts</p>
         </div>
+        <!-- Removed "New Quote" button -->
+      </div>
 
-        <div class="p-6 space-y-8">
-            <!-- 基本資訊 -->
-            <section>
-                <h3 class="text-xs font-bold border-b border-gray-200 pb-2 mb-4 uppercase text-gray-900">基本資訊 (Info)</h3>
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="input-group">
-                        <label>報價單號 (No.)</label>
-                        <input type="text" id="quoteNo" class="input-field font-mono" placeholder="---" oninput="updateDisplay()">
-                    </div>
-                    <div class="input-group">
-                        <label>日期 (Date)</label>
-                        <input type="date" id="date" class="input-field font-mono" oninput="handleDateChange()">
-                    </div>
+      <div class="p-6 space-y-8">
+        <!-- 基本資訊 -->
+        <section>
+          <h3 class="text-xs font-bold border-b border-gray-200 pb-2 mb-4 uppercase text-gray-900">
+            基本資訊 (Info)
+          </h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="input-group">
+              <label>報價單號 (No.)</label>
+              <input
+                type="text"
+                id="quoteNo"
+                class="input-field font-mono"
+                placeholder="---"
+                oninput="updateDisplay()"
+              />
+            </div>
+            <div class="input-group">
+              <label>日期 (Date)</label>
+              <input
+                type="date"
+                id="date"
+                class="input-field font-mono"
+                oninput="handleDateChange()"
+              />
+            </div>
+          </div>
+        </section>
+
+        <!-- 客戶資料 -->
+        <section>
+          <h3 class="text-xs font-bold border-b border-gray-200 pb-2 mb-4 uppercase text-gray-900">
+            客戶資料 (Client)
+          </h3>
+          <div class="space-y-3">
+            <div class="input-group">
+              <label>客戶/品牌名稱</label>
+              <input
+                type="text"
+                id="clientName"
+                class="input-field"
+                placeholder="例如: VIS for the Arts"
+                oninput="updateDisplay()"
+              />
+            </div>
+            <div class="input-group">
+              <label>聯絡人</label>
+              <input type="text" id="contactPerson" class="input-field" oninput="updateDisplay()" />
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div class="input-group">
+                <label>電話</label>
+                <input type="text" id="phone" class="input-field" oninput="updateDisplay()" />
+              </div>
+              <div class="input-group">
+                <label>Email</label>
+                <input type="email" id="email" class="input-field" oninput="updateDisplay()" />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 活動內容 -->
+        <section>
+          <h3 class="text-xs font-bold border-b border-gray-200 pb-2 mb-4 uppercase text-gray-900">
+            活動內容 (Event)
+          </h3>
+          <div class="space-y-3">
+            <div class="input-group">
+              <label>活動名稱</label>
+              <input type="text" id="eventName" class="input-field" oninput="updateDisplay()" />
+            </div>
+
+            <div class="input-group">
+              <label>活動日期 (Event Date)</label>
+              <div class="flex gap-2 items-center">
+                <input
+                  type="date"
+                  id="eventStartDate"
+                  class="input-field font-mono"
+                  placeholder="Start"
+                  oninput="handleEventDateChange()"
+                />
+                <span class="text-gray-400">-</span>
+                <input
+                  type="date"
+                  id="eventEndDate"
+                  class="input-field font-mono"
+                  placeholder="End"
+                  oninput="handleEventDateChange()"
+                />
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label>租借區域</label>
+              <select id="space" class="input-field appearance-none" onchange="updateDisplay()">
+                <option value="" disabled selected>請選擇 (Select Space)</option>
+                <option value="全棟租借">全棟租借</option>
+                <option value="1F+B1租借">1F+B1租借</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <!-- 租金計算機 (Calculator) -->
+        <section
+          class="bg-gray-50 border border-gray-200 p-4 rounded-sm shadow-sm relative overflow-hidden"
+        >
+          <div class="absolute top-0 left-0 w-1 h-full bg-black"></div>
+
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xs font-bold uppercase text-gray-900 flex items-center gap-2">
+              <i data-lucide="calculator" class="w-3.5 h-3.5"></i> 租金計算機 (Calculator)
+            </h3>
+            <div
+              class="text-[9px] text-red-600 font-bold flex items-center gap-1 bg-red-50 px-2 py-1 rounded-sm border border-red-100"
+            >
+              <i data-lucide="alert-circle" class="w-2.5 h-2.5"></i> 需與活動日期一致
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <!-- Date Range -->
+            <div>
+              <label class="text-[9px] uppercase text-gray-500 mb-1 block font-bold"
+                >日期區間 (Date Range)</label
+              >
+              <div class="flex gap-2 items-center">
+                <input
+                  type="date"
+                  id="calcStartDate"
+                  class="input-field font-mono bg-white"
+                  oninput="updateCalcMetrics()"
+                />
+                <span class="text-gray-400 text-xs">to</span>
+                <input
+                  type="date"
+                  id="calcEndDate"
+                  class="input-field font-mono bg-white"
+                  oninput="updateCalcMetrics()"
+                />
+              </div>
+              <div id="dateMismatchMsg" class="hidden text-[9px] text-red-500 mt-1">
+                * 日期不一致，無法計算 (Dates mismatch)
+              </div>
+            </div>
+
+            <!-- Space Select -->
+            <div>
+              <label class="text-[9px] uppercase text-gray-500 mb-1 block font-bold"
+                >區域 (Space)</label
+              >
+              <select id="calcSpace" class="input-field bg-white" onchange="updateCalcMetrics()">
+                <option value="1F+B1">2層 (1F+B1)</option>
+                <option value="Whole">包棟 (全棟)</option>
+              </select>
+            </div>
+
+            <!-- Time Slots Checkboxes -->
+            <div>
+              <label class="text-[9px] uppercase text-gray-500 mb-1 block font-bold"
+                >時段 (Time Slots) - 可複選</label
+              >
+              <div class="space-y-2 mt-2" id="slotContainer">
+                <!-- Slots generated by JS -->
+              </div>
+            </div>
+
+            <!-- Preview Metrics -->
+            <div class="bg-white p-3 rounded border border-gray-200 mt-1">
+              <div
+                class="flex justify-between items-center text-[10px] text-gray-500 mb-2 border-b border-gray-100 pb-1"
+              >
+                <span>平日: <strong id="metricWeekdays" class="text-gray-800">0</strong> 天</span>
+                <span>假日: <strong id="metricHolidays" class="text-gray-800">0</strong> 天</span>
+              </div>
+              <div class="text-[9px] text-gray-400 mb-2 space-y-0.5">
+                <div class="flex justify-between">
+                  <span>平日單日 (Weekday Daily):</span>
+                  <span class="font-mono" id="metricWeekdayRate">$0</span>
                 </div>
-            </section>
-
-            <!-- 客戶資料 -->
-            <section>
-                <h3 class="text-xs font-bold border-b border-gray-200 pb-2 mb-4 uppercase text-gray-900">客戶資料 (Client)</h3>
-                <div class="space-y-3">
-                    <div class="input-group">
-                        <label>客戶/品牌名稱</label>
-                        <input type="text" id="clientName" class="input-field" placeholder="例如: VIS for the Arts" oninput="updateDisplay()">
-                    </div>
-                    <div class="input-group">
-                        <label>聯絡人</label>
-                        <input type="text" id="contactPerson" class="input-field" oninput="updateDisplay()">
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="input-group">
-                            <label>電話</label>
-                            <input type="text" id="phone" class="input-field" oninput="updateDisplay()">
-                        </div>
-                        <div class="input-group">
-                            <label>Email</label>
-                            <input type="email" id="email" class="input-field" oninput="updateDisplay()">
-                        </div>
-                    </div>
+                <div class="flex justify-between">
+                  <span>假日單日 (Holiday Daily):</span>
+                  <span class="font-mono" id="metricHolidayRate">$0</span>
                 </div>
-            </section>
+              </div>
+              <div
+                class="flex items-center justify-between border-t border-dashed border-gray-200 pt-2"
+              >
+                <div class="text-[10px] text-gray-900 font-bold">總金額 (Total):</div>
+                <div class="text-sm font-bold font-mono text-black" id="metricTotalCost">$0</div>
+              </div>
+            </div>
 
-            <!-- 活動內容 -->
-            <section>
-                <h3 class="text-xs font-bold border-b border-gray-200 pb-2 mb-4 uppercase text-gray-900">活動內容 (Event)</h3>
-                <div class="space-y-3">
-                    <div class="input-group">
-                        <label>活動名稱</label>
-                        <input type="text" id="eventName" class="input-field" oninput="updateDisplay()">
-                    </div>
-                    
-                    <div class="input-group">
-                        <label>活動日期 (Event Date)</label>
-                        <div class="flex gap-2 items-center">
-                            <input type="date" id="eventStartDate" class="input-field font-mono" placeholder="Start" oninput="handleEventDateChange()">
-                            <span class="text-gray-400">-</span>
-                            <input type="date" id="eventEndDate" class="input-field font-mono" placeholder="End" oninput="handleEventDateChange()">
-                        </div>
-                    </div>
+            <button
+              onclick="addCalculatedItem()"
+              id="btnAddCalc"
+              class="w-full bg-black text-white text-xs py-2 font-bold uppercase tracking-wide hover:bg-gray-800 transition rounded-sm flex items-center justify-center gap-1"
+            >
+              <i data-lucide="plus" class="w-3 h-3"></i> 加入費用明細 (Add)
+            </button>
+          </div>
+        </section>
 
-                    <div class="input-group">
-                        <label>租借區域</label>
-                        <select id="space" class="input-field appearance-none" onchange="updateDisplay()">
-                            <option value="" disabled selected>請選擇 (Select Space)</option>
-                            <option value="全棟租借">全棟租借</option>
-                            <option value="1F+B1租借">1F+B1租借</option>
-                        </select>
-                    </div>
-                </div>
-            </section>
+        <!-- 費用明細 -->
+        <section>
+          <div class="flex justify-between items-end border-b border-gray-200 pb-2 mb-4">
+            <h3 class="text-xs font-bold uppercase text-gray-900">費用明細 (Items)</h3>
+            <button
+              onclick="addEmptyItem()"
+              class="flex items-center gap-1 text-[10px] bg-black text-white px-2 py-1.5 hover:bg-gray-800 transition rounded-sm"
+            >
+              <i data-lucide="plus" class="w-3 h-3"></i> 手動新增
+            </button>
+          </div>
+          <div id="itemsContainer" class="space-y-4">
+            <!-- Items will be injected here -->
+          </div>
 
-            <!-- 租金計算機 (Calculator) -->
-            <section class="bg-gray-50 border border-gray-200 p-4 rounded-sm shadow-sm relative overflow-hidden">
-                <div class="absolute top-0 left-0 w-1 h-full bg-black"></div>
-                
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-xs font-bold uppercase text-gray-900 flex items-center gap-2">
-                        <i data-lucide="calculator" class="w-3.5 h-3.5"></i> 租金計算機 (Calculator)
-                    </h3>
-                    <div class="text-[9px] text-red-600 font-bold flex items-center gap-1 bg-red-50 px-2 py-1 rounded-sm border border-red-100">
-                       <i data-lucide="alert-circle" class="w-2.5 h-2.5"></i> 需與活動日期一致
-                    </div>
-                </div>
+          <div class="mt-4 pt-4 border-t border-dashed border-gray-300">
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-sm cursor-pointer select-none text-gray-600">稅額 (Tax 5%)</label>
+              <input
+                type="checkbox"
+                id="taxToggle"
+                class="accent-black w-4 h-4"
+                checked
+                onchange="renderPreview()"
+              />
+            </div>
+          </div>
+        </section>
 
-                <div class="space-y-4">
-                    <!-- Date Range -->
-                    <div>
-                        <label class="text-[9px] uppercase text-gray-500 mb-1 block font-bold">日期區間 (Date Range)</label>
-                        <div class="flex gap-2 items-center">
-                            <input type="date" id="calcStartDate" class="input-field font-mono bg-white" oninput="updateCalcMetrics()">
-                            <span class="text-gray-400 text-xs">to</span>
-                            <input type="date" id="calcEndDate" class="input-field font-mono bg-white" oninput="updateCalcMetrics()">
-                        </div>
-                        <div id="dateMismatchMsg" class="hidden text-[9px] text-red-500 mt-1">* 日期不一致，無法計算 (Dates mismatch)</div>
-                    </div>
-
-                    <!-- Space Select -->
-                    <div>
-                        <label class="text-[9px] uppercase text-gray-500 mb-1 block font-bold">區域 (Space)</label>
-                        <select id="calcSpace" class="input-field bg-white" onchange="updateCalcMetrics()">
-                            <option value="1F+B1">2層 (1F+B1)</option>
-                            <option value="Whole">包棟 (全棟)</option>
-                        </select>
-                    </div>
-
-                    <!-- Time Slots Checkboxes -->
-                    <div>
-                        <label class="text-[9px] uppercase text-gray-500 mb-1 block font-bold">時段 (Time Slots) - 可複選</label>
-                        <div class="space-y-2 mt-2" id="slotContainer">
-                            <!-- Slots generated by JS -->
-                        </div>
-                    </div>
-
-                    <!-- Preview Metrics -->
-                    <div class="bg-white p-3 rounded border border-gray-200 mt-1">
-                        <div class="flex justify-between items-center text-[10px] text-gray-500 mb-2 border-b border-gray-100 pb-1">
-                            <span>平日: <strong id="metricWeekdays" class="text-gray-800">0</strong> 天</span>
-                            <span>假日: <strong id="metricHolidays" class="text-gray-800">0</strong> 天</span>
-                        </div>
-                        <div class="text-[9px] text-gray-400 mb-2 space-y-0.5">
-                            <div class="flex justify-between">
-                                <span>平日單日 (Weekday Daily):</span>
-                                <span class="font-mono" id="metricWeekdayRate">$0</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span>假日單日 (Holiday Daily):</span>
-                                <span class="font-mono" id="metricHolidayRate">$0</span>
-                            </div>
-                        </div>
-                        <div class="flex items-center justify-between border-t border-dashed border-gray-200 pt-2">
-                            <div class="text-[10px] text-gray-900 font-bold">總金額 (Total):</div>
-                            <div class="text-sm font-bold font-mono text-black" id="metricTotalCost">$0</div>
-                        </div>
-                    </div>
-
-                    <button onclick="addCalculatedItem()" id="btnAddCalc" class="w-full bg-black text-white text-xs py-2 font-bold uppercase tracking-wide hover:bg-gray-800 transition rounded-sm flex items-center justify-center gap-1">
-                        <i data-lucide="plus" class="w-3 h-3"></i> 加入費用明細 (Add)
-                    </button>
-                </div>
-            </section>
-
-            <!-- 費用明細 -->
-            <section>
-                <div class="flex justify-between items-end border-b border-gray-200 pb-2 mb-4">
-                    <h3 class="text-xs font-bold uppercase text-gray-900">費用明細 (Items)</h3>
-                    <button onclick="addEmptyItem()" class="flex items-center gap-1 text-[10px] bg-black text-white px-2 py-1.5 hover:bg-gray-800 transition rounded-sm">
-                        <i data-lucide="plus" class="w-3 h-3"></i> 手動新增
-                    </button>
-                </div>
-                <div id="itemsContainer" class="space-y-4">
-                    <!-- Items will be injected here -->
-                </div>
-
-                <div class="mt-4 pt-4 border-t border-dashed border-gray-300">
-                    <div class="flex items-center justify-between mb-2">
-                        <label class="text-sm cursor-pointer select-none text-gray-600">稅額 (Tax 5%)</label>
-                        <input type="checkbox" id="taxToggle" class="accent-black w-4 h-4" checked onchange="renderPreview()">
-                    </div>
-                </div>
-            </section>
-
-            <!-- 底部文字區 -->
-            <section>
-                <h3 class="text-xs font-bold border-b border-gray-200 pb-2 mb-4 uppercase text-gray-900">付款資訊 (Payment Info)</h3>
-                <textarea id="paymentInfo" class="input-field h-24 resize-none" oninput="updateDisplay()">戶名：藝飛科技股份有限公司
+        <!-- 底部文字區 -->
+        <section>
+          <h3 class="text-xs font-bold border-b border-gray-200 pb-2 mb-4 uppercase text-gray-900">
+            付款資訊 (Payment Info)
+          </h3>
+          <textarea id="paymentInfo" class="input-field h-24 resize-none" oninput="updateDisplay()">
+戶名：藝飛科技股份有限公司
 銀行：013國泰世華銀行-青埔分行 
 帳號：141-03-000009-1
 
 ★ 簽回報價單3日內完成支付後才保留指定檔期。
 ★ 完款後請於官方帳號提供水單或匯款資料。
-★ 檔期確認後恕不退費。</textarea>
-            </section>
+★ 檔期確認後恕不退費。</textarea
+          >
+        </section>
 
-            <section>
-                <h3 class="text-xs font-bold border-b border-gray-200 pb-2 mb-4 uppercase text-gray-900">備註 (Terms & Notes)</h3>
-                <textarea id="notes" class="input-field h-48 resize-none" oninput="updateDisplay()">【備註① 超時單位說明】
+        <section>
+          <h3 class="text-xs font-bold border-b border-gray-200 pb-2 mb-4 uppercase text-gray-900">
+            備註 (Terms & Notes)
+          </h3>
+          <textarea id="notes" class="input-field h-48 resize-none" oninput="updateDisplay()">
+【備註① 超時單位說明】
 若超時，依照2小時計算，單一小時10,000元，共計20,000元為一單位。
 【備註② 保留空間說明】
 依照報價單簽章回傳，即可保留第一階段空間預約50%，若完成款項則為正式空間保留100%。
@@ -314,323 +422,394 @@
 【備註⑥ 固定配置說明】
 場地內之燈具、家具與設備、點交前請全數還原固定位置，依照原況返還。
 【備註⑦ 設備租借說明】
-沒有提供相關設備租借，若有需要則洽相關廠商。</textarea>
-            </section>
+沒有提供相關設備租借，若有需要則洽相關廠商。</textarea
+          >
+        </section>
 
-            <div class="pt-6 pb-12 space-y-3">
-                <div class="flex gap-2">
-                    <button onclick="window.print()" class="w-1/2 bg-gray-900 text-white py-3 font-bold uppercase tracking-widest hover:bg-gray-800 transition shadow-sm flex items-center justify-center gap-2 rounded-sm">
-                        <i data-lucide="printer" class="w-4 h-4"></i> 列印
-                    </button>
-                    <button onclick="downloadPDF()" class="w-1/2 border-2 border-black text-black py-3 font-bold uppercase tracking-widest transition shadow-sm flex items-center justify-center gap-2 rounded-sm hover:bg-black hover:text-white">
-                        <i data-lucide="download" class="w-4 h-4"></i> 下載
-                    </button>
-                </div>
-            </div>
+        <div class="pt-6 pb-12 space-y-3">
+          <div class="flex gap-2">
+            <button
+              onclick="window.print()"
+              class="w-1/2 bg-gray-900 text-white py-3 font-bold uppercase tracking-widest hover:bg-gray-800 transition shadow-sm flex items-center justify-center gap-2 rounded-sm"
+            >
+              <i data-lucide="printer" class="w-4 h-4"></i> 列印
+            </button>
+            <button
+              onclick="downloadPDF()"
+              class="w-1/2 border-2 border-black text-black py-3 font-bold uppercase tracking-widest transition shadow-sm flex items-center justify-center gap-2 rounded-sm hover:bg-black hover:text-white"
+            >
+              <i data-lucide="download" class="w-4 h-4"></i> 下載
+            </button>
+          </div>
         </div>
+      </div>
     </div>
 
     <!-- 右側：預覽 (Print Area) -->
-    <div class="w-full lg:w-2/3 bg-gray-100 overflow-y-auto p-4 lg:p-12 flex justify-center items-start custom-scroll preview-pane">
-        
-        <!-- A4 Paper -->
-        <div id="quote-paper-single" class="quote-paper flex flex-col justify-between text-sm">
-            
-            <!-- 將報價單內容用一個容器包起來，設定 z-index 確保在浮水印之上 -->
-            <div class="quote-content-layer h-full flex flex-col justify-between">
-
-                <!-- Top Section -->
-                <div>
-                    <!-- Header -->
-                    <header class="flex justify-between items-start mb-2">
-                        <div class="w-1/2">
-                            <div class="mb-2">
-                                <div class="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">WFLY ART BANK Group</div>
-                                <div class="text-3xl font-bold tracking-tighter flex items-center">
-                                    hyphen<span class="mx-1 h-[3px] w-4 bg-black block"></span>for the arts
-                                </div>
-                            </div>
-                            <div class="text-[10px] text-gray-500 tracking-widest uppercase mb-2">Space / Art / Object / Design</div>
-                            <div class="text-xs leading-relaxed text-gray-600">
-                                <p>106 台北市大安區大安路一段175巷2號</p>
-                                <p>No. 2, Ln. 175, Sec. 1, Da'an Rd., Da'an Dist.</p>
-                                <p>Taipei City 106, Taiwan</p>
-                            </div>
-                        </div>
-
-                        <div class="w-1/2 text-right">
-                            <div class="inline-block text-left mt-8">
-                                <div class="flex justify-between border-b border-black pb-1 mb-1 w-48">
-                                    <span class="text-xs font-bold uppercase mr-4">NO.</span>
-                                    <span id="displayQuoteNo" class="font-mono">---</span>
-                                </div>
-                                <div class="flex justify-between border-b border-black pb-1 w-48">
-                                    <span class="text-xs font-bold uppercase mr-4">DATE</span>
-                                    <span id="displayDate" class="font-mono">---</span>
-                                </div>
-                            </div>
-                        </div>
-                    </header>
-
-                    <!-- Client & Event Grid -->
-                    <div class="grid grid-cols-2 gap-12 mb-6 border-t border-b border-black py-4">
-                        <div>
-                            <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Client Info</h4>
-                            <div class="space-y-1">
-                                <p class="text-lg font-bold" id="displayClientName">Client Name</p>
-                                <p class="text-gray-600" id="displayContact">Contact</p>
-                                <p class="font-mono text-xs mt-1" id="displayPhone"></p>
-                                <p class="font-mono text-xs" id="displayEmail"></p>
-                            </div>
-                        </div>
-                        <div>
-                            <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Event Details</h4>
-                            <div class="space-y-1">
-                                <p class="text-lg font-bold" id="displayEventName">Event Name</p>
-                                <p class="text-gray-600 font-mono" id="displayEventDate">Date Range</p>
-                                <div class="mt-2 inline-block bg-black text-white text-xs px-2 py-1 uppercase" id="displaySpace">
-                                    Space
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Items Table -->
-                    <div class="mb-4">
-                        <table class="w-full text-left border-collapse">
-                            <thead>
-                                <tr class="border-b-2 border-black">
-                                    <th class="py-2 text-xs font-bold uppercase tracking-widest w-[55%]">Description</th>
-                                    <th class="py-2 text-xs font-bold uppercase tracking-widest text-right">Unit Price</th>
-                                    <th class="py-2 text-xs font-bold uppercase tracking-widest text-center w-16">Qty</th>
-                                    <th class="py-2 text-xs font-bold uppercase tracking-widest text-right w-24">Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody id="displayItems" class="font-mono text-xs">
-                                <!-- JS Generated -->
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- Middle: Notes & Totals -->
-                    <div class="flex flex-row items-start gap-8 mb-4">
-                        <!-- Left: Notes -->
-                        <div class="flex-grow">
-                            <h4 class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Terms & Notes</h4>
-                            <div id="displayNotes" class="text-[8px] text-gray-600 leading-normal whitespace-pre-line font-medium border-l border-gray-200 pl-2"></div>
-                        </div>
-
-                        <!-- Right: Totals -->
-                        <div class="w-[180px] flex-shrink-0 pt-2">
-                            <div class="space-y-1">
-                                <div class="flex justify-between text-xs text-gray-500">
-                                    <span>SUBTOTAL</span>
-                                    <span class="font-mono" id="displaySubtotal">$0</span>
-                                </div>
-                                <div class="flex justify-between text-xs text-gray-500">
-                                    <span>TAX (5%)</span>
-                                    <span class="font-mono" id="displayTax">$0</span>
-                                </div>
-                                <div class="flex justify-between text-lg font-bold border-t-2 border-black pt-2 mt-2">
-                                    <span>TOTAL</span>
-                                    <span class="font-mono" id="displayTotal">NT$ 0</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+    <div
+      class="w-full lg:w-2/3 bg-gray-100 overflow-y-auto p-4 lg:p-12 flex justify-center items-start custom-scroll preview-pane"
+    >
+      <!-- A4 Paper -->
+      <div id="quote-paper-single" class="quote-paper flex flex-col justify-between text-sm">
+        <!-- 將報價單內容用一個容器包起來，設定 z-index 確保在浮水印之上 -->
+        <div class="quote-content-layer h-full flex flex-col justify-between">
+          <!-- Top Section -->
+          <div>
+            <!-- Header -->
+            <header class="flex justify-between items-start mb-2">
+              <div class="w-1/2">
+                <div class="mb-2">
+                  <div class="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">
+                    WFLY ART BANK Group
+                  </div>
+                  <div class="text-3xl font-bold tracking-tighter flex items-center">
+                    hyphen<span class="mx-1 h-[3px] w-4 bg-black block"></span>for the arts
+                  </div>
                 </div>
-
-                <!-- Bottom: Payment & Signatures -->
-                <div class="mt-auto pt-4 border-t border-black">
-                    <div class="flex flex-row gap-8 items-start">
-                        
-                        <div class="w-1/2">
-                             <h4 class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Payment Details</h4>
-                             <div id="displayPayment" class="text-[9px] text-gray-800 leading-relaxed whitespace-pre-line font-mono bg-gray-50 p-3 rounded-sm border border-gray-100 h-full"></div>
-                        </div>
-
-                        <div class="w-1/2 flex flex-col justify-end">
-                             <h4 class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">客戶簽名 (Client Signature)</h4>
-                             <div class="relative pt-20 border-b border-black">
-                                <span class="absolute bottom-1 right-0 text-[9px] text-gray-400 uppercase">Authorized Signature / Date</span>
-                             </div>
-                        </div>
-
-                    </div>
-                    
-                    <div class="text-center mt-6 text-[9px] text-gray-300 uppercase tracking-[0.2em]">
-                        hyphen for the arts © 2026 / WFLY ART BANK Group
-                    </div>
+                <div class="text-[10px] text-gray-500 tracking-widest uppercase mb-2">
+                  Space / Art / Object / Design
                 </div>
-            </div> <!-- End of content wrapper -->
+                <div class="text-xs leading-relaxed text-gray-600">
+                  <p>106 台北市大安區大安路一段175巷2號</p>
+                  <p>No. 2, Ln. 175, Sec. 1, Da'an Rd., Da'an Dist.</p>
+                  <p>Taipei City 106, Taiwan</p>
+                </div>
+              </div>
+
+              <div class="w-1/2 text-right">
+                <div class="inline-block text-left mt-8">
+                  <div class="flex justify-between border-b border-black pb-1 mb-1 w-48">
+                    <span class="text-xs font-bold uppercase mr-4">NO.</span>
+                    <span id="displayQuoteNo" class="font-mono">---</span>
+                  </div>
+                  <div class="flex justify-between border-b border-black pb-1 w-48">
+                    <span class="text-xs font-bold uppercase mr-4">DATE</span>
+                    <span id="displayDate" class="font-mono">---</span>
+                  </div>
+                </div>
+              </div>
+            </header>
+
+            <!-- Client & Event Grid -->
+            <div class="grid grid-cols-2 gap-12 mb-6 border-t border-b border-black py-4">
+              <div>
+                <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
+                  Client Info
+                </h4>
+                <div class="space-y-1">
+                  <p class="text-lg font-bold" id="displayClientName">Client Name</p>
+                  <p class="text-gray-600" id="displayContact">Contact</p>
+                  <p class="font-mono text-xs mt-1" id="displayPhone"></p>
+                  <p class="font-mono text-xs" id="displayEmail"></p>
+                </div>
+              </div>
+              <div>
+                <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
+                  Event Details
+                </h4>
+                <div class="space-y-1">
+                  <p class="text-lg font-bold" id="displayEventName">Event Name</p>
+                  <p class="text-gray-600 font-mono" id="displayEventDate">Date Range</p>
+                  <div
+                    class="mt-2 inline-block bg-black text-white text-xs px-2 py-1 uppercase"
+                    id="displaySpace"
+                  >
+                    Space
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Items Table -->
+            <div class="mb-4">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="border-b-2 border-black">
+                    <th class="py-2 text-xs font-bold uppercase tracking-widest w-[55%]">
+                      Description
+                    </th>
+                    <th class="py-2 text-xs font-bold uppercase tracking-widest text-right">
+                      Unit Price
+                    </th>
+                    <th class="py-2 text-xs font-bold uppercase tracking-widest text-center w-16">
+                      Qty
+                    </th>
+                    <th class="py-2 text-xs font-bold uppercase tracking-widest text-right w-24">
+                      Amount
+                    </th>
+                  </tr>
+                </thead>
+                <tbody id="displayItems" class="font-mono text-xs">
+                  <!-- JS Generated -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Middle: Notes & Totals -->
+            <div class="flex flex-row items-start gap-8 mb-4">
+              <!-- Left: Notes -->
+              <div class="flex-grow">
+                <h4 class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+                  Terms & Notes
+                </h4>
+                <div
+                  id="displayNotes"
+                  class="text-[8px] text-gray-600 leading-normal whitespace-pre-line font-medium border-l border-gray-200 pl-2"
+                ></div>
+              </div>
+
+              <!-- Right: Totals -->
+              <div class="w-[180px] flex-shrink-0 pt-2">
+                <div class="space-y-1">
+                  <div class="flex justify-between text-xs text-gray-500">
+                    <span>SUBTOTAL</span>
+                    <span class="font-mono" id="displaySubtotal">$0</span>
+                  </div>
+                  <div class="flex justify-between text-xs text-gray-500">
+                    <span>TAX (5%)</span>
+                    <span class="font-mono" id="displayTax">$0</span>
+                  </div>
+                  <div
+                    class="flex justify-between text-lg font-bold border-t-2 border-black pt-2 mt-2"
+                  >
+                    <span>TOTAL</span>
+                    <span class="font-mono" id="displayTotal">NT$ 0</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom: Payment & Signatures -->
+          <div class="mt-auto pt-4 border-t border-black">
+            <div class="flex flex-row gap-8 items-start">
+              <div class="w-1/2">
+                <h4 class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+                  Payment Details
+                </h4>
+                <div
+                  id="displayPayment"
+                  class="text-[9px] text-gray-800 leading-relaxed whitespace-pre-line font-mono bg-gray-50 p-3 rounded-sm border border-gray-100 h-full"
+                ></div>
+              </div>
+
+              <div class="w-1/2 flex flex-col justify-end">
+                <h4 class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
+                  客戶簽名 (Client Signature)
+                </h4>
+                <div class="relative pt-20 border-b border-black">
+                  <span class="absolute bottom-1 right-0 text-[9px] text-gray-400 uppercase"
+                    >Authorized Signature / Date</span
+                  >
+                </div>
+              </div>
+            </div>
+
+            <div class="text-center mt-6 text-[9px] text-gray-300 uppercase tracking-[0.2em]">
+              hyphen for the arts © 2026 / WFLY ART BANK Group
+            </div>
+          </div>
         </div>
+        <!-- End of content wrapper -->
+      </div>
     </div>
 
     <!-- Javascript Logic -->
     <script>
-        // --- Data ---
-        let items = []; // Empty by default
-        let calcSlots = ['morning']; // Default slot
-        const STORAGE_KEY = 'hyphen_quotes_history'; // Key for local storage
-        
-        // --- Constants & Config ---
-        const PRICING_RATES = {
-            '1F+B1': {
-                weekday: { morning: 5000, afternoon: 10000, evening: 13000 },
-                holiday: { morning: 6500, afternoon: 12000, evening: 15000 }
-            },
-            'Whole': {
-                weekday: { morning: 6000, afternoon: 13000, evening: 15000 },
-                holiday: { morning: 8000, afternoon: 13000, evening: 18000 }
-            }
-        };
+      // --- Data ---
+      let items = []; // Empty by default
+      let calcSlots = ["morning"]; // Default slot
+      const STORAGE_KEY = "hyphen_quotes_history"; // Key for local storage
 
-        const TIME_SLOTS = {
-            morning: { id: 'morning', label: '10:00-12:00 (早/2hr)', shortLabel: '早(10-12)', hours: 2 },
-            afternoon: { id: 'afternoon', label: '13:00-18:00 (午/5hr)', shortLabel: '午(13-18)', hours: 5 },
-            evening: { id: 'evening', label: '19:00-24:00 (晚/5hr)', shortLabel: '晚(19-24)', hours: 5 }
-        };
+      // --- Constants & Config ---
+      const PRICING_RATES = {
+        "1F+B1": {
+          weekday: { morning: 5000, afternoon: 10000, evening: 13000 },
+          holiday: { morning: 6500, afternoon: 12000, evening: 15000 },
+        },
+        Whole: {
+          weekday: { morning: 6000, afternoon: 13000, evening: 15000 },
+          holiday: { morning: 8000, afternoon: 13000, evening: 18000 },
+        },
+      };
 
-        const PRESET_SERVICES = [
-            { label: '--- 快速選擇服務項目 ---', value: '', price: 0 },
-            { label: '全棟租借 (9萬/日)', value: '全棟租借', price: 90000 },
-            { label: '二平層租借 (6萬/日)', value: '二平層租借', price: 60000 },
-            { label: '公關合作方案 (Exchange)', value: '公關合作方案 (Exchange)：\n• \n• \n• ', price: 0 },
-        ];
+      const TIME_SLOTS = {
+        morning: {
+          id: "morning",
+          label: "10:00-12:00 (早/2hr)",
+          shortLabel: "早(10-12)",
+          hours: 2,
+        },
+        afternoon: {
+          id: "afternoon",
+          label: "13:00-18:00 (午/5hr)",
+          shortLabel: "午(13-18)",
+          hours: 5,
+        },
+        evening: {
+          id: "evening",
+          label: "19:00-24:00 (晚/5hr)",
+          shortLabel: "晚(19-24)",
+          hours: 5,
+        },
+      };
 
-        // --- Init ---
-        window.onload = function() {
-            // Updated Init logic: Don't set Quote No and Date on load
-            // Set Today's Date for calculator only, as it's a tool
-            const today = new Date();
-            document.getElementById('calcStartDate').valueAsDate = today;
-            document.getElementById('calcEndDate').valueAsDate = today;
-            
-            // Note: quoteNo and date inputs are left empty by default
-            // document.getElementById('date').valueAsDate = today; // REMOVED
-            
-            lucide.createIcons();
-            renderSlotCheckboxes();
-            renderAll(); 
-            updateDisplay();
-            updateCalcMetrics();
-        };
+      const PRESET_SERVICES = [
+        { label: "--- 快速選擇服務項目 ---", value: "", price: 0 },
+        { label: "全棟租借 (9萬/日)", value: "全棟租借", price: 90000 },
+        { label: "二平層租借 (6萬/日)", value: "二平層租借", price: 60000 },
+        {
+          label: "公關合作方案 (Exchange)",
+          value: "公關合作方案 (Exchange)：\n• \n• \n• ",
+          price: 0,
+        },
+      ];
 
-        // --- Date & ID Logic ---
+      // --- Init ---
+      window.onload = function () {
+        // Updated Init logic: Don't set Quote No and Date on load
+        // Set Today's Date for calculator only, as it's a tool
+        const today = new Date();
+        document.getElementById("calcStartDate").valueAsDate = today;
+        document.getElementById("calcEndDate").valueAsDate = today;
 
-        // Generate ID format: HY-YYYY-MMDD
-        function generateQuoteNo(dateString) {
-            if (!dateString) return '';
-            const [year, month, day] = dateString.split('-');
-            return `HY-${year}-${month}${day}`;
+        // Note: quoteNo and date inputs are left empty by default
+        // document.getElementById('date').valueAsDate = today; // REMOVED
+
+        lucide.createIcons();
+        renderSlotCheckboxes();
+        renderAll();
+        updateDisplay();
+        updateCalcMetrics();
+      };
+
+      // --- Date & ID Logic ---
+
+      // Generate ID format: HY-YYYY-MMDD
+      function generateQuoteNo(dateString) {
+        if (!dateString) return "";
+        const [year, month, day] = dateString.split("-");
+        return `HY-${year}-${month}${day}`;
+      }
+
+      // Triggered when Date input changes
+      function handleDateChange() {
+        const dateVal = document.getElementById("date").value;
+        if (dateVal) {
+          const newNo = generateQuoteNo(dateVal);
+          document.getElementById("quoteNo").value = newNo;
+        } else {
+          document.getElementById("quoteNo").value = "";
         }
+        updateDisplay();
+      }
 
-        // Triggered when Date input changes
-        function handleDateChange() {
-            const dateVal = document.getElementById('date').value;
-            if (dateVal) {
-                const newNo = generateQuoteNo(dateVal);
-                document.getElementById('quoteNo').value = newNo;
-            } else {
-                document.getElementById('quoteNo').value = '';
-            }
-            updateDisplay();
+      // --- Core Functions ---
+
+      function updateDisplay() {
+        // Basic Info
+        const qNo = document.getElementById("quoteNo").value;
+        const dateVal = document.getElementById("date").value;
+        document.getElementById("displayQuoteNo").textContent = qNo || "---";
+        document.getElementById("displayDate").textContent = dateVal
+          ? dateVal.replace(/-/g, ".")
+          : "---";
+
+        // Client Info
+        document.getElementById("displayClientName").textContent =
+          document.getElementById("clientName").value || "Client Name";
+        document.getElementById("displayContact").textContent =
+          document.getElementById("contactPerson").value || "";
+        document.getElementById("displayPhone").textContent =
+          document.getElementById("phone").value;
+        document.getElementById("displayEmail").textContent =
+          document.getElementById("email").value;
+
+        // Event Info
+        document.getElementById("displayEventName").textContent =
+          document.getElementById("eventName").value || "Event Name";
+        // Handle space display logic: if value is empty, show placeholder text in select but actual text in preview
+        const spaceVal = document.getElementById("space").value;
+        document.getElementById("displaySpace").textContent = spaceVal || "Space";
+        document.getElementById("displaySpace").style.display = spaceVal ? "inline-block" : "none";
+
+        // Notes & Payment
+        document.getElementById("displayNotes").textContent =
+          document.getElementById("notes").value;
+        document.getElementById("displayPayment").textContent =
+          document.getElementById("paymentInfo").value;
+
+        handleEventDateChange(); // Ensure date range is updated
+      }
+
+      function handleEventDateChange() {
+        const start = document.getElementById("eventStartDate").value;
+        const end = document.getElementById("eventEndDate").value;
+        let display = "";
+        if (start && end) display = `${start.replace(/-/g, ".")} - ${end.replace(/-/g, ".")}`;
+        else if (start) display = start.replace(/-/g, ".");
+
+        document.getElementById("displayEventDate").textContent = display || "Date Range";
+
+        // Re-validate calc dates
+        updateCalcMetrics();
+      }
+
+      // --- Items & Calculation Logic ---
+
+      function addEmptyItem() {
+        items.push({ desc: "", price: 0, qty: 1 });
+        renderAll();
+      }
+
+      function removeItem(index) {
+        items.splice(index, 1);
+        renderAll();
+      }
+
+      function updateItem(index, field, value) {
+        if (field === "price" || field === "qty") {
+          items[index][field] = Number(value);
+          // Update the specific subtotal element
+          const subDiv = document.getElementById(`sub-input-${index}`);
+          if (subDiv) {
+            subDiv.innerText = "$" + (items[index].price * items[index].qty).toLocaleString();
+          }
+        } else {
+          items[index][field] = value;
         }
+        // Update preview only to maintain focus
+        renderPreview();
+      }
 
-        // --- Core Functions ---
-
-        function updateDisplay() {
-            // Basic Info
-            const qNo = document.getElementById('quoteNo').value;
-            const dateVal = document.getElementById('date').value;
-            document.getElementById('displayQuoteNo').textContent = qNo || '---';
-            document.getElementById('displayDate').textContent = dateVal ? dateVal.replace(/-/g, '.') : '---';
-
-            // Client Info
-            document.getElementById('displayClientName').textContent = document.getElementById('clientName').value || 'Client Name';
-            document.getElementById('displayContact').textContent = document.getElementById('contactPerson').value || '';
-            document.getElementById('displayPhone').textContent = document.getElementById('phone').value;
-            document.getElementById('displayEmail').textContent = document.getElementById('email').value;
-
-            // Event Info
-            document.getElementById('displayEventName').textContent = document.getElementById('eventName').value || 'Event Name';
-            // Handle space display logic: if value is empty, show placeholder text in select but actual text in preview
-            const spaceVal = document.getElementById('space').value;
-            document.getElementById('displaySpace').textContent = spaceVal || 'Space';
-            document.getElementById('displaySpace').style.display = spaceVal ? 'inline-block' : 'none';
-            
-            // Notes & Payment
-            document.getElementById('displayNotes').textContent = document.getElementById('notes').value;
-            document.getElementById('displayPayment').textContent = document.getElementById('paymentInfo').value;
-
-            handleEventDateChange(); // Ensure date range is updated
+      function handlePresetChange(index, select) {
+        const val = select.value;
+        const option = PRESET_SERVICES.find(p => p.value === val);
+        if (option) {
+          items[index].desc = option.value;
+          items[index].price = option.price;
+          renderAll(); // Re-render inputs to update textareas
         }
+        select.value = "";
+      }
 
-        function handleEventDateChange() {
-            const start = document.getElementById('eventStartDate').value;
-            const end = document.getElementById('eventEndDate').value;
-            let display = '';
-            if (start && end) display = `${start.replace(/-/g, '.')} - ${end.replace(/-/g, '.')}`;
-            else if (start) display = start.replace(/-/g, '.');
-            
-            document.getElementById('displayEventDate').textContent = display || 'Date Range';
-            
-            // Re-validate calc dates
-            updateCalcMetrics();
-        }
+      // New function to render inputs list
+      function renderInputs() {
+        const container = document.getElementById("itemsContainer");
+        container.innerHTML = "";
 
-        // --- Items & Calculation Logic ---
+        const presetOptions = PRESET_SERVICES.map(
+          p => `<option value="${p.value}">${p.label}</option>`
+        ).join("");
 
-        function addEmptyItem() {
-            items.push({ desc: '', price: 0, qty: 1 });
-            renderAll();
-        }
+        items.forEach((item, index) => {
+          const isPRItem = item.desc.includes("公關合作方案");
+          const isLongText = isPRItem;
 
-        function removeItem(index) {
-            items.splice(index, 1);
-            renderAll();
-        }
-
-        function updateItem(index, field, value) {
-            if (field === 'price' || field === 'qty') {
-                items[index][field] = Number(value);
-                // Update the specific subtotal element
-                const subDiv = document.getElementById(`sub-input-${index}`);
-                if(subDiv) {
-                    subDiv.innerText = '$' + (items[index].price * items[index].qty).toLocaleString();
-                }
-            } else {
-                items[index][field] = value;
-            }
-            // Update preview only to maintain focus
-            renderPreview(); 
-        }
-
-        function handlePresetChange(index, select) {
-            const val = select.value;
-            const option = PRESET_SERVICES.find(p => p.value === val);
-            if (option) {
-                items[index].desc = option.value;
-                items[index].price = option.price;
-                renderAll(); // Re-render inputs to update textareas
-            }
-            select.value = ''; 
-        }
-
-        // New function to render inputs list
-        function renderInputs() {
-            const container = document.getElementById('itemsContainer');
-            container.innerHTML = '';
-            
-            const presetOptions = PRESET_SERVICES.map(p => `<option value="${p.value}">${p.label}</option>`).join('');
-
-            items.forEach((item, index) => {
-                const isPRItem = item.desc.includes('公關合作方案');
-                const isLongText = isPRItem;
-                
-                const itemDiv = document.createElement('div');
-                itemDiv.className = 'bg-gray-50 p-3 rounded border border-gray-100 relative group transition-all hover:border-gray-300';
-                itemDiv.innerHTML = `
+          const itemDiv = document.createElement("div");
+          itemDiv.className =
+            "bg-gray-50 p-3 rounded border border-gray-100 relative group transition-all hover:border-gray-300";
+          itemDiv.innerHTML = `
                     <button onclick="removeItem(${index})" class="absolute top-2 right-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition">
                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                     </button>
@@ -642,12 +821,12 @@
                     </div>
                     <div class="mb-2 pr-6">
                         <label class="text-[9px] uppercase text-gray-400 block mb-1">
-                            ${isPRItem ? 'Exchange Details (直排條列)' : '項目說明'}
+                            ${isPRItem ? "Exchange Details (直排條列)" : "項目說明"}
                         </label>
                         <textarea 
                             oninput="updateItem(${index}, 'desc', this.value)" 
-                            class="input-field resize-none leading-snug ${isLongText ? 'h-24' : 'h-10'}"
-                            placeholder="${isPRItem ? '請輸入交換條件...' : ''}"
+                            class="input-field resize-none leading-snug ${isLongText ? "h-24" : "h-10"}"
+                            placeholder="${isPRItem ? "請輸入交換條件..." : ""}"
                         >${item.desc}</textarea>
                     </div>
                     <div class="flex gap-2">
@@ -669,34 +848,36 @@
                         </div>
                     </div>
                 `;
-                container.appendChild(itemDiv);
-            });
-            lucide.createIcons();
-        }
+          container.appendChild(itemDiv);
+        });
+        lucide.createIcons();
+      }
 
-        // New function to render preview table and totals
-        function renderPreview() {
-            const displayTbody = document.getElementById('displayItems');
-            let htmlDisplay = '';
-            let subtotal = 0;
+      // New function to render preview table and totals
+      function renderPreview() {
+        const displayTbody = document.getElementById("displayItems");
+        let htmlDisplay = "";
+        let subtotal = 0;
 
-            const hasPRPlan = items.some(item => item.desc.includes('公關合作方案'));
+        const hasPRPlan = items.some(item => item.desc.includes("公關合作方案"));
 
-            items.forEach((item, index) => {
-                const isPRItem = item.desc.includes('公關合作方案');
-                
-                if (hasPRPlan) {
-                    if (isPRItem) subtotal += (item.price * item.qty);
-                } else {
-                    subtotal += (item.price * item.qty);
-                }
+        items.forEach((item, index) => {
+          const isPRItem = item.desc.includes("公關合作方案");
 
-                const shouldStrike = hasPRPlan && !isPRItem;
-                const strikeStyle = shouldStrike ? 'color: #9ca3af;' : 'color: #4b5563;'; 
-                const strikeLine = shouldStrike ? `<div style="position: absolute; top: 50%; left: 0; width: 100%; height: 1px; background-color: #9ca3af;"></div>` : '';
-                const relativeWrap = `position: relative; display: inline-block;`;
+          if (hasPRPlan) {
+            if (isPRItem) subtotal += item.price * item.qty;
+          } else {
+            subtotal += item.price * item.qty;
+          }
 
-                htmlDisplay += `
+          const shouldStrike = hasPRPlan && !isPRItem;
+          const strikeStyle = shouldStrike ? "color: #9ca3af;" : "color: #4b5563;";
+          const strikeLine = shouldStrike
+            ? `<div style="position: absolute; top: 50%; left: 0; width: 100%; height: 1px; background-color: #9ca3af;"></div>`
+            : "";
+          const relativeWrap = `position: relative; display: inline-block;`;
+
+          htmlDisplay += `
                     <tr class="border-b border-gray-100">
                         <td class="py-2 pr-4 align-top">
                             <div class="font-sans font-medium text-gray-800 whitespace-pre-line leading-relaxed">${item.desc}</div>
@@ -710,7 +891,7 @@
                         <td class="py-2 text-center align-top" style="${strikeStyle}">
                             ${item.qty}
                         </td>
-                        <td class="py-2 text-right align-top font-medium" style="${hasPRPlan && !isPRItem ? 'color: #9ca3af;' : 'color: #111827;'}">
+                        <td class="py-2 text-right align-top font-medium" style="${hasPRPlan && !isPRItem ? "color: #9ca3af;" : "color: #111827;"}">
                             <div style="${relativeWrap}">
                                 $${(item.price * item.qty).toLocaleString()}
                                 ${strikeLine}
@@ -718,192 +899,201 @@
                         </td>
                     </tr>
                 `;
-            });
+        });
 
-            const minRows = 4;
-            if (items.length < minRows) {
-                for (let i = 0; i < minRows - items.length; i++) {
-                    htmlDisplay += `<tr class="border-b border-gray-50 h-[35px]"><td colspan="4"></td></tr>`;
-                }
-            }
-
-            displayTbody.innerHTML = htmlDisplay;
-
-            const hasTax = document.getElementById('taxToggle').checked;
-            const tax = hasTax ? Math.round(subtotal * 0.05) : 0;
-            const total = subtotal + tax;
-
-            document.getElementById('displaySubtotal').textContent = '$' + subtotal.toLocaleString();
-            document.getElementById('displayTax').textContent = hasTax ? '$' + tax.toLocaleString() : '$0';
-            document.getElementById('displayTotal').textContent = 'NT$ ' + total.toLocaleString();
+        const minRows = 4;
+        if (items.length < minRows) {
+          for (let i = 0; i < minRows - items.length; i++) {
+            htmlDisplay += `<tr class="border-b border-gray-50 h-[35px]"><td colspan="4"></td></tr>`;
+          }
         }
 
-        function renderAll() {
-            renderInputs();
-            renderPreview();
-        }
+        displayTbody.innerHTML = htmlDisplay;
 
-        // --- Calculator Logic ---
+        const hasTax = document.getElementById("taxToggle").checked;
+        const tax = hasTax ? Math.round(subtotal * 0.05) : 0;
+        const total = subtotal + tax;
 
-        function renderSlotCheckboxes() {
-            const container = document.getElementById('slotContainer');
-            container.innerHTML = '';
-            Object.entries(TIME_SLOTS).forEach(([key, slot]) => {
-                const isChecked = calcSlots.includes(key);
-                const div = document.createElement('div');
-                div.className = `flex items-center gap-2 p-2 border rounded-sm cursor-pointer transition-colors ${isChecked ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`;
-                div.onclick = () => toggleCalcSlot(key);
-                div.innerHTML = `
-                    <div class="w-3 h-3 border rounded-[1px] flex items-center justify-center ${isChecked ? 'border-white bg-white' : 'border-gray-400 bg-transparent'}">
-                        ${isChecked ? '<i data-lucide="check" class="w-2.5 h-2.5 text-black"></i>' : ''}
+        document.getElementById("displaySubtotal").textContent = "$" + subtotal.toLocaleString();
+        document.getElementById("displayTax").textContent = hasTax
+          ? "$" + tax.toLocaleString()
+          : "$0";
+        document.getElementById("displayTotal").textContent = "NT$ " + total.toLocaleString();
+      }
+
+      function renderAll() {
+        renderInputs();
+        renderPreview();
+      }
+
+      // --- Calculator Logic ---
+
+      function renderSlotCheckboxes() {
+        const container = document.getElementById("slotContainer");
+        container.innerHTML = "";
+        Object.entries(TIME_SLOTS).forEach(([key, slot]) => {
+          const isChecked = calcSlots.includes(key);
+          const div = document.createElement("div");
+          div.className = `flex items-center gap-2 p-2 border rounded-sm cursor-pointer transition-colors ${isChecked ? "bg-black text-white border-black" : "bg-white border-gray-200 text-gray-600 hover:border-gray-400"}`;
+          div.onclick = () => toggleCalcSlot(key);
+          div.innerHTML = `
+                    <div class="w-3 h-3 border rounded-[1px] flex items-center justify-center ${isChecked ? "border-white bg-white" : "border-gray-400 bg-transparent"}">
+                        ${isChecked ? '<i data-lucide="check" class="w-2.5 h-2.5 text-black"></i>' : ""}
                     </div>
                     <span class="text-xs font-medium">${slot.label}</span>
                 `;
-                container.appendChild(div);
-            });
-            lucide.createIcons();
+          container.appendChild(div);
+        });
+        lucide.createIcons();
+      }
+
+      function toggleCalcSlot(slotKey) {
+        if (calcSlots.includes(slotKey)) {
+          calcSlots = calcSlots.filter(k => k !== slotKey);
+        } else {
+          calcSlots.push(slotKey);
+          // Sort
+          const order = ["morning", "afternoon", "evening"];
+          calcSlots.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+        }
+        renderSlotCheckboxes();
+        updateCalcMetrics();
+      }
+
+      function getDayType(d) {
+        const day = d.getDay();
+        return day === 0 || day === 6 ? "holiday" : "weekday";
+      }
+
+      function calculateMetrics() {
+        const sStr = document.getElementById("calcStartDate").value;
+        const eStr = document.getElementById("calcEndDate").value;
+        const space = document.getElementById("calcSpace").value;
+
+        if (!sStr || !eStr) return { weekdays: 0, holidays: 0, totalCost: 0, dailyW: 0, dailyH: 0 };
+
+        const start = new Date(sStr);
+        const end = new Date(eStr);
+
+        if (start > end) return { weekdays: 0, holidays: 0, totalCost: 0, dailyW: 0, dailyH: 0 };
+
+        let weekdays = 0;
+        let holidays = 0;
+        let current = new Date(start);
+
+        while (current <= end) {
+          const type = getDayType(current);
+          if (type === "holiday") holidays++;
+          else weekdays++;
+          current.setDate(current.getDate() + 1);
         }
 
-        function toggleCalcSlot(slotKey) {
-            if (calcSlots.includes(slotKey)) {
-                calcSlots = calcSlots.filter(k => k !== slotKey);
-            } else {
-                calcSlots.push(slotKey);
-                // Sort
-                const order = ['morning', 'afternoon', 'evening'];
-                calcSlots.sort((a, b) => order.indexOf(a) - order.indexOf(b));
-            }
-            renderSlotCheckboxes();
-            updateCalcMetrics();
+        // Calculate daily rates
+        let dailyW = 0;
+        let dailyH = 0;
+
+        calcSlots.forEach(slotKey => {
+          const hours = TIME_SLOTS[slotKey].hours;
+          dailyW += PRICING_RATES[space].weekday[slotKey] * hours;
+          dailyH += PRICING_RATES[space].holiday[slotKey] * hours;
+        });
+
+        const total = weekdays * dailyW + holidays * dailyH;
+        return { weekdays, holidays, totalCost: total, dailyW, dailyH };
+      }
+
+      function updateCalcMetrics() {
+        // Validation Check
+        const evStart = document.getElementById("eventStartDate").value;
+        const evEnd = document.getElementById("eventEndDate").value;
+        const cStart = document.getElementById("calcStartDate").value;
+        const cEnd = document.getElementById("calcEndDate").value;
+        const mismatchDiv = document.getElementById("dateMismatchMsg");
+        const btn = document.getElementById("btnAddCalc");
+
+        const isMismatch = cStart !== evStart || cEnd !== evEnd;
+
+        if (isMismatch) {
+          mismatchDiv.classList.remove("hidden");
+          document.getElementById("calcStartDate").classList.add("bg-red-50", "border-red-300");
+          document.getElementById("calcEndDate").classList.add("bg-red-50", "border-red-300");
+          btn.classList.add("opacity-50", "cursor-not-allowed");
+        } else {
+          mismatchDiv.classList.add("hidden");
+          document.getElementById("calcStartDate").classList.remove("bg-red-50", "border-red-300");
+          document.getElementById("calcEndDate").classList.remove("bg-red-50", "border-red-300");
+          btn.classList.remove("opacity-50", "cursor-not-allowed");
         }
 
-        function getDayType(d) {
-            const day = d.getDay();
-            return (day === 0 || day === 6) ? 'holiday' : 'weekday';
+        // Calculate
+        const m = calculateMetrics();
+        document.getElementById("metricWeekdays").textContent = m.weekdays;
+        document.getElementById("metricHolidays").textContent = m.holidays;
+        document.getElementById("metricWeekdayRate").textContent = "$" + m.dailyW.toLocaleString();
+        document.getElementById("metricHolidayRate").textContent = "$" + m.dailyH.toLocaleString();
+        document.getElementById("metricTotalCost").textContent = "$" + m.totalCost.toLocaleString();
+      }
+
+      function addCalculatedItem() {
+        // Safety Checks
+        const evStart = document.getElementById("eventStartDate").value;
+        const evEnd = document.getElementById("eventEndDate").value;
+        const cStart = document.getElementById("calcStartDate").value;
+        const cEnd = document.getElementById("calcEndDate").value;
+
+        if (!evStart || !evEnd) {
+          alert("請先在上方設定「活動日期」。");
+          return;
+        }
+        if (cStart !== evStart || cEnd !== evEnd) {
+          alert("⚠️ 防呆機制啟動：租金計算機日期必須與活動日期一致！");
+          return;
+        }
+        if (calcSlots.length === 0) {
+          alert("請至少選擇一個時段。");
+          return;
         }
 
-        function calculateMetrics() {
-            const sStr = document.getElementById('calcStartDate').value;
-            const eStr = document.getElementById('calcEndDate').value;
-            const space = document.getElementById('calcSpace').value;
+        const m = calculateMetrics();
+        if (m.weekdays === 0 && m.holidays === 0 && m.totalCost === 0) return;
 
-            if (!sStr || !eStr) return { weekdays: 0, holidays: 0, totalCost: 0, dailyW: 0, dailyH: 0 };
+        const spaceVal = document.getElementById("calcSpace").value;
+        const spaceLabel = spaceVal === "1F+B1" ? "2層 (1F+B1)" : "全棟租借 (包棟)";
+        const slotLabels = calcSlots.map(s => TIME_SLOTS[s].shortLabel).join(" + ");
+        const dateRangeStr =
+          cStart === cEnd
+            ? cStart.replace(/-/g, ".")
+            : `${cStart.replace(/-/g, ".")} - ${cEnd.replace(/-/g, ".")}`;
 
-            const start = new Date(sStr);
-            const end = new Date(eStr);
-            
-            if (start > end) return { weekdays: 0, holidays: 0, totalCost: 0, dailyW: 0, dailyH: 0 };
+        const desc = `場地租借 (${dateRangeStr}): ${spaceLabel}\n時段: ${slotLabels}\n包含: ${m.weekdays} 平日 (Weekdays), ${m.holidays} 假日 (Holidays)`;
 
-            let weekdays = 0;
-            let holidays = 0;
-            let current = new Date(start);
+        items.push({ desc: desc, price: m.totalCost, qty: 1 });
+        renderAll();
+      }
 
-            while (current <= end) {
-                const type = getDayType(current);
-                if (type === 'holiday') holidays++;
-                else weekdays++;
-                current.setDate(current.getDate() + 1);
-            }
+      function downloadPDF() {
+        const element = document.getElementById("quote-paper-single");
 
-            // Calculate daily rates
-            let dailyW = 0;
-            let dailyH = 0;
-            
-            calcSlots.forEach(slotKey => {
-                const hours = TIME_SLOTS[slotKey].hours;
-                dailyW += PRICING_RATES[space].weekday[slotKey] * hours;
-                dailyH += PRICING_RATES[space].holiday[slotKey] * hours;
-            });
+        // Remove Shadow for cleaner PDF
+        const originalBoxShadow = element.style.boxShadow;
+        element.style.boxShadow = "none";
 
-            const total = (weekdays * dailyW) + (holidays * dailyH);
-            return { weekdays, holidays, totalCost: total, dailyW, dailyH };
-        }
+        const opt = {
+          margin: 0,
+          filename: `${document.getElementById("quoteNo").value || "Quote"}.pdf`,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        };
 
-        function updateCalcMetrics() {
-            // Validation Check
-            const evStart = document.getElementById('eventStartDate').value;
-            const evEnd = document.getElementById('eventEndDate').value;
-            const cStart = document.getElementById('calcStartDate').value;
-            const cEnd = document.getElementById('calcEndDate').value;
-            const mismatchDiv = document.getElementById('dateMismatchMsg');
-            const btn = document.getElementById('btnAddCalc');
-            
-            const isMismatch = (cStart !== evStart || cEnd !== evEnd);
-            
-            if (isMismatch) {
-                mismatchDiv.classList.remove('hidden');
-                document.getElementById('calcStartDate').classList.add('bg-red-50', 'border-red-300');
-                document.getElementById('calcEndDate').classList.add('bg-red-50', 'border-red-300');
-                btn.classList.add('opacity-50', 'cursor-not-allowed');
-            } else {
-                mismatchDiv.classList.add('hidden');
-                document.getElementById('calcStartDate').classList.remove('bg-red-50', 'border-red-300');
-                document.getElementById('calcEndDate').classList.remove('bg-red-50', 'border-red-300');
-                btn.classList.remove('opacity-50', 'cursor-not-allowed');
-            }
-
-            // Calculate
-            const m = calculateMetrics();
-            document.getElementById('metricWeekdays').textContent = m.weekdays;
-            document.getElementById('metricHolidays').textContent = m.holidays;
-            document.getElementById('metricWeekdayRate').textContent = '$' + m.dailyW.toLocaleString();
-            document.getElementById('metricHolidayRate').textContent = '$' + m.dailyH.toLocaleString();
-            document.getElementById('metricTotalCost').textContent = '$' + m.totalCost.toLocaleString();
-        }
-
-        function addCalculatedItem() {
-            // Safety Checks
-            const evStart = document.getElementById('eventStartDate').value;
-            const evEnd = document.getElementById('eventEndDate').value;
-            const cStart = document.getElementById('calcStartDate').value;
-            const cEnd = document.getElementById('calcEndDate').value;
-
-            if (!evStart || !evEnd) {
-                alert('請先在上方設定「活動日期」。');
-                return;
-            }
-            if (cStart !== evStart || cEnd !== evEnd) {
-                alert('⚠️ 防呆機制啟動：租金計算機日期必須與活動日期一致！');
-                return;
-            }
-            if (calcSlots.length === 0) {
-                alert('請至少選擇一個時段。');
-                return;
-            }
-
-            const m = calculateMetrics();
-            if (m.weekdays === 0 && m.holidays === 0 && m.totalCost === 0) return;
-
-            const spaceVal = document.getElementById('calcSpace').value;
-            const spaceLabel = spaceVal === '1F+B1' ? '2層 (1F+B1)' : '全棟租借 (包棟)';
-            const slotLabels = calcSlots.map(s => TIME_SLOTS[s].shortLabel).join(' + ');
-            const dateRangeStr = (cStart === cEnd) ? cStart.replace(/-/g, '.') : `${cStart.replace(/-/g, '.')} - ${cEnd.replace(/-/g, '.')}`;
-
-            const desc = `場地租借 (${dateRangeStr}): ${spaceLabel}\n時段: ${slotLabels}\n包含: ${m.weekdays} 平日 (Weekdays), ${m.holidays} 假日 (Holidays)`;
-
-            items.push({ desc: desc, price: m.totalCost, qty: 1 });
-            renderAll();
-        }
-
-        function downloadPDF() {
-            const element = document.getElementById('quote-paper-single');
-            
-            // Remove Shadow for cleaner PDF
-            const originalBoxShadow = element.style.boxShadow;
-            element.style.boxShadow = 'none';
-
-            const opt = {
-                margin: 0,
-                filename: `${document.getElementById('quoteNo').value || 'Quote'}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true, logging: false },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-            };
-
-            html2pdf().from(element).set(opt).save().then(() => {
-                element.style.boxShadow = originalBoxShadow;
-            });
-        }
+        html2pdf()
+          .from(element)
+          .set(opt)
+          .save()
+          .then(() => {
+            element.style.boxShadow = originalBoxShadow;
+          });
+      }
     </script>
-</body>
+  </body>
 </html>

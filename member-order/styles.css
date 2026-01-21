@@ -14,35 +14,36 @@
    ============================================= */
 
 /* 優化移動端體驗：防止 iOS 橡皮筋捲動，優化簽名板操作 */
-html, body {
-    overscroll-behavior: none;
-    touch-action: pan-x pan-y;
+html,
+body {
+  overscroll-behavior: none;
+  touch-action: pan-x pan-y;
 }
 
 /* 美化捲軸 */
 ::-webkit-scrollbar {
-    width: 8px;
+  width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-    background: #f1f1f1;
+  background: #f1f1f1;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
+  background: #cbd5e1;
+  border-radius: 4px;
 }
 
 /* 簽名時鎖定觸控 */
 .touch-none {
-    touch-action: none !important;
+  touch-action: none !important;
 }
 
 /* 修正 iOS Date Input 樣式問題 */
 input[type="date"] {
-    -webkit-appearance: none;
-    appearance: none;
-    min-height: 56px; /* 確保高度 */
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 56px; /* 確保高度 */
 }
 
 /* =============================================
@@ -50,79 +51,79 @@ input[type="date"] {
    ============================================= */
 
 @keyframes fade-in {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes scale-in {
-    from {
-        opacity: 0;
-        transform: scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: scale(1);
-    }
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes slide-up {
-    from {
-        opacity: 0;
-        transform: translateY(100%);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slide-down {
-    from {
-        opacity: 0;
-        transform: translateY(-8px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-fade-in {
-    animation: fade-in 0.2s ease-out;
+  animation: fade-in 0.2s ease-out;
 }
 
 .animate-scale-in {
-    animation: scale-in 0.25s ease-out;
+  animation: scale-in 0.25s ease-out;
 }
 
 .animate-slide-up {
-    animation: slide-up 0.3s ease-out;
+  animation: slide-up 0.3s ease-out;
 }
 
 .animate-slide-down {
-    animation: slide-down 0.2s ease-out;
+  animation: slide-down 0.2s ease-out;
 }
 
 /* 自定義捲軸樣式 */
 .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
+  width: 6px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
+  background: transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 3px;
+  background: #cbd5e1;
+  border-radius: 3px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+  background: #94a3b8;
 }
 
 /* =============================================
@@ -131,57 +132,57 @@ input[type="date"] {
 
 /* 手機 (< 640px) - 預設為手機優先 */
 @media (max-width: 639px) {
-    .mobile-stack {
-        flex-direction: column !important;
-    }
-    .mobile-full {
-        width: 100% !important;
-    }
-    .mobile-text-sm {
-        font-size: 0.875rem !important;
-    }
-    .mobile-p-4 {
-        padding: 1rem !important;
-    }
-    .mobile-gap-2 {
-        gap: 0.5rem !important;
-    }
+  .mobile-stack {
+    flex-direction: column !important;
+  }
+  .mobile-full {
+    width: 100% !important;
+  }
+  .mobile-text-sm {
+    font-size: 0.875rem !important;
+  }
+  .mobile-p-4 {
+    padding: 1rem !important;
+  }
+  .mobile-gap-2 {
+    gap: 0.5rem !important;
+  }
 }
 
 /* 平板 iPad (640px - 1024px) */
 @media (min-width: 640px) and (max-width: 1024px) {
-    .tablet-container {
-        max-width: 720px !important;
-        margin: 0 auto;
-    }
-    .tablet-grid-2 {
-        grid-template-columns: repeat(2, 1fr) !important;
-    }
-    .tablet-px-8 {
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
-    }
+  .tablet-container {
+    max-width: 720px !important;
+    margin: 0 auto;
+  }
+  .tablet-grid-2 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .tablet-px-8 {
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+  }
 }
 
 /* 桌機 (> 1024px) */
 @media (min-width: 1025px) {
-    .desktop-container {
-        max-width: 800px !important;
-        margin: 0 auto;
-    }
-    .desktop-grid-3 {
-        grid-template-columns: repeat(3, 1fr) !important;
-    }
-    .desktop-hover-scale:hover {
-        transform: scale(1.02);
-    }
+  .desktop-container {
+    max-width: 800px !important;
+    margin: 0 auto;
+  }
+  .desktop-grid-3 {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+  .desktop-hover-scale:hover {
+    transform: scale(1.02);
+  }
 }
 
 /* iPad 橫向模式特殊處理 */
 @media (min-width: 768px) and (max-width: 1024px) and (orientation: landscape) {
-    .ipad-landscape-fix {
-        max-height: 70vh;
-    }
+  .ipad-landscape-fix {
+    max-height: 70vh;
+  }
 }
 
 /* =============================================
@@ -189,12 +190,12 @@ input[type="date"] {
    ============================================= */
 
 @supports (padding: max(0px)) {
-    .safe-area-bottom {
-        padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
-    }
-    .safe-area-top {
-        padding-top: max(1rem, env(safe-area-inset-top));
-    }
+  .safe-area-bottom {
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+  .safe-area-top {
+    padding-top: max(1rem, env(safe-area-inset-top));
+  }
 }
 
 /* =============================================
@@ -203,20 +204,25 @@ input[type="date"] {
 
 /* 改善觸控反饋 */
 @media (hover: none) and (pointer: coarse) {
-    button, .clickable {
-        -webkit-tap-highlight-color: transparent;
-    }
-    button:active, .clickable:active {
-        transform: scale(0.98);
-        transition: transform 0.1s ease;
-    }
+  button,
+  .clickable {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:active,
+  .clickable:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
 }
 
 /* 優化表單元素在觸控裝置上的大小 */
 @media (pointer: coarse) {
-    input, select, textarea, button {
-        min-height: 48px; /* 確保觸控友善 */
-    }
+  input,
+  select,
+  textarea,
+  button {
+    min-height: 48px; /* 確保觸控友善 */
+  }
 }
 
 /* =============================================
@@ -225,90 +231,101 @@ input[type="date"] {
 
 /* 行事曆日期格子 - 平滑動畫 */
 .calendar-cell {
-    transition: background-color 0.15s ease, transform 0.1s ease;
+  transition:
+    background-color 0.15s ease,
+    transform 0.1s ease;
 }
 
 .calendar-cell:hover {
-    background-color: rgba(255, 255, 255, 0.5);
+  background-color: rgba(255, 255, 255, 0.5);
 }
 
 .calendar-cell:active {
-    transform: scale(0.98);
+  transform: scale(0.98);
 }
 
 /* 行事曆事件標題 - 優化截斷 */
 .calendar-event {
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
 }
 
 /* 行事曆過濾器按鈕 - hover 效果 */
 .calendar-filter-btn {
-    transition: color 0.15s ease;
+  transition: color 0.15s ease;
 }
 
 .calendar-filter-btn:hover {
-    color: #1d1d1f;
+  color: #1d1d1f;
 }
 
 /* 行事曆星期標題 - 字體優化 */
 .calendar-weekday {
-    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-    letter-spacing: 0.05em;
+  font-family:
+    "DM Sans",
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  letter-spacing: 0.05em;
 }
 
 /* 行事曆日期數字 - 大字體輕量 */
 .calendar-day-number {
-    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-    font-weight: 300;
-    font-variant-numeric: tabular-nums;
+  font-family:
+    "DM Sans",
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 選中日期高亮效果 */
 .calendar-selected {
-    background-color: rgba(139, 92, 246, 0.1);
-    box-shadow: inset 0 0 0 2px #8b5cf6;
+  background-color: rgba(139, 92, 246, 0.1);
+  box-shadow: inset 0 0 0 2px #8b5cf6;
 }
 
 /* 今日紅點標記動畫 */
 @keyframes pulse-dot {
-    0%, 100% {
-        opacity: 1;
-        transform: scale(1);
-    }
-    50% {
-        opacity: 0.8;
-        transform: scale(1.1);
-    }
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.1);
+  }
 }
 
 .today-dot {
-    animation: pulse-dot 2s ease-in-out infinite;
+  animation: pulse-dot 2s ease-in-out infinite;
 }
 
 /* 行事曆載入中 overlay */
 .calendar-loading-overlay {
-    backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
 }
 
 /* 響應式行事曆格子高度 */
 @media (max-width: 640px) {
-    .calendar-day-cell {
-        min-height: 72px;
-    }
+  .calendar-day-cell {
+    min-height: 72px;
+  }
 }
 
 @media (min-width: 641px) and (max-width: 1024px) {
-    .calendar-day-cell {
-        min-height: 90px;
-    }
+  .calendar-day-cell {
+    min-height: 90px;
+  }
 }
 
 @media (min-width: 1025px) {
-    .calendar-day-cell {
-        min-height: 110px;
-    }
+  .calendar-day-cell {
+    min-height: 110px;
+  }
 }

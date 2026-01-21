@@ -3,6 +3,7 @@
 ## 📌 功能說明
 
 這個功能讓客戶可以：
+
 1. 透過 **LINE Login** 登入
 2. 自動收到訂單確認卡片（Flex Message）
 3. 同時引導客戶加入你的官方帳號
@@ -30,6 +31,7 @@
 ### 步驟 2：取得 Messaging API Channel Access Token
 
 你應該已經有官方帳號的 Messaging API Channel：
+
 1. 在 LINE Developers Console 找到你的 **Messaging API Channel**
 2. 到「Messaging API」頁籤
 3. 滾動到最下方，找到「**Channel access token (long-lived)**」

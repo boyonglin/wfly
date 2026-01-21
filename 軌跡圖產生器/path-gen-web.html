@@ -1,753 +1,1540 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
     <title>多模式軌跡圖 (含一鍵打包)</title>
-    
+
     <!-- 引入 React 核心 -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    
+
     <!-- 引入 Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
+
     <!-- 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- 引入 JSZip -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <!-- 引入 Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
 
     <style>
-        body { 
-            font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif; 
-            overscroll-behavior: none; 
+      body {
+        font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
+        overscroll-behavior: none;
+      }
+      .font-serif {
+        font-family: "Noto Serif TC", "PMingLiU", serif;
+      }
+      canvas {
+        touch-action: none !important;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      @keyframes pulse-blue {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
         }
-        .font-serif { 
-            font-family: "Noto Serif TC", "PMingLiU", serif; 
+        50% {
+          box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
         }
-        canvas {
-            touch-action: none !important; 
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            user-select: none;
-        }
-        @keyframes pulse-blue {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
-            50% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
-        }
-        .download-ready {
-            animation: pulse-blue 2s infinite;
-        }
-        /* 隱藏捲軸但保留功能 */
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .no-scrollbar {
-            -ms-overflow-style: none;  /* IE and Edge */
-            scrollbar-width: none;  /* Firefox */
-        }
-        .editing-textarea {
-            font-family: "Microsoft JhengHei", sans-serif;
-            border: 2px solid #4f46e5;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            border-radius: 0.5rem;
-            padding: 0.5rem;
-            resize: both;
-            z-index: 50;
-            background-color: rgba(255, 255, 255, 0.95);
-            outline: none;
-        }
+      }
+      .download-ready {
+        animation: pulse-blue 2s infinite;
+      }
+      /* 隱藏捲軸但保留功能 */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none; /* IE and Edge */
+        scrollbar-width: none; /* Firefox */
+      }
+      .editing-textarea {
+        font-family: "Microsoft JhengHei", sans-serif;
+        border: 2px solid #4f46e5;
+        box-shadow:
+          0 4px 6px -1px rgba(0, 0, 0, 0.1),
+          0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        border-radius: 0.5rem;
+        padding: 0.5rem;
+        resize: both;
+        z-index: 50;
+        background-color: rgba(255, 255, 255, 0.95);
+        outline: none;
+      }
     </style>
-</head>
-<body class="bg-gray-100 text-gray-800">
-
+  </head>
+  <body class="bg-gray-100 text-gray-800">
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useRef, useEffect, useMemo } = React;
+      const { useState, useRef, useEffect, useMemo } = React;
 
-        // --- 設定標記 (請勿修改，這是打包功能的關鍵) ---
-        const PRELOADED_IMAGES = { name: null, address: null, company: null }; 
-        const PRELOADED_LAYOUTS = null; 
+      // --- 設定標記 (請勿修改，這是打包功能的關鍵) ---
+      const PRELOADED_IMAGES = { name: null, address: null, company: null };
+      const PRELOADED_LAYOUTS = null;
 
-        // --- 圖示組件 ---
-        const IconBase = ({ children, className }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                {children}
-            </svg>
-        );
-        const Upload = ({ className }) => <IconBase className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></IconBase>;
-        const Plus = ({ className }) => <IconBase className={className}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></IconBase>;
-        const Trash2 = ({ className }) => <IconBase className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></IconBase>;
-        const Users = ({ className }) => <IconBase className={className}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></IconBase>;
-        const Settings = ({ className }) => <IconBase className={className}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.35a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></IconBase>;
-        const Layout = ({ className }) => <IconBase className={className}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></IconBase>;
-        const Type = ({ className }) => <IconBase className={className}><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></IconBase>;
-        const MousePointer2 = ({ className }) => <IconBase className={className}><path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/></IconBase>;
-        const Loader2 = ({ className }) => <IconBase className={className}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></IconBase>;
-        const MapPin = ({ className }) => <IconBase className={className}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></IconBase>;
-        const Building2 = ({ className }) => <IconBase className={className}><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></IconBase>;
-        const User = ({ className }) => <IconBase className={className}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></IconBase>;
-        const FileText = ({ className }) => <IconBase className={className}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></IconBase>;
-        const X = ({ className }) => <IconBase className={className}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></IconBase>;
-        const Check = ({ className }) => <IconBase className={className}><polyline points="20 6 9 17 4 12"/></IconBase>;
-        const FolderOpen = ({ className }) => <IconBase className={className}><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-3.25 7a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></IconBase>;
-        const Gift = ({ className }) => <IconBase className={className}><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></IconBase>;
-        const Download = ({ className }) => <IconBase className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></IconBase>;
-        const FileArchive = ({ className }) => <IconBase className={className}><path d="M4 22V4c0-.5.2-1 .6-1.4C5 2.2 5.5 2 6 2h13.5L20 22Z"/><path d="M10 2v20"/><path d="M20 12h-2"/><path d="M20 7h-2"/><path d="M20 17h-2"/><path d="M4 12h2"/><path d="M4 7h2"/><path d="M4 17h2"/></IconBase>;
-        const ImageIcon = ({ className }) => <IconBase className={className}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></IconBase>;
-        const Share2 = ({ className }) => <IconBase className={className}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></IconBase>;
-        const AlertCircle = ({ className }) => <IconBase className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></IconBase>;
-        const Edit2 = ({ className }) => <IconBase className={className}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></IconBase>;
+      // --- 圖示組件 ---
+      const IconBase = ({ children, className }) => (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={className}
+        >
+          {children}
+        </svg>
+      );
+      const Upload = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" x2="12" y1="3" y2="15" />
+        </IconBase>
+      );
+      const Plus = ({ className }) => (
+        <IconBase className={className}>
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </IconBase>
+      );
+      const Trash2 = ({ className }) => (
+        <IconBase className={className}>
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          <line x1="10" y1="11" x2="10" y2="17" />
+          <line x1="14" y1="11" x2="14" y2="17" />
+        </IconBase>
+      );
+      const Users = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </IconBase>
+      );
+      const Settings = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.35a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+          <circle cx="12" cy="12" r="3" />
+        </IconBase>
+      );
+      const Layout = ({ className }) => (
+        <IconBase className={className}>
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <line x1="3" y1="9" x2="21" y2="9" />
+          <line x1="9" y1="21" x2="9" y2="9" />
+        </IconBase>
+      );
+      const Type = ({ className }) => (
+        <IconBase className={className}>
+          <polyline points="4 7 4 4 20 4 20 7" />
+          <line x1="9" y1="20" x2="15" y2="20" />
+          <line x1="12" y1="4" x2="12" y2="20" />
+        </IconBase>
+      );
+      const MousePointer2 = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z" />
+        </IconBase>
+      );
+      const Loader2 = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+        </IconBase>
+      );
+      const MapPin = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+          <circle cx="12" cy="10" r="3" />
+        </IconBase>
+      );
+      const Building2 = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
+          <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
+          <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
+          <path d="M10 6h4" />
+          <path d="M10 10h4" />
+          <path d="M10 14h4" />
+          <path d="M10 18h4" />
+        </IconBase>
+      );
+      const User = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </IconBase>
+      );
+      const FileText = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+          <line x1="10" y1="9" x2="8" y2="9" />
+        </IconBase>
+      );
+      const X = ({ className }) => (
+        <IconBase className={className}>
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </IconBase>
+      );
+      const Check = ({ className }) => (
+        <IconBase className={className}>
+          <polyline points="20 6 9 17 4 12" />
+        </IconBase>
+      );
+      const FolderOpen = ({ className }) => (
+        <IconBase className={className}>
+          <path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-3.25 7a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2" />
+        </IconBase>
+      );
+      const Gift = ({ className }) => (
+        <IconBase className={className}>
+          <polyline points="20 12 20 22 4 22 4 12" />
+          <rect x="2" y="7" width="20" height="5" />
+          <line x1="12" y1="22" x2="12" y2="7" />
+          <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" />
+          <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+        </IconBase>
+      );
+      const Download = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" x2="12" y1="15" y2="3" />
+        </IconBase>
+      );
+      const FileArchive = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M4 22V4c0-.5.2-1 .6-1.4C5 2.2 5.5 2 6 2h13.5L20 22Z" />
+          <path d="M10 2v20" />
+          <path d="M20 12h-2" />
+          <path d="M20 7h-2" />
+          <path d="M20 17h-2" />
+          <path d="M4 12h2" />
+          <path d="M4 7h2" />
+          <path d="M4 17h2" />
+        </IconBase>
+      );
+      const ImageIcon = ({ className }) => (
+        <IconBase className={className}>
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <polyline points="21 15 16 10 5 21" />
+        </IconBase>
+      );
+      const Share2 = ({ className }) => (
+        <IconBase className={className}>
+          <circle cx="18" cy="5" r="3" />
+          <circle cx="6" cy="12" r="3" />
+          <circle cx="18" cy="19" r="3" />
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </IconBase>
+      );
+      const AlertCircle = ({ className }) => (
+        <IconBase className={className}>
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </IconBase>
+      );
+      const Edit2 = ({ className }) => (
+        <IconBase className={className}>
+          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+        </IconBase>
+      );
 
-        // --- 通用 Modal 組件 ---
-        const Modal = ({ isOpen, onClose, title, children, footer, type = 'default' }) => {
-            if (!isOpen) return null;
-            return (
-                <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-fade-in">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md transform transition-all scale-100">
-                        <div className={`p-4 border-b border-gray-100 flex justify-between items-center rounded-t-xl ${type === 'danger' ? 'bg-red-50' : 'bg-gray-50'}`}>
-                            <h3 className={`text-lg font-bold flex items-center gap-2 ${type === 'danger' ? 'text-red-700' : 'text-gray-800'}`}>
-                                {title}
-                            </h3>
-                            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="p-6">
-                            {children}
-                        </div>
-                        {footer && (
-                            <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-xl flex justify-end gap-2">
-                                {footer}
-                            </div>
-                        )}
-                    </div>
+      // --- 通用 Modal 組件 ---
+      const Modal = ({ isOpen, onClose, title, children, footer, type = "default" }) => {
+        if (!isOpen) return null;
+        return (
+          <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md transform transition-all scale-100">
+              <div
+                className={`p-4 border-b border-gray-100 flex justify-between items-center rounded-t-xl ${type === "danger" ? "bg-red-50" : "bg-gray-50"}`}
+              >
+                <h3
+                  className={`text-lg font-bold flex items-center gap-2 ${type === "danger" ? "text-red-700" : "text-gray-800"}`}
+                >
+                  {title}
+                </h3>
+                <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6">{children}</div>
+              {footer && (
+                <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-xl flex justify-end gap-2">
+                  {footer}
                 </div>
-            );
+              )}
+            </div>
+          </div>
+        );
+      };
+
+      function App() {
+        const MODES = {
+          name: {
+            id: "name",
+            label: "姓名軌跡",
+            icon: <User className="w-4 h-4" />,
+            fields: { main: "姓名", sub: "關係" },
+            defaultLayout: {
+              main: { x: 300, y: 400, size: 60, color: "#000000", vertical: true },
+              sub: { x: 800, y: 50, size: 30, color: "#000000", vertical: false },
+              date: { x: 800, y: 100, size: 30, color: "#000000", vertical: false },
+              services: { x: 800, y: 150, size: 30, color: "#000000", vertical: false },
+            },
+          },
+          address: {
+            id: "address",
+            label: "地址軌跡",
+            icon: <MapPin className="w-4 h-4" />,
+            fields: { main: "地址", sub: "備註/居住者" },
+            defaultLayout: {
+              main: { x: 200, y: 300, size: 50, color: "#000000", vertical: true },
+              sub: { x: 700, y: 50, size: 30, color: "#000000", vertical: false },
+              date: { x: 700, y: 100, size: 30, color: "#000000", vertical: false },
+              services: { x: 700, y: 150, size: 30, color: "#000000", vertical: false },
+            },
+          },
+          company: {
+            id: "company",
+            label: "企業軌跡",
+            icon: <Building2 className="w-4 h-4" />,
+            fields: { main: "企業名稱", sub: "統編/負責人" },
+            defaultLayout: {
+              main: { x: 300, y: 350, size: 55, color: "#000000", vertical: true },
+              sub: { x: 750, y: 50, size: 30, color: "#000000", vertical: false },
+              date: { x: 750, y: 100, size: 30, color: "#000000", vertical: false },
+              services: { x: 750, y: 150, size: 30, color: "#000000", vertical: false },
+            },
+          },
         };
 
-        function App() {
-            const MODES = {
-                name: { id: 'name', label: '姓名軌跡', icon: <User className="w-4 h-4" />, fields: { main: '姓名', sub: '關係' }, defaultLayout: { main: { x: 300, y: 400, size: 60, color: '#000000', vertical: true }, sub: { x: 800, y: 50, size: 30, color: '#000000', vertical: false }, date: { x: 800, y: 100, size: 30, color: '#000000', vertical: false }, services: { x: 800, y: 150, size: 30, color: '#000000', vertical: false } } },
-                address: { id: 'address', label: '地址軌跡', icon: <MapPin className="w-4 h-4" />, fields: { main: '地址', sub: '備註/居住者' }, defaultLayout: { main: { x: 200, y: 300, size: 50, color: '#000000', vertical: true }, sub: { x: 700, y: 50, size: 30, color: '#000000', vertical: false }, date: { x: 700, y: 100, size: 30, color: '#000000', vertical: false }, services: { x: 700, y: 150, size: 30, color: '#000000', vertical: false } } },
-                company: { id: 'company', label: '企業軌跡', icon: <Building2 className="w-4 h-4" />, fields: { main: '企業名稱', sub: '統編/負責人' }, defaultLayout: { main: { x: 300, y: 350, size: 55, color: '#000000', vertical: true }, sub: { x: 750, y: 50, size: 30, color: '#000000', vertical: false }, date: { x: 750, y: 100, size: 30, color: '#000000', vertical: false }, services: { x: 750, y: 150, size: 30, color: '#000000', vertical: false } } }
-            };
+        const [currentMode, setCurrentMode] = useState("name");
+        const [showImportModal, setShowImportModal] = useState(false);
+        const [showDownloadModal, setShowDownloadModal] = useState(false);
+        const [generatedResults, setGeneratedResults] = useState([]);
+        const [importText, setImportText] = useState("");
+        const [customerName, setCustomerName] = useState("專案客戶");
+        const [modeImages, setModeImages] = useState(PRELOADED_IMAGES);
+        const [dataStore, setDataStore] = useState({
+          name: {
+            entries: [{ id: 1, mainText: "", subText: "" }],
+            global: { date: "", services: "" },
+            selectedId: 1,
+          },
+          address: {
+            entries: [{ id: 1, mainText: "", subText: "" }],
+            global: { date: "", services: "" },
+            selectedId: 1,
+          },
+          company: {
+            entries: [{ id: 1, mainText: "", subText: "" }],
+            global: { date: "", services: "" },
+            selectedId: 1,
+          },
+        });
 
-            const [currentMode, setCurrentMode] = useState('name');
-            const [showImportModal, setShowImportModal] = useState(false);
-            const [showDownloadModal, setShowDownloadModal] = useState(false);
-            const [generatedResults, setGeneratedResults] = useState([]);
-            const [importText, setImportText] = useState('');
-            const [customerName, setCustomerName] = useState('專案客戶');
-            const [modeImages, setModeImages] = useState(PRELOADED_IMAGES);
-            const [dataStore, setDataStore] = useState({
-                name: { entries: [{ id: 1, mainText: '', subText: '' }], global: { date: '', services: '' }, selectedId: 1 },
-                address: { entries: [{ id: 1, mainText: '', subText: '' }], global: { date: '', services: '' }, selectedId: 1 },
-                company: { entries: [{ id: 1, mainText: '', subText: '' }], global: { date: '', services: '' }, selectedId: 1 }
-            });
-            
-            // 彈窗狀態
-            const [alertState, setAlertState] = useState({ isOpen: false, title: '', message: '' });
-            const [confirmState, setConfirmState] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+        // 彈窗狀態
+        const [alertState, setAlertState] = useState({ isOpen: false, title: "", message: "" });
+        const [confirmState, setConfirmState] = useState({
+          isOpen: false,
+          title: "",
+          message: "",
+          onConfirm: null,
+        });
 
-            // 編輯狀態 (直接修改)
-            const [editingTarget, setEditingTarget] = useState(null); // { key, initialValue, rect: {x,y,w,h} }
+        // 編輯狀態 (直接修改)
+        const [editingTarget, setEditingTarget] = useState(null); // { key, initialValue, rect: {x,y,w,h} }
 
-            const showAlert = (title, message) => setAlertState({ isOpen: true, title, message });
-            const closeAlert = () => setAlertState({ ...alertState, isOpen: false });
-            
-            const showConfirm = (title, message, onConfirm) => setConfirmState({ isOpen: true, title, message, onConfirm });
-            const closeConfirm = () => setConfirmState({ ...confirmState, isOpen: false });
-            const handleConfirmAction = () => {
-                if (confirmState.onConfirm) confirmState.onConfirm();
-                closeConfirm();
-            };
+        const showAlert = (title, message) => setAlertState({ isOpen: true, title, message });
+        const closeAlert = () => setAlertState({ ...alertState, isOpen: false });
 
-            // 初始化 Layouts
-            const [layouts, setLayouts] = useState(PRELOADED_LAYOUTS || { 
-                name: MODES.name.defaultLayout, 
-                address: MODES.address.defaultLayout, 
-                company: MODES.company.defaultLayout 
-            });
+        const showConfirm = (title, message, onConfirm) =>
+          setConfirmState({ isOpen: true, title, message, onConfirm });
+        const closeConfirm = () => setConfirmState({ ...confirmState, isOpen: false });
+        const handleConfirmAction = () => {
+          if (confirmState.onConfirm) confirmState.onConfirm();
+          closeConfirm();
+        };
 
-            const currentImageSrc = modeImages[currentMode];
-            const modeConfig = MODES[currentMode];
-            const currentLayout = layouts[currentMode];
-            const currentData = dataStore[currentMode];
-            const entries = currentData.entries;
-            const globalFields = currentData.global;
-            const currentEntryId = currentData.selectedId;
-            const hasAnyImage = useMemo(() => Object.values(modeImages).some(img => img !== null), [modeImages]);
-            const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-            const canvasRef = useRef(null);
-            const fileInputRef = useRef(null);
-            const [draggingKey, setDraggingKey] = useState(null);
-            const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-            const [activeTab, setActiveTab] = useState('layout'); // 預設為排版模式以便操作
-            const [isGenerating, setIsGenerating] = useState(false);
-            const [progress, setProgress] = useState(0);
+        // 初始化 Layouts
+        const [layouts, setLayouts] = useState(
+          PRELOADED_LAYOUTS || {
+            name: MODES.name.defaultLayout,
+            address: MODES.address.defaultLayout,
+            company: MODES.company.defaultLayout,
+          }
+        );
 
-            const handleModeChange = (modeId) => setCurrentMode(modeId);
-            const updateLayout = (key, newProps) => setLayouts(prev => ({ ...prev, [currentMode]: { ...prev[currentMode], [key]: { ...prev[currentMode][key], ...newProps } } }));
-            const updateCurrentDataStore = (updates) => setDataStore(prev => ({ ...prev, [currentMode]: { ...prev[currentMode], ...updates } }));
-            const handleGlobalFieldChange = (field, value) => updateCurrentDataStore({ global: { ...globalFields, [field]: value } });
-            const handleSelectEntry = (id) => updateCurrentDataStore({ selectedId: id });
+        const currentImageSrc = modeImages[currentMode];
+        const modeConfig = MODES[currentMode];
+        const currentLayout = layouts[currentMode];
+        const currentData = dataStore[currentMode];
+        const entries = currentData.entries;
+        const globalFields = currentData.global;
+        const currentEntryId = currentData.selectedId;
+        const hasAnyImage = useMemo(
+          () => Object.values(modeImages).some(img => img !== null),
+          [modeImages]
+        );
+        const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+        const canvasRef = useRef(null);
+        const fileInputRef = useRef(null);
+        const [draggingKey, setDraggingKey] = useState(null);
+        const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+        const [activeTab, setActiveTab] = useState("layout"); // 預設為排版模式以便操作
+        const [isGenerating, setIsGenerating] = useState(false);
+        const [progress, setProgress] = useState(0);
 
-            // --- 智慧匯入邏輯 2.0 ---
-            const parseAndImportData = () => {
-                if (!importText.trim()) return;
-                const lines = importText.split('\n');
-                const newNameEntries = [], newAddressEntries = [], newCompanyEntries = [];
-                let lastType = null, detectedCustomerName = null;
-                const regexGeneric = /^(.*?)[：:]\s*(.*)$/;
+        const handleModeChange = modeId => setCurrentMode(modeId);
+        const updateLayout = (key, newProps) =>
+          setLayouts(prev => ({
+            ...prev,
+            [currentMode]: {
+              ...prev[currentMode],
+              [key]: { ...prev[currentMode][key], ...newProps },
+            },
+          }));
+        const updateCurrentDataStore = updates =>
+          setDataStore(prev => ({ ...prev, [currentMode]: { ...prev[currentMode], ...updates } }));
+        const handleGlobalFieldChange = (field, value) =>
+          updateCurrentDataStore({ global: { ...globalFields, [field]: value } });
+        const handleSelectEntry = id => updateCurrentDataStore({ selectedId: id });
 
-                lines.forEach(line => {
-                    const cleanLine = line.trim(); if (!cleanLine) return;
-                    let key = "", value = ""; let matched = false;
-                    const genericMatch = cleanLine.match(regexGeneric);
-                    
-                    if (genericMatch) { key = genericMatch[1].trim(); value = genericMatch[2].trim(); if (!value) return; } 
-                    else {
-                        if ((lastType === 'address' || lastType === 'company') && !cleanLine.includes('：') && !cleanLine.includes(':')) {
-                             if (lastType === 'address' && newAddressEntries.length > 0) newAddressEntries[newAddressEntries.length - 1].mainText += ' ' + cleanLine;
-                        }
-                        return; 
-                    }
+        // --- 智慧匯入邏輯 2.0 ---
+        const parseAndImportData = () => {
+          if (!importText.trim()) return;
+          const lines = importText.split("\n");
+          const newNameEntries = [],
+            newAddressEntries = [],
+            newCompanyEntries = [];
+          let lastType = null,
+            detectedCustomerName = null;
+          const regexGeneric = /^(.*?)[：:]\s*(.*)$/;
 
-                    if (key.includes('公司') || key.includes('企業') || value.toLowerCase().includes('ltd') || value.includes('有限公司') || value.includes('股份有限公司')) {
-                        newCompanyEntries.push({ id: Date.now() + Math.random(), mainText: value, subText: key.replace(/[：:]/g, '') }); lastType = 'company'; matched = true;
-                    }
-                    else if (key.includes('地址') || key.includes('住址') || key.includes('居住') || key.includes('戶籍') || key.includes('通訊') || value.match(/[縣市區路街巷弄號樓]/) || value.toLowerCase().includes('box')) {
-                        newAddressEntries.push({ id: Date.now() + Math.random(), mainText: value, subText: key }); lastType = 'address'; matched = true;
-                    }
-                    else if (key.match(/(高管|主管|經理|幹部|董事|監察|負責人)/)) {
-                        newNameEntries.push({ id: Date.now() + Math.random(), mainText: value, subText: key }); lastType = null; matched = true;
-                    }
-                    else {
-                        newNameEntries.push({ id: Date.now() + Math.random(), mainText: value, subText: key });
-                        if (key.includes('本人') || key.includes('客戶') || key.includes('申請人')) detectedCustomerName = value;
-                        lastType = null; matched = true;
-                    }
-                });
+          lines.forEach(line => {
+            const cleanLine = line.trim();
+            if (!cleanLine) return;
+            let key = "",
+              value = "";
+            let matched = false;
+            const genericMatch = cleanLine.match(regexGeneric);
 
-                if (newNameEntries.length === 0 && newAddressEntries.length === 0 && newCompanyEntries.length === 0) {
-                    showAlert("匯入失敗", "⚠️ 無法辨識任何資料。\n請確認格式為「標籤：內容」，例如：\n爸爸：陳大明\n地址：台北市...");
-                    return;
-                }
+            if (genericMatch) {
+              key = genericMatch[1].trim();
+              value = genericMatch[2].trim();
+              if (!value) return;
+            } else {
+              if (
+                (lastType === "address" || lastType === "company") &&
+                !cleanLine.includes("：") &&
+                !cleanLine.includes(":")
+              ) {
+                if (lastType === "address" && newAddressEntries.length > 0)
+                  newAddressEntries[newAddressEntries.length - 1].mainText += " " + cleanLine;
+              }
+              return;
+            }
 
-                setDataStore(prev => ({
-                    name: { ...prev.name, entries: newNameEntries.length > 0 ? newNameEntries : prev.name.entries, selectedId: newNameEntries.length > 0 ? newNameEntries[0].id : prev.name.selectedId },
-                    address: { ...prev.address, entries: newAddressEntries.length > 0 ? newAddressEntries : prev.address.entries, selectedId: newAddressEntries.length > 0 ? newAddressEntries[0].id : prev.address.selectedId },
-                    company: { ...prev.company, entries: newCompanyEntries.length > 0 ? newCompanyEntries : prev.company.entries, selectedId: newCompanyEntries.length > 0 ? newCompanyEntries[0].id : prev.company.selectedId }
-                }));
+            if (
+              key.includes("公司") ||
+              key.includes("企業") ||
+              value.toLowerCase().includes("ltd") ||
+              value.includes("有限公司") ||
+              value.includes("股份有限公司")
+            ) {
+              newCompanyEntries.push({
+                id: Date.now() + Math.random(),
+                mainText: value,
+                subText: key.replace(/[：:]/g, ""),
+              });
+              lastType = "company";
+              matched = true;
+            } else if (
+              key.includes("地址") ||
+              key.includes("住址") ||
+              key.includes("居住") ||
+              key.includes("戶籍") ||
+              key.includes("通訊") ||
+              value.match(/[縣市區路街巷弄號樓]/) ||
+              value.toLowerCase().includes("box")
+            ) {
+              newAddressEntries.push({
+                id: Date.now() + Math.random(),
+                mainText: value,
+                subText: key,
+              });
+              lastType = "address";
+              matched = true;
+            } else if (key.match(/(高管|主管|經理|幹部|董事|監察|負責人)/)) {
+              newNameEntries.push({
+                id: Date.now() + Math.random(),
+                mainText: value,
+                subText: key,
+              });
+              lastType = null;
+              matched = true;
+            } else {
+              newNameEntries.push({
+                id: Date.now() + Math.random(),
+                mainText: value,
+                subText: key,
+              });
+              if (key.includes("本人") || key.includes("客戶") || key.includes("申請人"))
+                detectedCustomerName = value;
+              lastType = null;
+              matched = true;
+            }
+          });
 
-                if (detectedCustomerName) setCustomerName(detectedCustomerName);
-                setShowImportModal(false); setImportText(''); 
-                showAlert("匯入成功", `✅ 智慧匯入成功！\n\n👤 姓名：${newNameEntries.length} 筆\n📍 地址：${newAddressEntries.length} 筆\n🏢 企業：${newCompanyEntries.length} 筆`);
-            };
-
-            // 輔助計算：文字排版
-            const calculateTextLayout = (ctx, text, config, MAX_CHARS = 15) => {
-                const lines = [];
-                // 1. 優先處理使用者手動輸入的換行 (\n)
-                const userLines = text.split('\n');
-                
-                userLines.forEach(uLine => {
-                    if (uLine.length === 0) {
-                        lines.push(''); // 保留空行
-                    } else {
-                        // 2. 只有當單行超過 MAX_CHARS 時才自動換行
-                        for (let i = 0; i < uLine.length; i += MAX_CHARS) {
-                            lines.push(uLine.slice(i, i + MAX_CHARS));
-                        }
-                    }
-                });
-
-                return lines;
-            };
-
-            // 繪製與測量輔助函數
-            const drawContent = (ctx, img, entry, layoutConfig, globalFieldsData, isPreview = false, activeKey = null) => {
-                if (!img || img.width === 0) return;
-                if (ctx.canvas.width !== img.width) ctx.canvas.width = img.width;
-                if (ctx.canvas.height !== img.height) ctx.canvas.height = img.height;
-                ctx.drawImage(img, 0, 0);
-                
-                const textData = { main: entry.mainText, sub: entry.subText, date: globalFieldsData.date, services: globalFieldsData.services };
-                const labels = { main: modeConfig.fields.main, sub: modeConfig.fields.sub, date: '盤點日期', services: 'Services' };
-                const MAX_CHARS = 15;
-
-                Object.keys(layoutConfig).forEach(key => {
-                    const config = layoutConfig[key];
-                    const rawText = textData[key] || '';
-                    ctx.font = `bold ${config.size}px "Noto Serif TC", "Microsoft JhengHei", "PMingLiU", serif`;
-                    ctx.fillStyle = config.color;
-                    ctx.textBaseline = 'top';
-
-                    const lines = calculateTextLayout(ctx, rawText, config, MAX_CHARS);
-
-                    // 繪製邏輯
-                    lines.forEach((line, idx) => {
-                        if (config.vertical) {
-                            // 直排：修改為「由左至右」排列 (idx 增加，X 增加)
-                            // Line 0 在 x, Line 1 在 x + size * 1.1 ...
-                            const lineX = config.x + (idx * config.size * 1.1);
-                            
-                            for (let i = 0; i < line.length; i++) {
-                                const char = line[i];
-                                const isAscii = char.charCodeAt(0) < 128;
-                                const offsetX = isAscii && config.size > 20 ? config.size * 0.25 : 0;
-                                ctx.fillText(char, lineX + offsetX, config.y + (i * config.size * 1.1));
-                            }
-                        } else {
-                            // 橫排：超過換行時，新的行往下列
-                            const lineY = config.y + (idx * config.size * 1.1);
-                            ctx.fillText(line, config.x, lineY);
-                        }
-                    });
-
-                    // 預覽框邏輯 (包含所有行)
-                    if (isPreview && activeTab === 'layout') {
-                        let boxX, boxY, boxW, boxH;
-
-                        if (config.vertical) {
-                            const numCols = lines.length;
-                            const colWidth = config.size * 1.1; // 估算行寬含間距
-                            // 總寬度：包含所有直行
-                            boxW = numCols * colWidth + (config.size * 0.1); 
-                            
-                            // 由左至右：框的左上角 X = config.x
-                            boxX = config.x - 5; 
-                            boxY = config.y - 5;
-
-                            // 總高度：最長的一行的長度
-                            const maxLen = Math.max(0, ...lines.map(l => l.length));
-                            boxH = maxLen * config.size * 1.1 + 10;
-                        } else {
-                            const numLines = lines.length;
-                            const lineHeight = config.size * 1.1;
-                            
-                            boxX = config.x - 5;
-                            boxY = config.y - 5;
-                            boxH = numLines * lineHeight + 10;
-                            
-                            // 總寬度：最寬的一行的寬度
-                            let maxWidth = 0;
-                            lines.forEach(l => {
-                                const m = ctx.measureText(l);
-                                if (m.width > maxWidth) maxWidth = m.width;
-                            });
-                            boxW = maxWidth + 10;
-                        }
-
-                        ctx.strokeStyle = activeKey === key ? '#4f46e5' : 'rgba(100, 100, 100, 0.5)'; 
-                        ctx.lineWidth = 2; 
-                        ctx.setLineDash([5, 5]); 
-                        ctx.strokeRect(boxX, boxY, boxW, boxH); 
-                        ctx.setLineDash([]);
-                        
-                        // 標籤位置微調
-                        ctx.font = '14px sans-serif'; 
-                        ctx.fillStyle = '#4f46e5'; 
-                        ctx.fillText(labels[key], config.x, config.y - 20);
-                        
-                        // 編輯提示
-                        if (activeKey === key) {
-                             ctx.fillStyle = '#4f46e5';
-                             ctx.font = '12px sans-serif';
-                             ctx.fillText("點兩下編輯", config.x, config.y + boxH + 5);
-                        }
-                    }
-                });
-            };
-
-            useEffect(() => {
-                if (!currentImageSrc || !canvasRef.current) return;
-                const canvas = canvasRef.current;
-                const ctx = canvas.getContext('2d');
-                const img = new Image(); img.src = currentImageSrc;
-                const currentEntry = entries.find(e => e.id === currentEntryId) || entries[0];
-                const render = () => { setCanvasSize({ width: img.width, height: img.height }); drawContent(ctx, img, currentEntry, currentLayout, globalFields, true, draggingKey); };
-                if (img.complete) render(); else img.onload = render;
-            }, [currentImageSrc, currentData, currentLayout, activeTab, draggingKey, currentMode]);
-
-            const handleImageUpload = (e) => { const file = e.target.files[0]; if (file) { const reader = new FileReader(); reader.onload = (event) => { setModeImages(prev => ({ ...prev, [currentMode]: event.target.result })); }; reader.readAsDataURL(file); } e.target.value = ''; };
-            const handleRemoveImage = () => { showConfirm('確認移除', `確定要移除「${modeConfig.label}」的底圖嗎？`, () => { setModeImages(prev => ({ ...prev, [currentMode]: null })); }); };
-            
-            const getPointerPos = (e) => {
-                const rect = canvasRef.current.getBoundingClientRect(); const scaleX = canvasRef.current.width / rect.width; const scaleY = canvasRef.current.height / rect.height;
-                let clientX = e.clientX, clientY = e.clientY; if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
-                return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
-            };
-
-            // 判斷點擊位置是否在文字框內的邏輯 (共用)
-            const getHitTarget = (pos, ctx) => {
-                const keys = Object.keys(currentLayout);
-                const MAX_CHARS = 15;
-                const currentEntry = entries.find(e => e.id === currentEntryId) || entries[0];
-
-                for (let key of keys) {
-                    const config = currentLayout[key]; 
-                    let text = ''; 
-                    if(key === 'main') text = currentEntry.mainText; 
-                    else if(key === 'sub') text = currentEntry.subText; 
-                    else if(key === 'date') text = globalFields.date; 
-                    else if(key === 'services') text = globalFields.services;
-                    
-                    ctx.font = `bold ${config.size}px "Noto Serif TC", serif`; 
-                    
-                    const lines = calculateTextLayout(ctx, text, config, MAX_CHARS);
-
-                    let hitX, hitY, hitW, hitH;
-                    if (config.vertical) {
-                        const numCols = lines.length;
-                        const colWidth = config.size * 1.1;
-                        // 左至右：HitBox X 從 config.x 開始
-                        hitX = config.x; 
-                        hitY = config.y;
-                        hitW = numCols * colWidth + (config.size * 0.1);
-                        const maxLen = Math.max(0, ...lines.map(l => l.length));
-                        hitH = maxLen * config.size * 1.1;
-                    } else {
-                        const numLines = lines.length;
-                        const lineHeight = config.size * 1.1;
-                        hitX = config.x;
-                        hitY = config.y;
-                        hitH = numLines * lineHeight;
-                        let maxWidth = 0;
-                        lines.forEach(l => {
-                            const m = ctx.measureText(l);
-                            if (m.width > maxWidth) maxWidth = m.width;
-                        });
-                        hitW = maxWidth;
-                    }
-
-                    if (pos.x >= hitX && pos.x <= hitX + hitW && pos.y >= hitY && pos.y <= hitY + hitH) {
-                         // 計算相對於 Canvas 顯示大小的 Rect (用於 Textarea 定位)
-                         const rect = canvasRef.current.getBoundingClientRect();
-                         const scaleX = rect.width / canvasRef.current.width;
-                         const scaleY = rect.height / canvasRef.current.height;
-                         
-                         return { 
-                             key, 
-                             text, 
-                             // 儲存真實 Canvas 座標
-                             rect: { x: hitX, y: hitY, w: Math.max(hitW, 100), h: Math.max(hitH, 50) },
-                             // 儲存顯示用的座標
-                             displayRect: {
-                                 left: (hitX * scaleX) + rect.left,
-                                 top: (hitY * scaleY) + rect.top,
-                                 width: Math.max(hitW * scaleX, 150),
-                                 height: Math.max(hitH * scaleY, 60)
-                             }
-                         };
-                    }
-                }
-                return null;
-            };
-
-            const handlePointerDown = (e) => {
-                // 如果正在編輯中，點擊外部應先完成編輯 (這部分由 onBlur 處理，這裡只需判斷是否要開始拖曳)
-                if (editingTarget) return;
-
-                if (activeTab !== 'layout' || !canvasRef.current) return;
-                const pos = getPointerPos(e); 
-                const ctx = canvasRef.current.getContext('2d'); 
-                
-                const target = getHitTarget(pos, ctx);
-                if (target) {
-                    setDraggingKey(target.key); 
-                    setDragOffset({ x: pos.x - currentLayout[target.key].x, y: pos.y - currentLayout[target.key].y }); 
-                }
-            };
-
-            const handleDoubleClick = (e) => {
-                if (!canvasRef.current) return;
-                const pos = getPointerPos(e);
-                const ctx = canvasRef.current.getContext('2d');
-                const target = getHitTarget(pos, ctx);
-                
-                if (target) {
-                    // 為了 UX，我們將 Textarea 顯示在畫布容器的相對位置，而不是整個頁面的絕對位置
-                    // 重新計算相對於 .relative container 的位置
-                    const containerRect = canvasRef.current.parentElement.getBoundingClientRect();
-                    const rect = canvasRef.current.getBoundingClientRect();
-                    const scaleX = rect.width / canvasRef.current.width;
-                    const scaleY = rect.height / canvasRef.current.height;
-
-                    const relLeft = (target.rect.x * scaleX) + (rect.left - containerRect.left);
-                    const relTop = (target.rect.y * scaleY) + (rect.top - containerRect.top);
-                    
-                    setEditingTarget({
-                        key: target.key,
-                        value: target.text,
-                        style: {
-                            left: relLeft,
-                            top: relTop,
-                            minWidth: Math.max(target.rect.w * scaleX, 200),
-                            minHeight: Math.max(target.rect.h * scaleY, 80)
-                        }
-                    });
-                    setDraggingKey(null); // 停止拖曳
-                }
-            };
-
-            const handleEditSave = () => {
-                if (!editingTarget) return;
-                const { key, value } = editingTarget;
-                
-                if (key === 'date' || key === 'services') {
-                    handleGlobalFieldChange(key, value);
-                } else {
-                    updateEntry(currentEntryId, key === 'main' ? 'mainText' : 'subText', value);
-                }
-                setEditingTarget(null);
-            };
-
-            const handlePointerMove = (e) => { 
-                if (editingTarget) return; // 編輯時不拖曳
-                if (!draggingKey) return; 
-                if (e.cancelable) e.preventDefault(); 
-                const pos = getPointerPos(e); 
-                updateLayout(draggingKey, { x: pos.x - dragOffset.x, y: pos.y - dragOffset.y }); 
-            };
-            
-            const handlePointerUp = () => setDraggingKey(null);
-            const addEntry = () => { const newId = Math.max(...entries.map(e => e.id), 0) + 1; updateCurrentDataStore({ entries: [...entries, { id: newId, mainText: '', subText: '' }], selectedId: newId }); };
-            const removeEntry = (id) => { if (entries.length <= 1) return; const newEntries = entries.filter(e => e.id !== id); let newSelectedId = currentEntryId; if (currentEntryId === id) newSelectedId = newEntries[0].id; updateCurrentDataStore({ entries: newEntries, selectedId: newSelectedId }); };
-            const updateEntry = (id, field, value) => { updateCurrentDataStore({ entries: entries.map(e => e.id === id ? { ...e, [field]: value } : e) }); };
-            const clearEntries = () => { showConfirm('確認清空', `確定要清空「${modeConfig.label}」的所有資料嗎？`, () => { updateCurrentDataStore({ entries: [{ id: 1, mainText: '', subText: '' }], selectedId: 1 }); }); };
-            
-            const handleDownloadCurrent = () => {
-                if (!canvasRef.current || !currentData) return;
-                const currentEntry = entries.find(e => e.id === currentEntryId);
-                const safeName = currentEntry ? currentEntry.mainText.replace(/[\/\\:*?"<>|]/g, "_") : "軌跡圖";
-                const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.9);
-                const link = document.createElement('a'); link.download = `${safeName}_${modeConfig.label}.jpg`; link.href = dataUrl;
-                document.body.appendChild(link); link.click(); document.body.removeChild(link);
-            };
-
-            const handleGenerateImages = async () => {
-                if (!hasAnyImage) { showAlert('提示', "請至少上傳一張底圖或等待組件載入..."); return; }
-                setIsGenerating(true); setProgress(0); setGeneratedResults([]);
-                try {
-                    const results = [];
-                    const modeKeys = Object.keys(MODES);
-                    let totalItems = 0;
-                    Object.keys(MODES).forEach(k => { if (modeImages[k]) totalItems += dataStore[k].entries.length; });
-                    let processed = 0;
-
-                    for (let m = 0; m < modeKeys.length; m++) {
-                        const modeKey = modeKeys[m];
-                        const imgSrc = modeImages[modeKey];
-                        if (!imgSrc) continue;
-                        const data = dataStore[modeKey];
-                        const layout = layouts[modeKey];
-                        const config = MODES[modeKey];
-                        
-                        const img = new Image(); img.src = imgSrc;
-                        await new Promise(r => { if (img.complete) r(); else img.onload = r; });
-                        const tempCanvas = document.createElement('canvas'); 
-                        const ctx = tempCanvas.getContext('2d');
-
-                        for (let i = 0; i < data.entries.length; i++) {
-                            const entry = data.entries[i];
-                            drawContent(ctx, img, entry, layout, data.global, false);
-                            
-                            const blob = await new Promise((resolve) => tempCanvas.toBlob(resolve, 'image/jpeg', 0.9));
-                            const url = URL.createObjectURL(blob);
-                            const name = `${entry.mainText.replace(/[\/\\:*?"<>|]/g, "_")}_${config.label}.jpg`;
-                            
-                            results.push({ url, name, blob });
-                            processed++;
-                            setProgress(Math.round((processed / totalItems) * 100));
-                            await new Promise(r => setTimeout(r, 10));
-                        }
-                    }
-                    setGeneratedResults(results);
-                    setShowDownloadModal(true);
-                } catch (e) { console.error(e); showAlert("錯誤", `生成失敗：${e.message}`); } 
-                finally { setIsGenerating(false); setProgress(0); }
-            };
-
-            const handleDownloadAll = async () => {
-                if (generatedResults.length === 0) return;
-                
-                if (typeof JSZip === 'undefined') {
-                    showAlert("錯誤", "壓縮元件尚未載入完成，請重整頁面後再試。");
-                    return;
-                }
-
-                const zip = new JSZip();
-                
-                generatedResults.forEach((item) => {
-                    zip.file(item.name, item.blob);
-                });
-
-                try {
-                    const content = await zip.generateAsync({ type: "blob" });
-                    const url = URL.createObjectURL(content);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = `${customerName || '軌跡圖'}_全部圖片.zip`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(url);
-                } catch (e) {
-                    console.error(e);
-                    showAlert("錯誤", "建立壓縮檔失敗：" + e.message);
-                }
-            };
-
-            const handleShareAll = async () => {
-                if (!navigator.share) { showAlert("不支援", "您的瀏覽器不支援直接分享多檔案，請使用下方的列表手動下載。"); return; }
-                const filesArray = generatedResults.map(item => new File([item.blob], item.name, { type: 'image/jpeg' }));
-                if (navigator.canShare && navigator.canShare({ files: filesArray })) {
-                    try { await navigator.share({ files: filesArray, title: '軌跡圖生成結果', text: `這是 ${customerName} 的軌跡圖檔案` }); } catch (error) { console.log('分享取消或失敗', error); }
-                } else { showAlert("不支援", "您的裝置不支援一次分享這麼多圖片，請嘗試分批或使用下方列表手動下載。"); }
-            };
-
-            return (
-                <div className="min-h-screen bg-gray-100 flex flex-col font-sans text-gray-800">
-                    
-                    {/* 自定義 Modal 組件 */}
-                    <Modal 
-                        isOpen={alertState.isOpen} 
-                        onClose={closeAlert} 
-                        title={alertState.title}
-                        footer={<button onClick={closeAlert} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">知道了</button>}
-                    >
-                        <div className="flex items-start gap-3">
-                            <AlertCircle className="w-6 h-6 text-indigo-600 mt-0.5 shrink-0" />
-                            <p className="text-gray-600 whitespace-pre-line leading-relaxed">{alertState.message}</p>
-                        </div>
-                    </Modal>
-
-                    <Modal 
-                        isOpen={confirmState.isOpen} 
-                        onClose={closeConfirm} 
-                        title={confirmState.title}
-                        type="danger"
-                        footer={
-                            <>
-                                <button onClick={closeConfirm} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">取消</button>
-                                <button onClick={handleConfirmAction} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium">確認執行</button>
-                            </>
-                        }
-                    >
-                        <div className="flex items-start gap-3">
-                            <AlertCircle className="w-6 h-6 text-red-600 mt-0.5 shrink-0" />
-                            <p className="text-gray-600 whitespace-pre-line leading-relaxed">{confirmState.message}</p>
-                        </div>
-                    </Modal>
-
-                    {showDownloadModal && (
-                        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
-                                <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-xl">
-                                    <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2"><ImageIcon className="w-5 h-5 text-indigo-600" />圖片生成中心 ({generatedResults.length} 張)</h3>
-                                    <button onClick={() => setShowDownloadModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-6 h-6" /></button>
-                                </div>
-                                <div className="p-4 bg-blue-50 border-b border-blue-100 text-sm text-blue-800 flex flex-col sm:flex-row justify-between items-center gap-3">
-                                    <span>💡 手機用戶：點擊「分享/儲存全部」可一次存入相簿，或長按下方圖片個別儲存。</span>
-                                    <div className="flex gap-2">
-                                        <button onClick={handleDownloadAll} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow transition whitespace-nowrap">
-                                            <FileArchive className="w-4 h-4" /> 一鍵下載全部 (ZIP)
-                                        </button>
-                                        {navigator.share && (<button onClick={handleShareAll} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow transition whitespace-nowrap"><Share2 className="w-4 h-4" /> 分享/儲存全部</button>)}
-                                    </div>
-                                </div>
-                                <div className="p-4 flex-1 overflow-y-auto bg-gray-100 grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    {generatedResults.map((item, idx) => (
-                                        <div key={idx} className="bg-white p-2 rounded-lg shadow flex flex-col gap-2 group">
-                                            <div className="aspect-[3/4] bg-gray-200 rounded overflow-hidden relative"><img src={item.url} alt={item.name} className="w-full h-full object-contain" /></div>
-                                            <div className="text-xs font-bold text-gray-600 truncate">{item.name}</div>
-                                            <a href={item.url} download={item.name} className="flex items-center justify-center gap-1 w-full py-2 bg-gray-100 hover:bg-indigo-50 text-indigo-600 font-bold rounded text-xs transition border border-gray-200"><Download className="w-3 h-3" /> 下載此張</a>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="p-3 text-center text-xs text-gray-400 bg-white rounded-b-xl">提示：如果「分享全部」沒反應，請使用單張下載。</div>
-                            </div>
-                        </div>
-                    )}
-                    {showImportModal && (<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]"><div className="p-4 border-b border-gray-100 flex justify-between items-center"><h3 className="text-lg font-bold text-gray-800 flex items-center gap-2"><FileText className="w-5 h-5 text-indigo-600" />智慧資料匯入</h3><button onClick={() => setShowImportModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button></div><div className="p-4 flex-1 overflow-hidden flex flex-col gap-2"><div className="bg-blue-50 text-blue-800 text-sm p-3 rounded-lg border border-blue-100"><p className="font-bold mb-1">使用說明：</p><p>請貼入資料。系統會自動根據關鍵字分配到對應軌跡圖。</p></div><textarea className="flex-1 w-full border border-gray-300 rounded-lg p-4 font-mono text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none" placeholder={`範例：\n爸爸姓名：陳秉豐\n爸媽家住址：台中市...\n公司名稱：鈞豐...`} value={importText} onChange={(e) => setImportText(e.target.value)} style={{ minHeight: '300px' }}/></div><div className="p-4 border-t border-gray-100 flex justify-end gap-2 bg-gray-50 rounded-b-xl"><button onClick={() => setShowImportModal(false)} className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-200 rounded-lg transition">取消</button><button onClick={parseAndImportData} disabled={!importText.trim()} className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-md transition disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"><Check className="w-4 h-4" /> 開始解析並匯入</button></div></div></div>)}
-                    <header className="bg-white shadow-sm z-10 px-4 py-3 control-panel"><div className="max-w-7xl mx-auto flex flex-col xl:flex-row justify-between items-center gap-4"><div className="flex flex-col md:flex-row items-center gap-4 w-full xl:w-auto"><h1 className="text-xl font-bold text-gray-900 hidden md:flex items-center gap-2 whitespace-nowrap"><Users className="w-6 h-6 text-indigo-600" />多模式軌跡生成</h1><div className="flex items-center gap-2 w-full md:w-auto bg-gray-50 p-1.5 rounded-lg border border-gray-200"><FolderOpen className="w-4 h-4 text-gray-400 ml-2" /><input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="客戶/專案名稱" className="bg-transparent border-none text-sm font-bold text-gray-700 focus:ring-0 focus:outline-none w-32 md:w-40 placeholder-gray-400"/><div className="h-4 w-px bg-gray-300 mx-1"></div><div className="flex bg-gray-200 p-0.5 rounded-md">{Object.values(MODES).map(mode => (<button key={mode.id} onClick={() => handleModeChange(mode.id)} className={`flex items-center gap-2 px-3 py-1 rounded text-xs font-medium transition-all whitespace-nowrap ${currentMode === mode.id ? 'bg-white shadow text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}>{mode.icon}<span className="hidden sm:inline">{mode.label}</span></button>))}</div></div></div><div className="flex gap-2 w-full xl:w-auto justify-end"><button onClick={() => setShowImportModal(true)} className="flex items-center gap-2 px-3 py-2 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-50 transition shadow-sm whitespace-nowrap"><FileText className="w-4 h-4" /> 智慧匯入</button><input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />{!currentImageSrc && (<button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition whitespace-nowrap"><Upload className="w-4 h-4" /> 上傳底圖</button>)}<button onClick={handleGenerateImages} disabled={!hasAnyImage || isGenerating} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white shadow-md transition-all min-w-[140px] justify-center whitespace-nowrap ${!hasAnyImage ? 'bg-gray-300 cursor-not-allowed' : isGenerating ? 'bg-indigo-400 cursor-wait' : 'bg-indigo-600 hover:bg-indigo-700'}`}>{isGenerating ? <><Loader2 className="w-4 h-4 animate-spin" /> {progress}%</> : <><ImageIcon className="w-4 h-4" /> 批量生成圖片</>}</button></div></div></header>
-                    <main className="flex-1 max-w-7xl w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6 print-container">
-                        <div className="lg:col-span-4 flex flex-col gap-4 h-[calc(100vh-6rem)] overflow-hidden control-panel">
-                            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-                                <div className="flex items-center justify-between mb-3"><h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2"><Settings className="w-4 h-4" /> {modeConfig.label}設定</h2></div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div><label className="text-xs text-gray-500 mb-1 block">盤點日期 (右上)</label><input type="text" value={globalFields.date} onChange={(e) => handleGlobalFieldChange('date', e.target.value)} className="w-full px-2 py-1.5 text-sm border rounded bg-gray-50 focus:ring-1 focus:ring-indigo-500 outline-none"/></div>
-                                    <div><label className="text-xs text-gray-500 mb-1 block">Services (右上)</label><input type="text" value={globalFields.services} onChange={(e) => handleGlobalFieldChange('services', e.target.value)} className="w-full px-2 py-1.5 text-sm border rounded bg-gray-50 focus:ring-1 focus:ring-indigo-500 outline-none"/></div>
-                                </div>
-                            </div>
-                            <div className="flex bg-gray-200 p-1 rounded-lg shrink-0"><button onClick={() => setActiveTab('data')} className={`flex-1 py-2 text-sm font-medium rounded-md flex justify-center items-center gap-2 transition ${activeTab === 'data' ? 'bg-white shadow text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}><Layout className="w-4 h-4" /> 編輯資料</button><button onClick={() => setActiveTab('layout')} className={`flex-1 py-2 text-sm font-medium rounded-md flex justify-center items-center gap-2 transition ${activeTab === 'layout' ? 'bg-white shadow text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}><MousePointer2 className="w-4 h-4" /> 拖曳排版</button></div>
-                            <div className="flex-1 overflow-y-auto bg-white rounded-xl shadow-sm border border-gray-200">
-                                {activeTab === 'data' && (<div className="p-4 space-y-3"><div className="flex justify-between items-center mb-2"><span className="text-xs font-bold text-gray-500">共 {entries.length} 筆資料</span><div className="flex gap-2"><button onClick={clearEntries} className="text-red-400 hover:bg-red-50 p-1 rounded text-xs flex items-center gap-1">清空</button><button onClick={addEntry} className="text-indigo-600 hover:bg-indigo-50 p-1 rounded text-xs flex items-center gap-1"><Plus className="w-3 h-3" /> 新增</button></div></div>{entries.map((entry, index) => (<div key={entry.id} onClick={() => handleSelectEntry(entry.id)} className={`group flex items-center gap-2 p-3 rounded-lg border transition cursor-pointer ${currentEntryId === entry.id ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200' : 'border-gray-200 hover:border-indigo-300'}`}><div className="text-gray-400 font-mono text-xs w-6">{index + 1}.</div><div className="flex-1 grid grid-cols-2 gap-2"><div><label className="text-[10px] text-gray-400 block mb-0.5">{modeConfig.fields.main}</label><input type="text" value={entry.mainText} onChange={(e) => updateEntry(entry.id, 'mainText', e.target.value)} className="w-full bg-transparent border-b border-gray-300 focus:border-indigo-500 outline-none text-sm font-medium px-0 py-0.5" placeholder={modeConfig.fields.main}/></div><div><label className="text-[10px] text-gray-400 block mb-0.5">{modeConfig.fields.sub}</label><input type="text" value={entry.subText} onChange={(e) => updateEntry(entry.id, 'subText', e.target.value)} className="w-full bg-transparent border-b border-gray-300 focus:border-indigo-500 outline-none text-sm text-gray-600 px-0 py-0.5" placeholder={modeConfig.fields.sub}/></div></div><button onClick={(e) => { e.stopPropagation(); removeEntry(entry.id); }} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div>))}<button onClick={addEntry} className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-400 rounded-lg hover:border-indigo-400 hover:text-indigo-500 transition flex justify-center items-center gap-2 mt-4"><Plus className="w-4 h-4" /> 點擊新增下一筆</button></div>)}
-                                {activeTab === 'layout' && (<div className="p-4 space-y-6"><div className="bg-blue-50 border border-blue-200 text-blue-800 text-xs p-3 rounded-lg mb-4">當前調整的是「{modeConfig.label}」的排版設定。</div>{[{ key: 'main', label: modeConfig.fields.main }, { key: 'sub', label: modeConfig.fields.sub }, { key: 'date', label: '盤點日期' }, { key: 'services', label: 'Services' }].map((item) => (<div key={item.key} className="space-y-2 border-b border-gray-100 pb-4 last:border-0"><div className="flex items-center justify-between"><span className="font-bold text-sm text-gray-700 flex items-center gap-2"><Type className="w-4 h-4 text-gray-400" />{item.label}</span><div className="flex items-center gap-2"><input type="color" value={currentLayout[item.key].color} onChange={(e) => updateLayout(item.key, { color: e.target.value })} className="w-6 h-6 rounded border-0 cursor-pointer p-0"/><button onClick={() => updateLayout(item.key, { vertical: !currentLayout[item.key].vertical })} className={`text-xs px-2 py-1 rounded border ${currentLayout[item.key].vertical ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-gray-100 text-gray-600'}`}>{currentLayout[item.key].vertical ? '直排' : '橫排'}</button></div></div><div className="grid grid-cols-2 gap-4"><div><label className="text-xs text-gray-400">字體大小 ({currentLayout[item.key].size}px)</label><input type="range" min="10" max="150" value={currentLayout[item.key].size} onChange={(e) => updateLayout(item.key, { size: Number(e.target.value) })} className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-2"/></div></div></div>))}</div>)}
-                            </div>
-                        </div>
-                        <div className="lg:col-span-8 bg-gray-50 rounded-xl border border-gray-200 flex flex-col overflow-hidden relative group">
-                            <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur px-3 py-1 rounded-full shadow text-xs font-bold text-gray-500 pointer-events-none border border-gray-200">{activeTab === 'layout' ? '✋ 拖曳排版模式 (可點兩下編輯)' : '👁️ 資料預覽模式'}</div>
-                            {currentImageSrc && (<div className="absolute top-4 right-4 z-10 flex gap-2 floating-tools">
-                                <button onClick={handleDownloadCurrent} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg shadow border border-blue-500 text-xs font-bold flex items-center gap-2 transition" title="下載當前圖片(JPG)"><Download className="w-3 h-3" /> 下載圖片</button>
-                                <button onClick={() => fileInputRef.current.click()} className="bg-white/90 backdrop-blur hover:bg-white text-gray-600 hover:text-indigo-600 px-3 py-1.5 rounded-lg shadow border border-gray-200 text-xs font-bold flex items-center gap-2 transition" title="更換底圖"><Upload className="w-3 h-3" /> 更換</button>
-                                <button onClick={handleRemoveImage} className="bg-white/90 backdrop-blur hover:bg-red-50 text-gray-600 hover:text-red-600 px-3 py-1.5 rounded-lg shadow border border-gray-200 text-xs font-bold flex items-center gap-2 transition" title="移除底圖"><Trash2 className="w-3 h-3" /> 移除</button>
-                            </div>)}
-                            <div className="flex-1 overflow-auto flex items-center justify-center p-8 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
-                                {!currentImageSrc ? (
-                                    <div onClick={() => fileInputRef.current.click()} className="text-center p-12 border-4 border-dashed border-gray-300 rounded-3xl cursor-pointer hover:bg-gray-100 hover:border-indigo-400 transition group max-w-md"><Upload className="w-16 h-16 text-gray-300 group-hover:text-indigo-400 mx-auto mb-4" /><h3 className="text-xl font-bold text-gray-600 group-hover:text-indigo-600">步驟 1：上傳底圖</h3><p className="text-gray-400 mt-2 text-sm">請上傳「{modeConfig.label}」的空白背景圖</p><div className="mt-4 text-xs text-indigo-500 bg-indigo-50 px-2 py-1 rounded">當前模式：{modeConfig.label}</div></div>
-                                ) : (
-                                    <div className="relative">
-                                        <canvas 
-                                            ref={canvasRef} 
-                                            onMouseDown={handlePointerDown} 
-                                            onMouseMove={handlePointerMove} 
-                                            onMouseUp={handlePointerUp} 
-                                            onMouseLeave={handlePointerUp}
-                                            
-                                            onDoubleClick={handleDoubleClick}
-
-                                            onTouchStart={handlePointerDown}
-                                            onTouchMove={handlePointerMove}
-                                            onTouchEnd={handlePointerUp}
-                                            onTouchCancel={handlePointerUp}
-                                            
-                                            className={`max-w-full shadow-2xl bg-white ${activeTab === 'layout' ? 'cursor-move' : 'cursor-default'}`} 
-                                            style={{ maxHeight: '80vh' }}
-                                        />
-                                        {/* 直接編輯的 Textarea 覆蓋層 */}
-                                        {editingTarget && (
-                                            <textarea
-                                                className="editing-textarea absolute"
-                                                style={{
-                                                    left: editingTarget.style.left,
-                                                    top: editingTarget.style.top,
-                                                    width: editingTarget.style.minWidth,
-                                                    height: editingTarget.style.minHeight,
-                                                }}
-                                                value={editingTarget.value}
-                                                onChange={(e) => setEditingTarget({ ...editingTarget, value: e.target.value })}
-                                                onBlur={handleEditSave}
-                                                autoFocus
-                                            />
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </main>
-                </div>
+          if (
+            newNameEntries.length === 0 &&
+            newAddressEntries.length === 0 &&
+            newCompanyEntries.length === 0
+          ) {
+            showAlert(
+              "匯入失敗",
+              "⚠️ 無法辨識任何資料。\n請確認格式為「標籤：內容」，例如：\n爸爸：陳大明\n地址：台北市..."
             );
-        }
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+            return;
+          }
+
+          setDataStore(prev => ({
+            name: {
+              ...prev.name,
+              entries: newNameEntries.length > 0 ? newNameEntries : prev.name.entries,
+              selectedId: newNameEntries.length > 0 ? newNameEntries[0].id : prev.name.selectedId,
+            },
+            address: {
+              ...prev.address,
+              entries: newAddressEntries.length > 0 ? newAddressEntries : prev.address.entries,
+              selectedId:
+                newAddressEntries.length > 0 ? newAddressEntries[0].id : prev.address.selectedId,
+            },
+            company: {
+              ...prev.company,
+              entries: newCompanyEntries.length > 0 ? newCompanyEntries : prev.company.entries,
+              selectedId:
+                newCompanyEntries.length > 0 ? newCompanyEntries[0].id : prev.company.selectedId,
+            },
+          }));
+
+          if (detectedCustomerName) setCustomerName(detectedCustomerName);
+          setShowImportModal(false);
+          setImportText("");
+          showAlert(
+            "匯入成功",
+            `✅ 智慧匯入成功！\n\n👤 姓名：${newNameEntries.length} 筆\n📍 地址：${newAddressEntries.length} 筆\n🏢 企業：${newCompanyEntries.length} 筆`
+          );
+        };
+
+        // 輔助計算：文字排版
+        const calculateTextLayout = (ctx, text, config, MAX_CHARS = 15) => {
+          const lines = [];
+          // 1. 優先處理使用者手動輸入的換行 (\n)
+          const userLines = text.split("\n");
+
+          userLines.forEach(uLine => {
+            if (uLine.length === 0) {
+              lines.push(""); // 保留空行
+            } else {
+              // 2. 只有當單行超過 MAX_CHARS 時才自動換行
+              for (let i = 0; i < uLine.length; i += MAX_CHARS) {
+                lines.push(uLine.slice(i, i + MAX_CHARS));
+              }
+            }
+          });
+
+          return lines;
+        };
+
+        // 繪製與測量輔助函數
+        const drawContent = (
+          ctx,
+          img,
+          entry,
+          layoutConfig,
+          globalFieldsData,
+          isPreview = false,
+          activeKey = null
+        ) => {
+          if (!img || img.width === 0) return;
+          if (ctx.canvas.width !== img.width) ctx.canvas.width = img.width;
+          if (ctx.canvas.height !== img.height) ctx.canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+
+          const textData = {
+            main: entry.mainText,
+            sub: entry.subText,
+            date: globalFieldsData.date,
+            services: globalFieldsData.services,
+          };
+          const labels = {
+            main: modeConfig.fields.main,
+            sub: modeConfig.fields.sub,
+            date: "盤點日期",
+            services: "Services",
+          };
+          const MAX_CHARS = 15;
+
+          Object.keys(layoutConfig).forEach(key => {
+            const config = layoutConfig[key];
+            const rawText = textData[key] || "";
+            ctx.font = `bold ${config.size}px "Noto Serif TC", "Microsoft JhengHei", "PMingLiU", serif`;
+            ctx.fillStyle = config.color;
+            ctx.textBaseline = "top";
+
+            const lines = calculateTextLayout(ctx, rawText, config, MAX_CHARS);
+
+            // 繪製邏輯
+            lines.forEach((line, idx) => {
+              if (config.vertical) {
+                // 直排：修改為「由左至右」排列 (idx 增加，X 增加)
+                // Line 0 在 x, Line 1 在 x + size * 1.1 ...
+                const lineX = config.x + idx * config.size * 1.1;
+
+                for (let i = 0; i < line.length; i++) {
+                  const char = line[i];
+                  const isAscii = char.charCodeAt(0) < 128;
+                  const offsetX = isAscii && config.size > 20 ? config.size * 0.25 : 0;
+                  ctx.fillText(char, lineX + offsetX, config.y + i * config.size * 1.1);
+                }
+              } else {
+                // 橫排：超過換行時，新的行往下列
+                const lineY = config.y + idx * config.size * 1.1;
+                ctx.fillText(line, config.x, lineY);
+              }
+            });
+
+            // 預覽框邏輯 (包含所有行)
+            if (isPreview && activeTab === "layout") {
+              let boxX, boxY, boxW, boxH;
+
+              if (config.vertical) {
+                const numCols = lines.length;
+                const colWidth = config.size * 1.1; // 估算行寬含間距
+                // 總寬度：包含所有直行
+                boxW = numCols * colWidth + config.size * 0.1;
+
+                // 由左至右：框的左上角 X = config.x
+                boxX = config.x - 5;
+                boxY = config.y - 5;
+
+                // 總高度：最長的一行的長度
+                const maxLen = Math.max(0, ...lines.map(l => l.length));
+                boxH = maxLen * config.size * 1.1 + 10;
+              } else {
+                const numLines = lines.length;
+                const lineHeight = config.size * 1.1;
+
+                boxX = config.x - 5;
+                boxY = config.y - 5;
+                boxH = numLines * lineHeight + 10;
+
+                // 總寬度：最寬的一行的寬度
+                let maxWidth = 0;
+                lines.forEach(l => {
+                  const m = ctx.measureText(l);
+                  if (m.width > maxWidth) maxWidth = m.width;
+                });
+                boxW = maxWidth + 10;
+              }
+
+              ctx.strokeStyle = activeKey === key ? "#4f46e5" : "rgba(100, 100, 100, 0.5)";
+              ctx.lineWidth = 2;
+              ctx.setLineDash([5, 5]);
+              ctx.strokeRect(boxX, boxY, boxW, boxH);
+              ctx.setLineDash([]);
+
+              // 標籤位置微調
+              ctx.font = "14px sans-serif";
+              ctx.fillStyle = "#4f46e5";
+              ctx.fillText(labels[key], config.x, config.y - 20);
+
+              // 編輯提示
+              if (activeKey === key) {
+                ctx.fillStyle = "#4f46e5";
+                ctx.font = "12px sans-serif";
+                ctx.fillText("點兩下編輯", config.x, config.y + boxH + 5);
+              }
+            }
+          });
+        };
+
+        useEffect(() => {
+          if (!currentImageSrc || !canvasRef.current) return;
+          const canvas = canvasRef.current;
+          const ctx = canvas.getContext("2d");
+          const img = new Image();
+          img.src = currentImageSrc;
+          const currentEntry = entries.find(e => e.id === currentEntryId) || entries[0];
+          const render = () => {
+            setCanvasSize({ width: img.width, height: img.height });
+            drawContent(ctx, img, currentEntry, currentLayout, globalFields, true, draggingKey);
+          };
+          if (img.complete) render();
+          else img.onload = render;
+        }, [currentImageSrc, currentData, currentLayout, activeTab, draggingKey, currentMode]);
+
+        const handleImageUpload = e => {
+          const file = e.target.files[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = event => {
+              setModeImages(prev => ({ ...prev, [currentMode]: event.target.result }));
+            };
+            reader.readAsDataURL(file);
+          }
+          e.target.value = "";
+        };
+        const handleRemoveImage = () => {
+          showConfirm("確認移除", `確定要移除「${modeConfig.label}」的底圖嗎？`, () => {
+            setModeImages(prev => ({ ...prev, [currentMode]: null }));
+          });
+        };
+
+        const getPointerPos = e => {
+          const rect = canvasRef.current.getBoundingClientRect();
+          const scaleX = canvasRef.current.width / rect.width;
+          const scaleY = canvasRef.current.height / rect.height;
+          let clientX = e.clientX,
+            clientY = e.clientY;
+          if (e.touches && e.touches.length > 0) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+          }
+          return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+        };
+
+        // 判斷點擊位置是否在文字框內的邏輯 (共用)
+        const getHitTarget = (pos, ctx) => {
+          const keys = Object.keys(currentLayout);
+          const MAX_CHARS = 15;
+          const currentEntry = entries.find(e => e.id === currentEntryId) || entries[0];
+
+          for (let key of keys) {
+            const config = currentLayout[key];
+            let text = "";
+            if (key === "main") text = currentEntry.mainText;
+            else if (key === "sub") text = currentEntry.subText;
+            else if (key === "date") text = globalFields.date;
+            else if (key === "services") text = globalFields.services;
+
+            ctx.font = `bold ${config.size}px "Noto Serif TC", serif`;
+
+            const lines = calculateTextLayout(ctx, text, config, MAX_CHARS);
+
+            let hitX, hitY, hitW, hitH;
+            if (config.vertical) {
+              const numCols = lines.length;
+              const colWidth = config.size * 1.1;
+              // 左至右：HitBox X 從 config.x 開始
+              hitX = config.x;
+              hitY = config.y;
+              hitW = numCols * colWidth + config.size * 0.1;
+              const maxLen = Math.max(0, ...lines.map(l => l.length));
+              hitH = maxLen * config.size * 1.1;
+            } else {
+              const numLines = lines.length;
+              const lineHeight = config.size * 1.1;
+              hitX = config.x;
+              hitY = config.y;
+              hitH = numLines * lineHeight;
+              let maxWidth = 0;
+              lines.forEach(l => {
+                const m = ctx.measureText(l);
+                if (m.width > maxWidth) maxWidth = m.width;
+              });
+              hitW = maxWidth;
+            }
+
+            if (pos.x >= hitX && pos.x <= hitX + hitW && pos.y >= hitY && pos.y <= hitY + hitH) {
+              // 計算相對於 Canvas 顯示大小的 Rect (用於 Textarea 定位)
+              const rect = canvasRef.current.getBoundingClientRect();
+              const scaleX = rect.width / canvasRef.current.width;
+              const scaleY = rect.height / canvasRef.current.height;
+
+              return {
+                key,
+                text,
+                // 儲存真實 Canvas 座標
+                rect: { x: hitX, y: hitY, w: Math.max(hitW, 100), h: Math.max(hitH, 50) },
+                // 儲存顯示用的座標
+                displayRect: {
+                  left: hitX * scaleX + rect.left,
+                  top: hitY * scaleY + rect.top,
+                  width: Math.max(hitW * scaleX, 150),
+                  height: Math.max(hitH * scaleY, 60),
+                },
+              };
+            }
+          }
+          return null;
+        };
+
+        const handlePointerDown = e => {
+          // 如果正在編輯中，點擊外部應先完成編輯 (這部分由 onBlur 處理，這裡只需判斷是否要開始拖曳)
+          if (editingTarget) return;
+
+          if (activeTab !== "layout" || !canvasRef.current) return;
+          const pos = getPointerPos(e);
+          const ctx = canvasRef.current.getContext("2d");
+
+          const target = getHitTarget(pos, ctx);
+          if (target) {
+            setDraggingKey(target.key);
+            setDragOffset({
+              x: pos.x - currentLayout[target.key].x,
+              y: pos.y - currentLayout[target.key].y,
+            });
+          }
+        };
+
+        const handleDoubleClick = e => {
+          if (!canvasRef.current) return;
+          const pos = getPointerPos(e);
+          const ctx = canvasRef.current.getContext("2d");
+          const target = getHitTarget(pos, ctx);
+
+          if (target) {
+            // 為了 UX，我們將 Textarea 顯示在畫布容器的相對位置，而不是整個頁面的絕對位置
+            // 重新計算相對於 .relative container 的位置
+            const containerRect = canvasRef.current.parentElement.getBoundingClientRect();
+            const rect = canvasRef.current.getBoundingClientRect();
+            const scaleX = rect.width / canvasRef.current.width;
+            const scaleY = rect.height / canvasRef.current.height;
+
+            const relLeft = target.rect.x * scaleX + (rect.left - containerRect.left);
+            const relTop = target.rect.y * scaleY + (rect.top - containerRect.top);
+
+            setEditingTarget({
+              key: target.key,
+              value: target.text,
+              style: {
+                left: relLeft,
+                top: relTop,
+                minWidth: Math.max(target.rect.w * scaleX, 200),
+                minHeight: Math.max(target.rect.h * scaleY, 80),
+              },
+            });
+            setDraggingKey(null); // 停止拖曳
+          }
+        };
+
+        const handleEditSave = () => {
+          if (!editingTarget) return;
+          const { key, value } = editingTarget;
+
+          if (key === "date" || key === "services") {
+            handleGlobalFieldChange(key, value);
+          } else {
+            updateEntry(currentEntryId, key === "main" ? "mainText" : "subText", value);
+          }
+          setEditingTarget(null);
+        };
+
+        const handlePointerMove = e => {
+          if (editingTarget) return; // 編輯時不拖曳
+          if (!draggingKey) return;
+          if (e.cancelable) e.preventDefault();
+          const pos = getPointerPos(e);
+          updateLayout(draggingKey, { x: pos.x - dragOffset.x, y: pos.y - dragOffset.y });
+        };
+
+        const handlePointerUp = () => setDraggingKey(null);
+        const addEntry = () => {
+          const newId = Math.max(...entries.map(e => e.id), 0) + 1;
+          updateCurrentDataStore({
+            entries: [...entries, { id: newId, mainText: "", subText: "" }],
+            selectedId: newId,
+          });
+        };
+        const removeEntry = id => {
+          if (entries.length <= 1) return;
+          const newEntries = entries.filter(e => e.id !== id);
+          let newSelectedId = currentEntryId;
+          if (currentEntryId === id) newSelectedId = newEntries[0].id;
+          updateCurrentDataStore({ entries: newEntries, selectedId: newSelectedId });
+        };
+        const updateEntry = (id, field, value) => {
+          updateCurrentDataStore({
+            entries: entries.map(e => (e.id === id ? { ...e, [field]: value } : e)),
+          });
+        };
+        const clearEntries = () => {
+          showConfirm("確認清空", `確定要清空「${modeConfig.label}」的所有資料嗎？`, () => {
+            updateCurrentDataStore({
+              entries: [{ id: 1, mainText: "", subText: "" }],
+              selectedId: 1,
+            });
+          });
+        };
+
+        const handleDownloadCurrent = () => {
+          if (!canvasRef.current || !currentData) return;
+          const currentEntry = entries.find(e => e.id === currentEntryId);
+          const safeName = currentEntry
+            ? currentEntry.mainText.replace(/[\/\\:*?"<>|]/g, "_")
+            : "軌跡圖";
+          const dataUrl = canvasRef.current.toDataURL("image/jpeg", 0.9);
+          const link = document.createElement("a");
+          link.download = `${safeName}_${modeConfig.label}.jpg`;
+          link.href = dataUrl;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        };
+
+        const handleGenerateImages = async () => {
+          if (!hasAnyImage) {
+            showAlert("提示", "請至少上傳一張底圖或等待組件載入...");
+            return;
+          }
+          setIsGenerating(true);
+          setProgress(0);
+          setGeneratedResults([]);
+          try {
+            const results = [];
+            const modeKeys = Object.keys(MODES);
+            let totalItems = 0;
+            Object.keys(MODES).forEach(k => {
+              if (modeImages[k]) totalItems += dataStore[k].entries.length;
+            });
+            let processed = 0;
+
+            for (let m = 0; m < modeKeys.length; m++) {
+              const modeKey = modeKeys[m];
+              const imgSrc = modeImages[modeKey];
+              if (!imgSrc) continue;
+              const data = dataStore[modeKey];
+              const layout = layouts[modeKey];
+              const config = MODES[modeKey];
+
+              const img = new Image();
+              img.src = imgSrc;
+              await new Promise(r => {
+                if (img.complete) r();
+                else img.onload = r;
+              });
+              const tempCanvas = document.createElement("canvas");
+              const ctx = tempCanvas.getContext("2d");
+
+              for (let i = 0; i < data.entries.length; i++) {
+                const entry = data.entries[i];
+                drawContent(ctx, img, entry, layout, data.global, false);
+
+                const blob = await new Promise(resolve =>
+                  tempCanvas.toBlob(resolve, "image/jpeg", 0.9)
+                );
+                const url = URL.createObjectURL(blob);
+                const name = `${entry.mainText.replace(/[\/\\:*?"<>|]/g, "_")}_${config.label}.jpg`;
+
+                results.push({ url, name, blob });
+                processed++;
+                setProgress(Math.round((processed / totalItems) * 100));
+                await new Promise(r => setTimeout(r, 10));
+              }
+            }
+            setGeneratedResults(results);
+            setShowDownloadModal(true);
+          } catch (e) {
+            console.error(e);
+            showAlert("錯誤", `生成失敗：${e.message}`);
+          } finally {
+            setIsGenerating(false);
+            setProgress(0);
+          }
+        };
+
+        const handleDownloadAll = async () => {
+          if (generatedResults.length === 0) return;
+
+          if (typeof JSZip === "undefined") {
+            showAlert("錯誤", "壓縮元件尚未載入完成，請重整頁面後再試。");
+            return;
+          }
+
+          const zip = new JSZip();
+
+          generatedResults.forEach(item => {
+            zip.file(item.name, item.blob);
+          });
+
+          try {
+            const content = await zip.generateAsync({ type: "blob" });
+            const url = URL.createObjectURL(content);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `${customerName || "軌跡圖"}_全部圖片.zip`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          } catch (e) {
+            console.error(e);
+            showAlert("錯誤", "建立壓縮檔失敗：" + e.message);
+          }
+        };
+
+        const handleShareAll = async () => {
+          if (!navigator.share) {
+            showAlert("不支援", "您的瀏覽器不支援直接分享多檔案，請使用下方的列表手動下載。");
+            return;
+          }
+          const filesArray = generatedResults.map(
+            item => new File([item.blob], item.name, { type: "image/jpeg" })
+          );
+          if (navigator.canShare && navigator.canShare({ files: filesArray })) {
+            try {
+              await navigator.share({
+                files: filesArray,
+                title: "軌跡圖生成結果",
+                text: `這是 ${customerName} 的軌跡圖檔案`,
+              });
+            } catch (error) {
+              console.log("分享取消或失敗", error);
+            }
+          } else {
+            showAlert(
+              "不支援",
+              "您的裝置不支援一次分享這麼多圖片，請嘗試分批或使用下方列表手動下載。"
+            );
+          }
+        };
+
+        return (
+          <div className="min-h-screen bg-gray-100 flex flex-col font-sans text-gray-800">
+            {/* 自定義 Modal 組件 */}
+            <Modal
+              isOpen={alertState.isOpen}
+              onClose={closeAlert}
+              title={alertState.title}
+              footer={
+                <button
+                  onClick={closeAlert}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium"
+                >
+                  知道了
+                </button>
+              }
+            >
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-6 h-6 text-indigo-600 mt-0.5 shrink-0" />
+                <p className="text-gray-600 whitespace-pre-line leading-relaxed">
+                  {alertState.message}
+                </p>
+              </div>
+            </Modal>
+
+            <Modal
+              isOpen={confirmState.isOpen}
+              onClose={closeConfirm}
+              title={confirmState.title}
+              type="danger"
+              footer={
+                <>
+                  <button
+                    onClick={closeConfirm}
+                    className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleConfirmAction}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+                  >
+                    確認執行
+                  </button>
+                </>
+              }
+            >
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-6 h-6 text-red-600 mt-0.5 shrink-0" />
+                <p className="text-gray-600 whitespace-pre-line leading-relaxed">
+                  {confirmState.message}
+                </p>
+              </div>
+            </Modal>
+
+            {showDownloadModal && (
+              <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
+                  <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-xl">
+                    <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                      <ImageIcon className="w-5 h-5 text-indigo-600" />
+                      圖片生成中心 ({generatedResults.length} 張)
+                    </h3>
+                    <button
+                      onClick={() => setShowDownloadModal(false)}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+                  <div className="p-4 bg-blue-50 border-b border-blue-100 text-sm text-blue-800 flex flex-col sm:flex-row justify-between items-center gap-3">
+                    <span>
+                      💡 手機用戶：點擊「分享/儲存全部」可一次存入相簿，或長按下方圖片個別儲存。
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleDownloadAll}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow transition whitespace-nowrap"
+                      >
+                        <FileArchive className="w-4 h-4" /> 一鍵下載全部 (ZIP)
+                      </button>
+                      {navigator.share && (
+                        <button
+                          onClick={handleShareAll}
+                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow transition whitespace-nowrap"
+                        >
+                          <Share2 className="w-4 h-4" /> 分享/儲存全部
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="p-4 flex-1 overflow-y-auto bg-gray-100 grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {generatedResults.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-white p-2 rounded-lg shadow flex flex-col gap-2 group"
+                      >
+                        <div className="aspect-[3/4] bg-gray-200 rounded overflow-hidden relative">
+                          <img
+                            src={item.url}
+                            alt={item.name}
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                        <div className="text-xs font-bold text-gray-600 truncate">{item.name}</div>
+                        <a
+                          href={item.url}
+                          download={item.name}
+                          className="flex items-center justify-center gap-1 w-full py-2 bg-gray-100 hover:bg-indigo-50 text-indigo-600 font-bold rounded text-xs transition border border-gray-200"
+                        >
+                          <Download className="w-3 h-3" /> 下載此張
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="p-3 text-center text-xs text-gray-400 bg-white rounded-b-xl">
+                    提示：如果「分享全部」沒反應，請使用單張下載。
+                  </div>
+                </div>
+              </div>
+            )}
+            {showImportModal && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+                  <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+                    <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-indigo-600" />
+                      智慧資料匯入
+                    </h3>
+                    <button
+                      onClick={() => setShowImportModal(false)}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="p-4 flex-1 overflow-hidden flex flex-col gap-2">
+                    <div className="bg-blue-50 text-blue-800 text-sm p-3 rounded-lg border border-blue-100">
+                      <p className="font-bold mb-1">使用說明：</p>
+                      <p>請貼入資料。系統會自動根據關鍵字分配到對應軌跡圖。</p>
+                    </div>
+                    <textarea
+                      className="flex-1 w-full border border-gray-300 rounded-lg p-4 font-mono text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                      placeholder={`範例：\n爸爸姓名：陳秉豐\n爸媽家住址：台中市...\n公司名稱：鈞豐...`}
+                      value={importText}
+                      onChange={e => setImportText(e.target.value)}
+                      style={{ minHeight: "300px" }}
+                    />
+                  </div>
+                  <div className="p-4 border-t border-gray-100 flex justify-end gap-2 bg-gray-50 rounded-b-xl">
+                    <button
+                      onClick={() => setShowImportModal(false)}
+                      className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-200 rounded-lg transition"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={parseAndImportData}
+                      disabled={!importText.trim()}
+                      className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-md transition disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <Check className="w-4 h-4" /> 開始解析並匯入
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            <header className="bg-white shadow-sm z-10 px-4 py-3 control-panel">
+              <div className="max-w-7xl mx-auto flex flex-col xl:flex-row justify-between items-center gap-4">
+                <div className="flex flex-col md:flex-row items-center gap-4 w-full xl:w-auto">
+                  <h1 className="text-xl font-bold text-gray-900 hidden md:flex items-center gap-2 whitespace-nowrap">
+                    <Users className="w-6 h-6 text-indigo-600" />
+                    多模式軌跡生成
+                  </h1>
+                  <div className="flex items-center gap-2 w-full md:w-auto bg-gray-50 p-1.5 rounded-lg border border-gray-200">
+                    <FolderOpen className="w-4 h-4 text-gray-400 ml-2" />
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={e => setCustomerName(e.target.value)}
+                      placeholder="客戶/專案名稱"
+                      className="bg-transparent border-none text-sm font-bold text-gray-700 focus:ring-0 focus:outline-none w-32 md:w-40 placeholder-gray-400"
+                    />
+                    <div className="h-4 w-px bg-gray-300 mx-1"></div>
+                    <div className="flex bg-gray-200 p-0.5 rounded-md">
+                      {Object.values(MODES).map(mode => (
+                        <button
+                          key={mode.id}
+                          onClick={() => handleModeChange(mode.id)}
+                          className={`flex items-center gap-2 px-3 py-1 rounded text-xs font-medium transition-all whitespace-nowrap ${currentMode === mode.id ? "bg-white shadow text-indigo-600" : "text-gray-500 hover:text-gray-700"}`}
+                        >
+                          {mode.icon}
+                          <span className="hidden sm:inline">{mode.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2 w-full xl:w-auto justify-end">
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="flex items-center gap-2 px-3 py-2 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-50 transition shadow-sm whitespace-nowrap"
+                  >
+                    <FileText className="w-4 h-4" /> 智慧匯入
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                  />
+                  {!currentImageSrc && (
+                    <button
+                      onClick={() => fileInputRef.current.click()}
+                      className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition whitespace-nowrap"
+                    >
+                      <Upload className="w-4 h-4" /> 上傳底圖
+                    </button>
+                  )}
+                  <button
+                    onClick={handleGenerateImages}
+                    disabled={!hasAnyImage || isGenerating}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white shadow-md transition-all min-w-[140px] justify-center whitespace-nowrap ${!hasAnyImage ? "bg-gray-300 cursor-not-allowed" : isGenerating ? "bg-indigo-400 cursor-wait" : "bg-indigo-600 hover:bg-indigo-700"}`}
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" /> {progress}%
+                      </>
+                    ) : (
+                      <>
+                        <ImageIcon className="w-4 h-4" /> 批量生成圖片
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </header>
+            <main className="flex-1 max-w-7xl w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6 print-container">
+              <div className="lg:col-span-4 flex flex-col gap-4 h-[calc(100vh-6rem)] overflow-hidden control-panel">
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                      <Settings className="w-4 h-4" /> {modeConfig.label}設定
+                    </h2>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">盤點日期 (右上)</label>
+                      <input
+                        type="text"
+                        value={globalFields.date}
+                        onChange={e => handleGlobalFieldChange("date", e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm border rounded bg-gray-50 focus:ring-1 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Services (右上)</label>
+                      <input
+                        type="text"
+                        value={globalFields.services}
+                        onChange={e => handleGlobalFieldChange("services", e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm border rounded bg-gray-50 focus:ring-1 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex bg-gray-200 p-1 rounded-lg shrink-0">
+                  <button
+                    onClick={() => setActiveTab("data")}
+                    className={`flex-1 py-2 text-sm font-medium rounded-md flex justify-center items-center gap-2 transition ${activeTab === "data" ? "bg-white shadow text-indigo-600" : "text-gray-500 hover:text-gray-700"}`}
+                  >
+                    <Layout className="w-4 h-4" /> 編輯資料
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("layout")}
+                    className={`flex-1 py-2 text-sm font-medium rounded-md flex justify-center items-center gap-2 transition ${activeTab === "layout" ? "bg-white shadow text-indigo-600" : "text-gray-500 hover:text-gray-700"}`}
+                  >
+                    <MousePointer2 className="w-4 h-4" /> 拖曳排版
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto bg-white rounded-xl shadow-sm border border-gray-200">
+                  {activeTab === "data" && (
+                    <div className="p-4 space-y-3">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs font-bold text-gray-500">
+                          共 {entries.length} 筆資料
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={clearEntries}
+                            className="text-red-400 hover:bg-red-50 p-1 rounded text-xs flex items-center gap-1"
+                          >
+                            清空
+                          </button>
+                          <button
+                            onClick={addEntry}
+                            className="text-indigo-600 hover:bg-indigo-50 p-1 rounded text-xs flex items-center gap-1"
+                          >
+                            <Plus className="w-3 h-3" /> 新增
+                          </button>
+                        </div>
+                      </div>
+                      {entries.map((entry, index) => (
+                        <div
+                          key={entry.id}
+                          onClick={() => handleSelectEntry(entry.id)}
+                          className={`group flex items-center gap-2 p-3 rounded-lg border transition cursor-pointer ${currentEntryId === entry.id ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200" : "border-gray-200 hover:border-indigo-300"}`}
+                        >
+                          <div className="text-gray-400 font-mono text-xs w-6">{index + 1}.</div>
+                          <div className="flex-1 grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-gray-400 block mb-0.5">
+                                {modeConfig.fields.main}
+                              </label>
+                              <input
+                                type="text"
+                                value={entry.mainText}
+                                onChange={e => updateEntry(entry.id, "mainText", e.target.value)}
+                                className="w-full bg-transparent border-b border-gray-300 focus:border-indigo-500 outline-none text-sm font-medium px-0 py-0.5"
+                                placeholder={modeConfig.fields.main}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 block mb-0.5">
+                                {modeConfig.fields.sub}
+                              </label>
+                              <input
+                                type="text"
+                                value={entry.subText}
+                                onChange={e => updateEntry(entry.id, "subText", e.target.value)}
+                                className="w-full bg-transparent border-b border-gray-300 focus:border-indigo-500 outline-none text-sm text-gray-600 px-0 py-0.5"
+                                placeholder={modeConfig.fields.sub}
+                              />
+                            </div>
+                          </div>
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              removeEntry(entry.id);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 p-1"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={addEntry}
+                        className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-400 rounded-lg hover:border-indigo-400 hover:text-indigo-500 transition flex justify-center items-center gap-2 mt-4"
+                      >
+                        <Plus className="w-4 h-4" /> 點擊新增下一筆
+                      </button>
+                    </div>
+                  )}
+                  {activeTab === "layout" && (
+                    <div className="p-4 space-y-6">
+                      <div className="bg-blue-50 border border-blue-200 text-blue-800 text-xs p-3 rounded-lg mb-4">
+                        當前調整的是「{modeConfig.label}」的排版設定。
+                      </div>
+                      {[
+                        { key: "main", label: modeConfig.fields.main },
+                        { key: "sub", label: modeConfig.fields.sub },
+                        { key: "date", label: "盤點日期" },
+                        { key: "services", label: "Services" },
+                      ].map(item => (
+                        <div
+                          key={item.key}
+                          className="space-y-2 border-b border-gray-100 pb-4 last:border-0"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-sm text-gray-700 flex items-center gap-2">
+                              <Type className="w-4 h-4 text-gray-400" />
+                              {item.label}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="color"
+                                value={currentLayout[item.key].color}
+                                onChange={e => updateLayout(item.key, { color: e.target.value })}
+                                className="w-6 h-6 rounded border-0 cursor-pointer p-0"
+                              />
+                              <button
+                                onClick={() =>
+                                  updateLayout(item.key, {
+                                    vertical: !currentLayout[item.key].vertical,
+                                  })
+                                }
+                                className={`text-xs px-2 py-1 rounded border ${currentLayout[item.key].vertical ? "bg-indigo-100 text-indigo-700 border-indigo-200" : "bg-gray-100 text-gray-600"}`}
+                              >
+                                {currentLayout[item.key].vertical ? "直排" : "橫排"}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="text-xs text-gray-400">
+                                字體大小 ({currentLayout[item.key].size}px)
+                              </label>
+                              <input
+                                type="range"
+                                min="10"
+                                max="150"
+                                value={currentLayout[item.key].size}
+                                onChange={e =>
+                                  updateLayout(item.key, { size: Number(e.target.value) })
+                                }
+                                className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-2"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="lg:col-span-8 bg-gray-50 rounded-xl border border-gray-200 flex flex-col overflow-hidden relative group">
+                <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur px-3 py-1 rounded-full shadow text-xs font-bold text-gray-500 pointer-events-none border border-gray-200">
+                  {activeTab === "layout" ? "✋ 拖曳排版模式 (可點兩下編輯)" : "👁️ 資料預覽模式"}
+                </div>
+                {currentImageSrc && (
+                  <div className="absolute top-4 right-4 z-10 flex gap-2 floating-tools">
+                    <button
+                      onClick={handleDownloadCurrent}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg shadow border border-blue-500 text-xs font-bold flex items-center gap-2 transition"
+                      title="下載當前圖片(JPG)"
+                    >
+                      <Download className="w-3 h-3" /> 下載圖片
+                    </button>
+                    <button
+                      onClick={() => fileInputRef.current.click()}
+                      className="bg-white/90 backdrop-blur hover:bg-white text-gray-600 hover:text-indigo-600 px-3 py-1.5 rounded-lg shadow border border-gray-200 text-xs font-bold flex items-center gap-2 transition"
+                      title="更換底圖"
+                    >
+                      <Upload className="w-3 h-3" /> 更換
+                    </button>
+                    <button
+                      onClick={handleRemoveImage}
+                      className="bg-white/90 backdrop-blur hover:bg-red-50 text-gray-600 hover:text-red-600 px-3 py-1.5 rounded-lg shadow border border-gray-200 text-xs font-bold flex items-center gap-2 transition"
+                      title="移除底圖"
+                    >
+                      <Trash2 className="w-3 h-3" /> 移除
+                    </button>
+                  </div>
+                )}
+                <div className="flex-1 overflow-auto flex items-center justify-center p-8 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
+                  {!currentImageSrc ? (
+                    <div
+                      onClick={() => fileInputRef.current.click()}
+                      className="text-center p-12 border-4 border-dashed border-gray-300 rounded-3xl cursor-pointer hover:bg-gray-100 hover:border-indigo-400 transition group max-w-md"
+                    >
+                      <Upload className="w-16 h-16 text-gray-300 group-hover:text-indigo-400 mx-auto mb-4" />
+                      <h3 className="text-xl font-bold text-gray-600 group-hover:text-indigo-600">
+                        步驟 1：上傳底圖
+                      </h3>
+                      <p className="text-gray-400 mt-2 text-sm">
+                        請上傳「{modeConfig.label}」的空白背景圖
+                      </p>
+                      <div className="mt-4 text-xs text-indigo-500 bg-indigo-50 px-2 py-1 rounded">
+                        當前模式：{modeConfig.label}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <canvas
+                        ref={canvasRef}
+                        onMouseDown={handlePointerDown}
+                        onMouseMove={handlePointerMove}
+                        onMouseUp={handlePointerUp}
+                        onMouseLeave={handlePointerUp}
+                        onDoubleClick={handleDoubleClick}
+                        onTouchStart={handlePointerDown}
+                        onTouchMove={handlePointerMove}
+                        onTouchEnd={handlePointerUp}
+                        onTouchCancel={handlePointerUp}
+                        className={`max-w-full shadow-2xl bg-white ${activeTab === "layout" ? "cursor-move" : "cursor-default"}`}
+                        style={{ maxHeight: "80vh" }}
+                      />
+                      {/* 直接編輯的 Textarea 覆蓋層 */}
+                      {editingTarget && (
+                        <textarea
+                          className="editing-textarea absolute"
+                          style={{
+                            left: editingTarget.style.left,
+                            top: editingTarget.style.top,
+                            width: editingTarget.style.minWidth,
+                            height: editingTarget.style.minHeight,
+                          }}
+                          value={editingTarget.value}
+                          onChange={e =>
+                            setEditingTarget({ ...editingTarget, value: e.target.value })
+                          }
+                          onBlur={handleEditSave}
+                          autoFocus
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </main>
+          </div>
+        );
+      }
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
     </script>
-</body>
+  </body>
 </html>
