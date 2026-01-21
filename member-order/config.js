@@ -52,7 +52,7 @@ const CONFIG = {
   },
 
   // =============================================
-  // 5. Line 官方帳號資訊
+  // 5. LINE 官方帳號資訊 & API 代理設定
   // =============================================
   LINE: {
     OFFICIAL_ACCOUNT_ID: "@324vsvvv",
@@ -66,12 +66,18 @@ const CONFIG = {
     // 請到 LINE Developers Console 建立 LINE Login Channel
     // https://developers.line.biz/console/
     LOGIN_CHANNEL_ID: "2008930980-bjQhoGJN", // 【請填入】LINE Login Channel ID
+  },
 
-    // 推播 API Endpoint (建議透過後端代理，避免 Token 暴露)
-    // 如果你有後端服務，請填入你的 API 端點
-    // 如果沒有，可以透過 Google Apps Script 代理
-    PUSH_API_ENDPOINT:
-      "https://script.google.com/macros/s/AKfycbwazweHXIEcursFmwhUQfIaLGsICL0TA1OB4x-Td3I6mIMt_4s7My1vGoq3x8GNngpviA/exec", // 【可選】填入後端 API 端點，或留空使用 Google Apps Script
+  // =============================================
+  // API 代理端點設定 (Google Apps Script)
+  // =============================================
+  // 此端點用於多種 API 代理，包括：
+  // - LINE Push 推播 (action=pushOrderCard)
+  // - Google Calendar 讀取 (action=getCalendarEvents)
+  // =============================================
+  API: {
+    PROXY_ENDPOINT:
+      "https://script.google.com/macros/s/AKfycbwazweHXIEcursFmwhUQfIaLGsICL0TA1OB4x-Td3I6mIMt_4s7My1vGoq3x8GNngpviA/exec",
   },
 
   // =============================================

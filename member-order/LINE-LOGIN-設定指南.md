@@ -72,9 +72,15 @@ LINE: {
 
     // 這個留空，Token 存在 Google Apps Script 中
     CHANNEL_ACCESS_TOKEN: '',
+},
 
+// API 代理端點設定 (Google Apps Script)
+// 此端點用於多種 API 代理，包括：
+// - LINE Push 推播 (action=pushOrderCard)
+// - Google Calendar 讀取 (action=getCalendarEvents)
+API: {
     // 填入步驟 3 的 Google Apps Script 部署網址
-    PUSH_API_ENDPOINT: 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec'
+    PROXY_ENDPOINT: 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec'
 },
 ```
 

@@ -28,7 +28,8 @@ function doPost(e) {
     const sheetId = props.getProperty('GOOGLE_SHEET_ID');
 
     if (!sheetId) {
-      throw new Error('Server config error: Missing GOOGLE_SHEET_ID in script properties');
+      Logger.log('Server configuration error: Missing GOOGLE_SHEET_ID in script properties');
+      throw new Error('Server configuration error');
     }
 
     const ss = SpreadsheetApp.openById(sheetId);

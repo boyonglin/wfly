@@ -69,7 +69,7 @@
       // =============================================
       // 從全域設定取得常數
       // =============================================
-      const { STORAGE_KEY, DRAFT_KEY, PAYMENT, LINE, GOOGLE_SCRIPT_URL } = window.APP_CONFIG;
+      const { STORAGE_KEY, DRAFT_KEY, PAYMENT, LINE, API, GOOGLE_SCRIPT_URL } = window.APP_CONFIG;
 
       // Icon 映射表
       const ICON_MAP = {
@@ -206,9 +206,9 @@
               return;
             }
 
-            // 檢查是否有設定 PUSH API
-            if (!LINE.PUSH_API_ENDPOINT || LINE.PUSH_API_ENDPOINT === "") {
-              alert("尚未設定推播 API，請改用 QR Code 方式");
+            // 檢查是否有設定 API 代理
+            if (!API.PROXY_ENDPOINT || API.PROXY_ENDPOINT === "") {
+              alert("尚未設定 API 代理端點，請改用 QR Code 方式");
               handleShowLineQR();
               return;
             }
@@ -292,7 +292,7 @@
               };
 
               const script = document.createElement("script");
-              script.src = `${LINE.PUSH_API_ENDPOINT}?action=pushOrderCard&data=${encodeURIComponent(base64Data)}&callback=${callbackName}`;
+              script.src = `${API.PROXY_ENDPOINT}?action=pushOrderCard&data=${encodeURIComponent(base64Data)}&callback=${callbackName}`;
               script.onerror = () => {
                 clearTimeout(timeout);
                 delete window[callbackName];

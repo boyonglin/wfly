@@ -79,8 +79,8 @@
         DEFAULT_LOCATION,
         PAYMENT,
         ORDER_ID_PREFIX,
-        CALENDAR,
         LINE,
+        API,
       } = window.APP_CONFIG;
 
       // Icon 映射表
@@ -182,12 +182,6 @@
           );
         };
 
-        const isToday = date => {
-          if (!date) return false;
-          const today = new Date();
-          return isSameDay(date, today);
-        };
-
         const isPastDate = date => {
           if (!date) return false;
           const today = new Date();
@@ -204,12 +198,39 @@
         };
 
         // =============================================
+        // Dropdown 位置計算 - 自動偵測視窗邊界
+        // =============================================
+        const getDropdownPosition = (ref, maxHeight = 240) => {
+          if (!ref?.current) {
+            return { top: "auto", left: "16px", width: "auto" };
+          }
+          const rect = ref.current.getBoundingClientRect();
+          const viewportHeight = window.innerHeight;
+          const spaceBelow = viewportHeight - rect.bottom - 8;
+          const spaceAbove = rect.top - 8;
+          const openUpwards = spaceBelow < maxHeight && spaceAbove > spaceBelow;
+
+          if (openUpwards) {
+            return {
+              bottom: viewportHeight - rect.top + 4,
+              left: rect.left,
+              width: rect.width,
+            };
+          }
+          return {
+            top: rect.bottom + 4,
+            left: rect.left,
+            width: rect.width,
+          };
+        };
+
+        // =============================================
         // 自定義行事曆 - 透過 Apps Script 代理 Google Calendar
         // =============================================
         const fetchCalendarEvents = async month => {
-          const endpoint = LINE?.PUSH_API_ENDPOINT;
+          const endpoint = API?.PROXY_ENDPOINT;
           if (!endpoint) {
-            setCalendarError("尚未設定行事曆代理端點。");
+            setCalendarError("尚未設定 API 代理端點。");
             setCalendarLoading(false);
             return;
           }
@@ -289,17 +310,6 @@
               evDate.getMonth() === date.getMonth() &&
               evDate.getDate() === date.getDate()
             );
-          });
-        };
-
-        // 格式化時間
-        const formatEventTime = dateStr => {
-          if (!dateStr || dateStr.length === 10) return ""; // 全天事件
-          const d = new Date(dateStr);
-          return d.toLocaleTimeString("zh-TW", {
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
           });
         };
 
@@ -1210,17 +1220,7 @@
                             <div
                               data-dropdown="period"
                               className="fixed z-[90] bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden animate-slide-down"
-                              style={{
-                                top: periodRef.current
-                                  ? periodRef.current.getBoundingClientRect().bottom + 4
-                                  : "auto",
-                                left: periodRef.current
-                                  ? periodRef.current.getBoundingClientRect().left
-                                  : "16px",
-                                width: periodRef.current
-                                  ? periodRef.current.getBoundingClientRect().width
-                                  : "auto",
-                              }}
+                              style={getDropdownPosition(periodRef, 200)}
                             >
                               {[
                                 { value: "morning", label: "上午", time: "09:00 - 12:00" },
@@ -1298,17 +1298,7 @@
                             <div
                               data-dropdown="time"
                               className="fixed z-[90] bg-white rounded-xl border border-gray-200 shadow-xl max-h-[240px] overflow-y-auto animate-slide-down custom-scrollbar"
-                              style={{
-                                top: timeRef.current
-                                  ? timeRef.current.getBoundingClientRect().bottom + 4
-                                  : "auto",
-                                left: timeRef.current
-                                  ? timeRef.current.getBoundingClientRect().left
-                                  : "16px",
-                                width: timeRef.current
-                                  ? timeRef.current.getBoundingClientRect().width
-                                  : "auto",
-                              }}
+                              style={getDropdownPosition(timeRef, 240)}
                             >
                               {(() => {
                                 const times = [];
