@@ -1,0 +1,10 @@
+> Google App Scripts
+>> Google Sheet Upload
+>> Get API Key
+
+> Google Cloud Console
+>> Google Calendar API
+
+> LINE Developers
+>> LINE Login
+>> Messaging API
