@@ -13,8 +13,8 @@
 // =============================================
 // 1. API 設定 (Google Apps Script)
 // =============================================
-// 【工程師設定區】請填入部署好的 Google Apps Script URL 與目標 Sheet ID
-// 1) 在試算表「182ZsNsbZNhF7RmgW3egw9Zg2Z3Tp-XCclHZgGmSvI34」-> 擴充功能 -> Apps Script
+// 請填入部署好的 Google Apps Script URL 與目標 Sheet ID
+// 1) 在試算表 -> 擴充功能 -> Apps Script
 // 2) 貼上 doPost 範例，並部署為網路應用程式 (任何人皆可存取)
 // 3) 將部署後的 URL 貼到 GOOGLE_SCRIPT_URL
 const CONFIG = {
