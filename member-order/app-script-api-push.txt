@@ -1,7 +1,8 @@
 /**
- * Google Apps Script - LINE Push Message 代理 v2
+ * Google Apps Script - LINE Push Message + Calendar API 代理 v3
  * =============================================
  * 使用 GET 請求 + JSONP 來繞過 CORS 問題
+ * 整合 LINE 推播與 Google Calendar 讀取功能
  *
  * 【設定步驟】
  * 1. 到 Google Apps Script (script.google.com) 建立新專案
@@ -9,13 +10,21 @@
  * 3. 設定腳本屬性：
  *    - 點擊「設定」(齒輪圖示) > 「腳本屬性」
  *    - 新增屬性：LINE_CHANNEL_ACCESS_TOKEN = 你的 Messaging API Channel Access Token
+ *    - 新增屬性：GOOGLE_CALENDAR_API_KEY = 你的 Google Calendar API Key
+ *    - 新增屬性：GOOGLE_CALENDAR_ID = shared.calendar.vibe@gmail.com
  * 4. 部署為網路應用程式：
  *    - 執行為：我自己
  *    - 誰可存取：任何人
  * 5. 複製部署的 URL 到 config.js 的 PUSH_API_ENDPOINT
+ *
+ * 【可用 Actions】
+ * - pushOrderCard: 推播訂單卡片
+ * - pushText: 推播純文字
+ * - getCalendarEvents: 取得行事曆事件
  */
 
 const LINE_PUSH_API = 'https://api.line.me/v2/bot/message/push';
+const CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3/calendars';
 
 /**
  * 處理 GET 請求（用於繞過 CORS）
@@ -29,13 +38,46 @@ function doGet(e) {
     if (!action) {
       return createJsonpResponse(e, {
         status: 'ok',
-        message: 'LINE Push API v2 is running',
-        usage: 'GET ?action=pushOrderCard&data=BASE64_ENCODED_JSON'
+        message: 'LINE Push + Calendar API v3 is running',
+        usage: 'GET ?action=pushOrderCard|pushText|getCalendarEvents&data=BASE64_ENCODED_JSON'
       });
     }
 
-    // 取得 Channel Access Token
+    // 取得腳本屬性
     const props = PropertiesService.getScriptProperties();
+
+    // =============================================
+    // Calendar API 處理（不需要 LINE Token）
+    // =============================================
+    if (action === 'getCalendarEvents') {
+      const calendarApiKey = props.getProperty('GOOGLE_CALENDAR_API_KEY');
+      const calendarId = props.getProperty('GOOGLE_CALENDAR_ID');
+
+      if (!calendarApiKey || !calendarId) {
+        return createJsonpResponse(e, {
+          success: false,
+          error: 'Server config error: Missing GOOGLE_CALENDAR_API_KEY or GOOGLE_CALENDAR_ID'
+        });
+      }
+
+      // 解碼參數
+      let params = {};
+      if (e.parameter.data) {
+        try {
+          const decodedData = Utilities.newBlob(Utilities.base64Decode(e.parameter.data)).getDataAsString();
+          params = JSON.parse(decodedData);
+        } catch (decodeError) {
+          // 沒有參數也可以，使用預設值
+        }
+      }
+
+      const result = getCalendarEvents(calendarApiKey, calendarId, params);
+      return createJsonpResponse(e, result);
+    }
+
+    // =============================================
+    // LINE API 處理（需要 LINE Token）
+    // =============================================
     const channelAccessToken = props.getProperty('LINE_CHANNEL_ACCESS_TOKEN');
 
     if (!channelAccessToken) {
@@ -283,6 +325,58 @@ function callLinePushApi(token, payload) {
       success: false,
       error: 'LINE API Error: ' + responseCode,
       details: 'Please check server logs for more information.'
+    };
+  }
+}
+
+/**
+ * 取得 Google Calendar 事件
+ * @param {string} apiKey - Google Calendar API Key
+ * @param {string} calendarId - Calendar ID (email)
+ * @param {object} params - 查詢參數 {timeMin, timeMax, maxResults}
+ */
+function getCalendarEvents(apiKey, calendarId, params) {
+  try {
+    // 預設取得未來 30 天的事件
+    const now = new Date();
+    const timeMin = params.timeMin || now.toISOString();
+    const futureDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const timeMax = params.timeMax || futureDate.toISOString();
+    const maxResults = params.maxResults || 50;
+
+    const encodedCalendarId = encodeURIComponent(calendarId);
+    const url = CALENDAR_API_BASE + '/' + encodedCalendarId + '/events?' +
+      'key=' + apiKey +
+      '&timeMin=' + encodeURIComponent(timeMin) +
+      '&timeMax=' + encodeURIComponent(timeMax) +
+      '&maxResults=' + maxResults +
+      '&singleEvents=true' +
+      '&orderBy=startTime';
+
+    const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    const responseCode = response.getResponseCode();
+    const responseText = response.getContentText();
+
+    if (responseCode === 200) {
+      const data = JSON.parse(responseText);
+      return {
+        success: true,
+        events: data.items || [],
+        summary: data.summary,
+        timeZone: data.timeZone
+      };
+    } else {
+      console.error('Calendar API Error:', responseCode, responseText);
+      return {
+        success: false,
+        error: 'Calendar API Error: ' + responseCode
+      };
+    }
+  } catch (error) {
+    console.error('getCalendarEvents Error:', error);
+    return {
+      success: false,
+      error: error.message
     };
   }
 }

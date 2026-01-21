@@ -8,13 +8,18 @@
     <!-- 1. 引入 Tailwind CSS (樣式框架) -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- 2. 引入 Babel (用於瀏覽器端編譯 React JSX) -->
+    <!-- 2. Google Fonts for Calendar -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- 3. 引入 Babel (用於瀏覽器端編譯 React JSX) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- 3. 引入自訂樣式 -->
+    <!-- 4. 引入自訂樣式 -->
     <link rel="stylesheet" href="styles.css">
 
-    <!-- 4. 引入設定檔 (必須在 React 之前載入) -->
+    <!-- 5. 引入設定檔 (必須在 React 之前載入) -->
     <script src="config.js"></script>
 </head>
 <body class="bg-[#f5f5f7]">
@@ -34,7 +39,7 @@
         // =============================================
         // 從全域設定取得常數
         // =============================================
-        const { GOOGLE_SCRIPT_URL, GOOGLE_SHEET_ID, STORAGE_KEY, DRAFT_KEY, LOCATIONS, DEFAULT_LOCATION, PAYMENT, ORDER_ID_PREFIX } = window.APP_CONFIG;
+        const { GOOGLE_SCRIPT_URL, GOOGLE_SHEET_ID, STORAGE_KEY, DRAFT_KEY, LOCATIONS, DEFAULT_LOCATION, PAYMENT, ORDER_ID_PREFIX, CALENDAR, LINE } = window.APP_CONFIG;
 
         // Icon 映射表
         const ICON_MAP = {
@@ -88,6 +93,12 @@
             const timeRef = useRef(null);
             const datePickerRef = useRef(null);
 
+            // 自定義行事曆狀態
+            const [calendarEvents, setCalendarEvents] = useState([]);
+            const [calendarLoading, setCalendarLoading] = useState(true);
+            const [calendarError, setCalendarError] = useState('');
+            const [calendarMonth, setCalendarMonth] = useState(new Date());
+
             // 日期選擇器相關狀態
             const [currentMonth, setCurrentMonth] = useState(new Date());
 
@@ -138,6 +149,100 @@
                 const month = String(date.getMonth() + 1).padStart(2, '0');
                 const day = String(date.getDate()).padStart(2, '0');
                 return `${year}-${month}-${day}`;
+            };
+
+            // =============================================
+            // 自定義行事曆 - 透過 Apps Script 代理 Google Calendar
+            // =============================================
+            const fetchCalendarEvents = async (month) => {
+                const endpoint = LINE?.PUSH_API_ENDPOINT;
+                if (!endpoint) {
+                    setCalendarError('尚未設定行事曆代理端點。');
+                    setCalendarLoading(false);
+                    return;
+                }
+
+                setCalendarLoading(true);
+                try {
+                    const year = month.getFullYear();
+                    const m = month.getMonth();
+                    const timeMin = new Date(year, m, 1).toISOString();
+                    const timeMax = new Date(year, m + 1, 0, 23, 59, 59).toISOString();
+                    const payload = btoa(JSON.stringify({ timeMin, timeMax }));
+                    const url = `${endpoint}?action=getCalendarEvents&data=${encodeURIComponent(payload)}`;
+
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error('Calendar proxy 回應錯誤');
+                    const data = await res.json();
+
+                    if (!data.success) {
+                        throw new Error(data.error || 'Calendar proxy 回應錯誤');
+                    }
+
+                    const events = (data.events || []).map(it => ({
+                        id: it.id,
+                        title: it.summary || '(無標題)',
+                        start: it.start?.dateTime || it.start?.date,
+                        end: it.end?.dateTime || it.end?.date,
+                        allDay: Boolean(it.start?.date)
+                    }));
+
+                    setCalendarEvents(events);
+                    setCalendarError('');
+                } catch (err) {
+                    console.error('GCAL 代理讀取失敗:', err);
+                    setCalendarError('行事曆載入失敗，請稍後再試。');
+                }
+                setCalendarLoading(false);
+            };
+
+            useEffect(() => {
+                fetchCalendarEvents(calendarMonth);
+            }, [calendarMonth]);
+
+            // 取得當月日期陣列（用於行事曆格線）
+            const getCalendarDays = (date) => {
+                const year = date.getFullYear();
+                const month = date.getMonth();
+                const firstDay = new Date(year, month, 1);
+                const lastDay = new Date(year, month + 1, 0);
+                const daysInMonth = lastDay.getDate();
+                const startingDayOfWeek = firstDay.getDay();
+                // 週一開始 (0=Mon, 6=Sun)
+                const adjustedStart = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1;
+                const days = [];
+                // 上月補空
+                for (let i = 0; i < adjustedStart; i++) {
+                    const prevDate = new Date(year, month, -adjustedStart + i + 1);
+                    days.push({ date: prevDate, isCurrentMonth: false });
+                }
+                // 本月
+                for (let i = 1; i <= daysInMonth; i++) {
+                    days.push({ date: new Date(year, month, i), isCurrentMonth: true });
+                }
+                // 補滿至 42 格 (6 週)
+                const remaining = 42 - days.length;
+                for (let i = 1; i <= remaining; i++) {
+                    days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false });
+                }
+                return days;
+            };
+
+            // 取得某日的事件
+            const getEventsForDay = (date) => {
+                return calendarEvents.filter(ev => {
+                    const evDate = new Date(ev.start);
+                    return evDate.getFullYear() === date.getFullYear() &&
+                           evDate.getMonth() === date.getMonth() &&
+                           evDate.getDate() === date.getDate();
+                });
+            };
+
+            // 格式化時間
+            const formatEventTime = (dateStr) => {
+                if (!dateStr || dateStr.length === 10) return ''; // 全天事件
+                const d = new Date(dateStr);
+                return d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false });
             };
 
             // =============================================
@@ -659,25 +764,114 @@
                             </div>
                         </section>
 
-                        {/* 預約行事曆區塊 */}
+                        {/* 預約行事曆區塊 - LGI 簡約風格 */}
                         <section className="space-y-3 sm:space-y-4">
                             <h3 className="text-base sm:text-lg font-bold border-b border-gray-200 pb-2 text-[#1d1d1f]">預約行事曆</h3>
-                            <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-                                <div className="relative w-full" style={{
-                                    paddingBottom: window.innerWidth < 640 ? '120%' : '80%'
-                                }}>
-                                    <iframe
-                                        src="https://calendar.google.com/calendar/embed?src=c2hhcmVkLmNhbGVuZGFyLnZpYmVAZ21haWwuY29t&ctz=Asia%2FTaipei&mode=WEEK&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0"
-                                        style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0}}
-                                        frameBorder="0"
-                                        scrolling="no"
-                                        title="預約行事曆"
-                                    />
+                            <div className="bg-white rounded-xl sm:rounded-2xl overflow-hidden shadow-sm border border-gray-100 relative" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                                {/* 行事曆頂部：月份與導航 */}
+                                <div className="px-3 sm:px-5 pt-4 sm:pt-5 pb-3 flex items-center justify-between">
+                                    <h4 className="text-base sm:text-lg font-semibold text-[#1d1d1f] tracking-tight">
+                                        {calendarMonth.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long' })}
+                                    </h4>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}
+                                            className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-500 text-sm"
+                                        >
+                                            ←
+                                        </button>
+                                        <button
+                                            onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}
+                                            className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-500 text-sm"
+                                        >
+                                            →
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="p-4 sm:p-6 bg-gray-50 border-t border-gray-100 space-y-3 sm:space-y-4">
+
+                                {/* 星期標題列 */}
+                                <div className="grid grid-cols-7 border-t border-gray-100">
+                                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => (
+                                        <div key={i} className="py-1.5 sm:py-2 text-center text-[9px] sm:text-[10px] font-medium text-gray-400 uppercase tracking-wider">
+                                            {day}
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* 日期格線 */}
+                                <div className="grid grid-cols-7 border-t border-gray-100">
+                                    {getCalendarDays(calendarMonth).map((dayObj, idx) => {
+                                        const { date, isCurrentMonth } = dayObj;
+                                        const dayEvents = getEventsForDay(date);
+                                        const isToday = date.toDateString() === new Date().toDateString();
+                                        const isSelected = customerInfo.appointmentDate && date.toDateString() === new Date(customerInfo.appointmentDate).toDateString();
+
+                                        return (
+                                            <div
+                                                key={idx}
+                                                onClick={() => {
+                                                    if (isCurrentMonth && !isPastDate(date)) {
+                                                        setCustomerInfo(prev => ({ ...prev, appointmentDate: formatDateString(date) }));
+                                                        if (errors.customer_appointmentDate) {
+                                                            setErrors(prev => ({ ...prev, customer_appointmentDate: false }));
+                                                        }
+                                                    }
+                                                }}
+                                                className={`min-h-[60px] sm:min-h-[72px] md:min-h-[85px] p-1 sm:p-1.5 border-b border-r border-gray-100 cursor-pointer transition-colors ${
+                                                    !isCurrentMonth ? 'bg-gray-50/50' : 'hover:bg-gray-50'
+                                                } ${
+                                                    isSelected ? 'bg-purple-50 ring-1 ring-purple-400 ring-inset' : ''
+                                                } ${
+                                                    idx % 7 === 6 ? 'border-r-0' : ''
+                                                }`}
+                                            >
+                                                {/* 日期數字 */}
+                                                <div className={`text-lg sm:text-xl md:text-2xl font-light leading-none mb-0.5 sm:mb-1 ${
+                                                    !isCurrentMonth ? 'text-gray-300' : isToday ? 'text-red-500 font-normal' : 'text-[#1d1d1f]'
+                                                }`}>
+                                                    {date.getDate()}
+                                                </div>
+
+                                                {/* 事件列表 */}
+                                                <div className="space-y-0.5">
+                                                    {dayEvents.slice(0, 2).map((ev, i) => (
+                                                        <div
+                                                            key={ev.id || i}
+                                                            className="text-[8px] sm:text-[10px] leading-tight truncate text-gray-600"
+                                                            title={ev.title}
+                                                        >
+                                                            {ev.title}
+                                                        </div>
+                                                    ))}
+                                                    {dayEvents.length > 2 && (
+                                                        <div className="text-[8px] sm:text-[9px] text-gray-400">
+                                                            +{dayEvents.length - 2}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* 載入中提示 */}
+                                {calendarLoading && (
+                                    <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
+                                        <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                                    </div>
+                                )}
+
+                                {/* 預約區域 */}
+                                <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 space-y-3">
+                                    {calendarError && (
+                                        <div className="text-xs sm:text-sm text-red-500 flex items-center gap-2">
+                                            <Info className="w-4 h-4 flex-shrink-0" />
+                                            {calendarError}
+                                        </div>
+                                    )}
                                     <p className="text-xs sm:text-sm text-gray-600 flex items-center gap-2">
                                         <Info className="w-4 h-4 text-purple-600 flex-shrink-0" />
-                                        請參考上方行事曆，選擇合適的預約日期與時間
+                                        點選日期可快速選擇預約日，或使用下方選擇器。
                                     </p>
 
                                     <div className="space-y-3">

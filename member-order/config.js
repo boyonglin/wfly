@@ -68,7 +68,7 @@ const CONFIG = {
         // 推播 API Endpoint (建議透過後端代理，避免 Token 暴露)
         // 如果你有後端服務，請填入你的 API 端點
         // 如果沒有，可以透過 Google Apps Script 代理
-        PUSH_API_ENDPOINT: 'https://script.google.com/macros/s/AKfycbyWzPpd1zYzaQHZqSYJ-Ei_sjurFf0HWcEnXXnoLllgJdNrcCLqcYj1gWwGctmOHLw-FQ/exec'  // 【可選】填入後端 API 端點，或留空使用 Google Apps Script
+        PUSH_API_ENDPOINT: 'https://script.google.com/macros/s/AKfycbwazweHXIEcursFmwhUQfIaLGsICL0TA1OB4x-Td3I6mIMt_4s7My1vGoq3x8GNngpviA/exec'  // 【可選】填入後端 API 端點，或留空使用 Google Apps Script
     },
 
     // =============================================
@@ -78,7 +78,25 @@ const CONFIG = {
 };
 
 // =============================================
-// 7. 產品資料定義
+// 7. 行事曆設定 (透過 Google Apps Script 代理)
+// =============================================
+CONFIG.CALENDAR = {
+    // 【安全設計】API Key 存放在 Google Apps Script 的腳本屬性中
+    // 前端透過 LINE Push API Endpoint 代理取得行事曆資料
+    //
+    // 設定步驟：
+    // 1) 到 Google Apps Script 專案 > 設定 > 腳本屬性
+    // 2) 新增：GOOGLE_CALENDAR_API_KEY = 你的 Calendar API Key
+    // 3) 新增：GOOGLE_CALENDAR_ID = shared.calendar.vibe@gmail.com
+    // 4) 前端使用 action=getCalendarEvents 呼叫
+    //
+    // 使用方式（與 LINE Push 共用同一個 Apps Script）：
+    // GET ?action=getCalendarEvents&data=BASE64({timeMin, timeMax})
+    CALENDAR_ID: 'shared.calendar.vibe@gmail.com'  // 僅供顯示用，實際呼叫由後端處理
+};
+
+// =============================================
+// 8. 產品資料定義
 // =============================================
 // 注意：icon 屬性需要在 React 中動態賦值，這裡僅提供資料結構
 const PRODUCTS = [
