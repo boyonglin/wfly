@@ -71,7 +71,8 @@
       // =============================================
       // 從全域設定取得常數
       // =============================================
-      const { STORAGE_KEY, DRAFT_KEY, PAYMENT, LINE_PAY, LINE, API } = window.APP_CONFIG;
+      const { STORAGE_KEY, DRAFT_KEY, PAYMENT, LINE_PAY, LINE, API, GOOGLE_SCRIPT_URL } =
+        window.APP_CONFIG;
 
       // Icon 映射表
       const ICON_MAP = {
@@ -157,7 +158,6 @@
           // 檢查 URL 是否有 LINE Pay 回傳參數
           const urlParams = new URLSearchParams(window.location.search);
           const transactionId = urlParams.get("transactionId");
-          const orderId = urlParams.get("orderId");
 
           try {
             const savedOrder = localStorage.getItem(STORAGE_KEY);
@@ -207,14 +207,20 @@
 
           setIsConfirmingLinePay(true);
           try {
-            // btoa 無法處理 UTF-8，需先轉換
+            // btoa 無法直接處理 UTF-8，使用 TextEncoder 轉換
             const payloadData = JSON.stringify({
               transactionId: transactionId,
               amount: order.total,
               orderId: order.id,
               sandbox: LINE_PAY.SANDBOX,
             });
-            const payload = btoa(unescape(encodeURIComponent(payloadData)));
+            const encoder = new TextEncoder();
+            const payloadBytes = encoder.encode(payloadData);
+            let binaryString = "";
+            for (let i = 0; i < payloadBytes.length; i++) {
+              binaryString += String.fromCharCode(payloadBytes[i]);
+            }
+            const payload = btoa(binaryString);
 
             const response = await fetch(
               `${LINE_PAY.ENDPOINT}?action=linePayConfirm&data=${encodeURIComponent(payload)}`
@@ -232,6 +238,24 @@
               localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
               setOrderResult(updatedOrder);
               setLinePayConfirmed(true);
+
+              // 同步付款狀態到 Google Sheets
+              try {
+                await fetch(GOOGLE_SCRIPT_URL, {
+                  method: "POST",
+                  mode: "cors",
+                  headers: { "Content-Type": "text/plain" },
+                  body: JSON.stringify({
+                    action: "updatePaymentStatus",
+                    orderId: order.id,
+                    paymentStatus: "paid",
+                  }),
+                });
+                console.log("Payment status synced to Google Sheets");
+              } catch (syncError) {
+                console.error("Failed to sync payment status:", syncError);
+                // 不影響前端顯示，只記錄錯誤
+              }
             } else {
               throw new Error(result.error || "付款確認失敗");
             }

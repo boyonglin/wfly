@@ -21,7 +21,7 @@ const CONFIG = {
   // Google Apps Script API
   // 【安全性】Sheet ID 已移至後端腳本屬性，不再暴露於前端
   GOOGLE_SCRIPT_URL:
-    "https://script.google.com/macros/s/AKfycbxb8FP1E9TbMa2j7OkuaQoulk7S21rIVFcETDxfCj61BLsJ_717uhKr1PgxaRDPOY4heA/exec",
+    "https://script.google.com/macros/s/AKfycbwju__9lD277dbZe8tLDxWCh2o3Jji8hAtbU5d3ePhndZwBBq2b96dmQuMegX_s3lc2mg/exec",
 
   // =============================================
   // 2. LocalStorage Keys
@@ -68,7 +68,7 @@ const CONFIG = {
 
     // 【請填入】部署好的 LINE Pay GAS URL
     // 部署步驟：
-    // 1. 將 gas-line-pay.txt 程式碼貼到 GAS
+    // 1. 將 line-pay.txt 程式碼貼到 GAS
     // 2. 設定腳本屬性：LINEPAY_CHANNEL_ID、LINEPAY_CHANNEL_SECRET
     // 3. 部署 > 新增部署 > 網頁應用程式 > 任何人皆可存取
     // 4. 複製部署後的 URL 貼到這裡
