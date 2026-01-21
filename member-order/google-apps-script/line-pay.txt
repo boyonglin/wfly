@@ -1,0 +1,222 @@
+// =============================================
+// LINE Pay API 串接 - Google Apps Script
+// =============================================
+// 使用前請先設定腳本屬性：
+// 1. LINEPAY_CHANNEL_ID - 你的 Channel ID
+// 2. LINEPAY_CHANNEL_SECRET - 你的 Channel Secret Key
+// 3. LINEPAY_SANDBOX - true（測試）或 false（正式）
+// =============================================
+
+/**
+ * LINE Pay 設定
+ */
+function getLinePayConfig() {
+  const props = PropertiesService.getScriptProperties();
+  const isSandbox = props.getProperty('LINEPAY_SANDBOX') === 'true';
+
+  return {
+    channelId: props.getProperty('LINEPAY_CHANNEL_ID'),
+    channelSecret: props.getProperty('LINEPAY_CHANNEL_SECRET'),
+    apiUrl: isSandbox
+      ? 'https://sandbox-api-pay.line.me'
+      : 'https://api-pay.line.me',
+    isSandbox: isSandbox
+  };
+}
+
+/**
+ * 產生 LINE Pay API 簽章
+ */
+function generateLinePaySignature(channelSecret, uri, requestBody, nonce) {
+  const message = channelSecret + uri + requestBody + nonce;
+  const signature = Utilities.base64Encode(
+    Utilities.computeHmacSha256Signature(message, channelSecret)
+  );
+  return signature;
+}
+
+/**
+ * LINE Pay Request API - 建立付款請求
+ * @param {string} orderId - 訂單編號
+ * @param {number} amount - 金額
+ * @param {string} productName - 商品名稱
+ * @param {string} confirmUrl - 付款成功後導回的網址
+ * @param {string} cancelUrl - 取消付款後導回的網址
+ */
+function linePayRequest(orderId, amount, productName, confirmUrl, cancelUrl) {
+  const config = getLinePayConfig();
+  const uri = '/v3/payments/request';
+  const nonce = Utilities.getUuid();
+
+  const requestBody = JSON.stringify({
+    amount: amount,
+    currency: 'TWD',
+    orderId: orderId,
+    packages: [{
+      id: 'pkg_' + orderId,
+      amount: amount,
+      name: '吾飛藝術銀行',
+      products: [{
+        name: productName,
+        quantity: 1,
+        price: amount
+      }]
+    }],
+    redirectUrls: {
+      confirmUrl: confirmUrl,
+      cancelUrl: cancelUrl
+    },
+    options: {
+      display: {
+        locale: 'zh_TW'
+      }
+    }
+  });
+
+  const signature = generateLinePaySignature(config.channelSecret, uri, requestBody, nonce);
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'X-LINE-ChannelId': config.channelId,
+      'X-LINE-Authorization-Nonce': nonce,
+      'X-LINE-Authorization': signature
+    },
+    payload: requestBody,
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(config.apiUrl + uri, options);
+    const result = JSON.parse(response.getContentText());
+
+    if (result.returnCode === '0000') {
+      return {
+        success: true,
+        transactionId: result.info.transactionId,
+        paymentUrl: result.info.paymentUrl.web
+      };
+    } else {
+      return {
+        success: false,
+        error: result.returnMessage,
+        code: result.returnCode
+      };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+/**
+ * LINE Pay Confirm API - 確認付款
+ * @param {string} transactionId - LINE Pay 交易 ID
+ * @param {number} amount - 金額（必須與 Request 時相同）
+ */
+function linePayConfirm(transactionId, amount) {
+  const config = getLinePayConfig();
+  const uri = '/v3/payments/' + transactionId + '/confirm';
+  const nonce = Utilities.getUuid();
+
+  const requestBody = JSON.stringify({
+    amount: amount,
+    currency: 'TWD'
+  });
+
+  const signature = generateLinePaySignature(config.channelSecret, uri, requestBody, nonce);
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'X-LINE-ChannelId': config.channelId,
+      'X-LINE-Authorization-Nonce': nonce,
+      'X-LINE-Authorization': signature
+    },
+    payload: requestBody,
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(config.apiUrl + uri, options);
+    const result = JSON.parse(response.getContentText());
+
+    if (result.returnCode === '0000') {
+      return {
+        success: true,
+        transactionId: transactionId,
+        info: result.info
+      };
+    } else {
+      return {
+        success: false,
+        error: result.returnMessage,
+        code: result.returnCode
+      };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// =============================================
+// doGet / doPost 處理範例
+// =============================================
+// 請將以下程式碼整合到你現有的 doGet 或 doPost 函式中
+
+function doGet(e) {
+  const action = e.parameter.action;
+  const data = e.parameter.data ? JSON.parse(Utilities.newBlob(Utilities.base64Decode(e.parameter.data)).getDataAsString()) : {};
+
+  // LINE Pay 建立付款請求
+  if (action === 'linePayRequest') {
+    const { orderId, amount, productName, confirmUrl, cancelUrl } = data;
+    const result = linePayRequest(orderId, amount, productName, confirmUrl, cancelUrl);
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // LINE Pay 確認付款
+  if (action === 'linePayConfirm') {
+    const { transactionId, amount } = data;
+    const result = linePayConfirm(transactionId, amount);
+
+    // 如果確認成功，可以在這裡更新 Google Sheet 的付款狀態
+    if (result.success) {
+      // 範例：更新訂單狀態
+      // updateOrderPaymentStatus(data.orderId, 'PAID', transactionId);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 其他 action 處理...
+  return ContentService.createTextOutput(JSON.stringify({ error: 'Unknown action' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// =============================================
+// 輔助函式：更新訂單付款狀態（範例）
+// =============================================
+// function updateOrderPaymentStatus(orderId, status, transactionId) {
+//   const ss = SpreadsheetApp.openById('YOUR_SHEET_ID');
+//   const sheet = ss.getSheetByName('訂單');
+//   const data = sheet.getDataRange().getValues();
+//
+//   for (let i = 1; i < data.length; i++) {
+//     if (data[i][0] === orderId) { // 假設訂單編號在第一欄
+//       sheet.getRange(i + 1, 10).setValue(status); // 付款狀態欄
+//       sheet.getRange(i + 1, 11).setValue(transactionId); // LINE Pay 交易 ID 欄
+//       sheet.getRange(i + 1, 12).setValue(new Date()); // 付款時間
+//       break;
+//     }
+//   }
+// }
