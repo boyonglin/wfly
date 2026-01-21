@@ -44,7 +44,7 @@
 
 1. 前往 [Google Apps Script](https://script.google.com/)
 2. 建立新專案，命名為「LINE Push API」
-3. 將 `doPost-line-push.txt` 的內容貼入
+3. 將 `api-proxy.txt` 的內容貼入
 4. 設定腳本屬性：
    - 點擊「設定」(⚙️) → 「腳本屬性」
    - 新增屬性：

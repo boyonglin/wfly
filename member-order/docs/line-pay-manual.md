@@ -49,7 +49,7 @@
 
 ### 3. 新增 LINE Pay 處理程式碼
 
-在你的 GAS 專案中新增：gas-line-pay.txt
+在你的 GAS 專案中新增：line-pay.txt
 
 ---
 

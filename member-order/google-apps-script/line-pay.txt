@@ -43,14 +43,6 @@ function generateLinePaySignature(channelSecret, uri, requestBody, nonce) {
   // 組合訊息：ChannelSecret + URI + RequestBody + Nonce
   const message = channelSecret + uri + requestBody + nonce;
 
-  // 除錯用 log（上線後可移除）
-  console.log('=== LINE Pay 簽章除錯 ===');
-  console.log('URI:', uri);
-  console.log('Nonce:', nonce);
-  console.log('RequestBody:', requestBody);
-  console.log('Message 長度:', message.length);
-  console.log('ChannelSecret 長度:', channelSecret ? channelSecret.length : 'undefined');
-
   // ⚠️ 重點：將字串轉換為 byte array（模擬 TextEncoder.encode()）
   const keyBytes = Utilities.newBlob(channelSecret).getBytes();
   const messageBytes = Utilities.newBlob(message).getBytes();
@@ -60,7 +52,6 @@ function generateLinePaySignature(channelSecret, uri, requestBody, nonce) {
 
   // 轉換為 Base64
   const signature = Utilities.base64Encode(signatureBytes);
-  console.log('Signature:', signature);
 
   return signature;
 }
@@ -102,14 +93,6 @@ function linePayRequest(orderId, amount, productName, confirmUrl, cancelUrl, san
 
   // ⚠️ 重要：簽章和 payload 必須用完全相同的 JSON 字串
   const requestBody = JSON.stringify(requestData);
-
-  // 除錯 log
-  console.log('=== LINE Pay Request 除錯 ===');
-  console.log('API URL:', config.apiUrl);
-  console.log('URI:', uri);
-  console.log('Nonce:', nonce);
-  console.log('RequestBody:', requestBody);
-
   const signature = generateLinePaySignature(config.channelSecret, uri, requestBody, nonce);
 
   const options = {
@@ -124,13 +107,9 @@ function linePayRequest(orderId, amount, productName, confirmUrl, cancelUrl, san
     muteHttpExceptions: true
   };
 
-  console.log('Headers:', JSON.stringify(options.headers));
-
   try {
     const response = UrlFetchApp.fetch(config.apiUrl + uri, options);
     const responseText = response.getContentText();
-    console.log('Response:', responseText);
-
     const result = JSON.parse(responseText);
 
     if (result.returnCode === '0000') {
@@ -147,7 +126,6 @@ function linePayRequest(orderId, amount, productName, confirmUrl, cancelUrl, san
       };
     }
   } catch (error) {
-    console.log('Error:', error.message);
     return {
       success: false,
       error: error.message
@@ -211,9 +189,8 @@ function linePayConfirm(transactionId, amount, sandbox) {
 }
 
 // =============================================
-// doGet / doPost 處理範例
+// doGet 處理 LINE Pay API 請求
 // =============================================
-// 請將以下程式碼整合到你現有的 doGet 或 doPost 函式中
 
 function doGet(e) {
   const action = e.parameter.action;
@@ -231,48 +208,13 @@ function doGet(e) {
   if (action === 'linePayConfirm') {
     const { transactionId, amount, sandbox } = data;
     const result = linePayConfirm(transactionId, amount, sandbox);
-
-    // 如果確認成功，可以在這裡更新 Google Sheet 的付款狀態
-    if (result.success) {
-      // 範例：更新訂單狀態
-      // updateOrderPaymentStatus(data.orderId, 'PAID', transactionId);
-    }
-
     return ContentService.createTextOutput(JSON.stringify(result))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  // 其他 action 處理...
-  return ContentService.createTextOutput(JSON.stringify({ error: 'Unknown action' }))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-// =============================================
-// 測試函式 - 可直接在 GAS 編輯器執行測試
-// =============================================
-function testLinePayRequest() {
-  const result = linePayRequest(
-    'TEST_' + Date.now(),      // orderId
-    100,                        // amount
-    '測試商品',                 // productName
-    'https://example.com/confirm',  // confirmUrl
-    'https://example.com/cancel',   // cancelUrl
-    true                        // sandbox = true (Sandbox 環境)
-  );
-  console.log('Test Result:', JSON.stringify(result, null, 2));
-}
-
-// 測試函式 2 - 檢查 credentials
-function testCredentials() {
-  const props = PropertiesService.getScriptProperties();
-  const channelId = props.getProperty('LINEPAY_CHANNEL_ID');
-  const channelSecret = props.getProperty('LINEPAY_CHANNEL_SECRET');
-
-  console.log('=== Credentials 檢查 ===');
-  console.log('Channel ID:', channelId);
-  console.log('Channel ID 長度:', channelId ? channelId.length : 'undefined');
-  console.log('Channel Secret 前 4 碼:', channelSecret ? channelSecret.substring(0, 4) : 'undefined');
-  console.log('Channel Secret 後 4 碼:', channelSecret ? channelSecret.substring(channelSecret.length - 4) : 'undefined');
-  console.log('Channel Secret 長度:', channelSecret ? channelSecret.length : 'undefined');
-  console.log('Channel Secret 有無空白:', channelSecret !== channelSecret.trim() ? '有！' : '無');
+  return ContentService.createTextOutput(JSON.stringify({
+    status: 'ok',
+    message: 'LINE Pay API is running',
+    usage: 'GET ?action=linePayRequest|linePayConfirm&data=BASE64_ENCODED_JSON'
+  })).setMimeType(ContentService.MimeType.JSON);
 }

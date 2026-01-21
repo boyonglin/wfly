@@ -1,6 +1,7 @@
 - Google App Scripts
-  - Google Sheet Upload
+  - Update Google Sheet
   - Get API Key
+  - Create Line Pay
 
 - Google Cloud Console
   - Google Calendar API

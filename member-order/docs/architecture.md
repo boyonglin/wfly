@@ -72,8 +72,9 @@ member-order/
 │   └── styles.css           # 共用樣式表 (~315 行)
 │
 ├── 📜 後端腳本 (Serverless)
-│   ├── app-script-do-post.txt    # Google Apps Script - 訂單 API
-│   └── app-script-api-push.txt   # Google Apps Script - LINE 推播 + Calendar
+│   ├── get-post.txt              # Google Apps Script - 訂單 API
+│   ├── api-proxy.txt             # Google Apps Script - LINE 推播 + Calendar
+│   └── line-pay.txt              # Google Apps Script - LINE Pay 付款
 │
 ├── 📖 文件
 │   ├── requirement.md            # 原始需求規格
@@ -444,9 +445,11 @@ HTML + CDN React ──▶ Google Apps Script ──▶ Google Sheets
 ## 📚 相關文件
 
 - [requirement.md](./requirement.md) - 原始需求規格
-- [LINE-LOGIN-設定指南.md](./LINE-LOGIN-設定指南.md) - LINE 整合指南
-- [app-script-do-post.txt](./app-script-do-post.txt) - 訂單 API 程式碼
-- [app-script-api-push.txt](./app-script-api-push.txt) - 推播 API 程式碼
+- [line-login-manual.md](./line-login-manual.md) - LINE Login 整合指南
+- [line-pay-manual.md](./line-pay-manual.md) - LINE Pay 整合指南
+- [get-post.txt](../google-apps-script/get-post.txt) - 訂單 API 程式碼
+- [api-proxy.txt](../google-apps-script/api-proxy.txt) - 推播 + Calendar API 程式碼
+- [line-pay.txt](../google-apps-script/line-pay.txt) - LINE Pay API 程式碼
 
 ---
 
