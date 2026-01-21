@@ -15,12 +15,12 @@
 
 請到 [LINE Pay Merchant Center](https://pay.line.me/portal/tw/merchant) 取得以下資訊：
 
-| 項目                   | 說明       | 你的資料（請填寫）              |
-| ---------------------- | ---------- | ------------------------------- |
-| **Channel ID**         | 商家識別碼 | `__________________`            |
-| **Channel Secret Key** | 商家密鑰   | ⚠️ 不要貼在這裡！直接設定到 GAS |
+| 項目                   | 說明       | 你的資料（請填寫）           |
+| ---------------------- | ---------- | ---------------------------- |
+| **Channel ID**         | 商家識別碼 | `__________________`         |
+| **Channel Secret Key** | 商家密鑰   | 不要貼在這裡！直接設定到 GAS |
 
-⚠️ **重要安全提醒**：Channel Secret Key 必須保存在後端（Google Apps Script），絕對不能放在前端！
+**重要安全提醒**：Channel Secret Key 必須保存在後端（Google Apps Script），絕對不能放在前端！
 
 ---
 
@@ -49,7 +49,7 @@
 
 ### 3. 新增 LINE Pay 處理程式碼
 
-在你的 GAS 專案中新增：gas-line-pay.txt
+在你的 GAS 專案中新增：line-pay.txt
 
 ---
 

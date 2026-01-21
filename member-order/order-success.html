@@ -31,7 +31,8 @@
     <!-- 4. 引入自訂樣式 -->
     <link rel="stylesheet" href="styles.css" />
 
-    <!-- 5. 引入設定檔 (必須在 React 之前載入) -->
+    <!-- 5. 引入設定檔 (config-api.js 必須在 config.js 之前載入) -->
+    <script src="config-api.js"></script>
     <script src="config.js"></script>
 
     <!-- 6. 引入 LINE Login SDK -->
@@ -64,12 +65,14 @@
         Heart,
         Briefcase,
         Network,
+        Wallet,
+        CheckCircle,
       } from "https://esm.sh/lucide-react@0.263.1";
 
       // =============================================
       // 從全域設定取得常數
       // =============================================
-      const { STORAGE_KEY, DRAFT_KEY, PAYMENT, LINE, API } = window.APP_CONFIG;
+      const { STORAGE_KEY, DRAFT_KEY, PAYMENT, LINE_PAY, LINE, API } = window.APP_CONFIG;
 
       // Icon 映射表
       const ICON_MAP = {
@@ -140,12 +143,21 @@
         const [lineSendResult, setLineSendResult] = useState(null); // 'success', 'error', null
         const [showLineSentModal, setShowLineSentModal] = useState(false);
 
+        // LINE Pay 相關狀態
+        const [isConfirmingLinePay, setIsConfirmingLinePay] = useState(false);
+        const [linePayConfirmed, setLinePayConfirmed] = useState(false);
+        const [linePayError, setLinePayError] = useState(null);
+
         // =============================================
-        // 初始化 - 載入訂單資料
+        // 初始化 - 載入訂單資料 & 處理 LINE Pay 回傳
         // =============================================
         useEffect(() => {
           // 初始化 LIFF (LINE Login)
           initializeLiff();
+
+          // 檢查 URL 是否有 LINE Pay 回傳參數
+          const urlParams = new URLSearchParams(window.location.search);
+          const transactionId = urlParams.get("transactionId");
 
           try {
             const savedOrder = localStorage.getItem(STORAGE_KEY);
@@ -155,6 +167,16 @@
               if (parsedOrder.deadline && parsedOrder.deadline > Date.now()) {
                 setOrderResult(parsedOrder);
                 setRestored(true);
+
+                // 如果有 LINE Pay transactionId，執行確認付款
+                // LINE Pay API 本身有防重複機制（return code 1152, 1198）
+                if (
+                  transactionId &&
+                  parsedOrder.paymentMethod === "linepay" &&
+                  parsedOrder.paymentStatus !== "paid"
+                ) {
+                  confirmLinePay(transactionId, parsedOrder);
+                }
               } else {
                 // 訂單已過期，跳轉回表單頁
                 localStorage.removeItem(STORAGE_KEY);
@@ -168,7 +190,65 @@
             console.error("Failed to load order:", error);
             window.location.href = "order-form.html";
           }
+
+          // 清除 URL 參數（避免重新整理時重複確認）
+          if (transactionId) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
         }, []);
+
+        // =============================================
+        // LINE Pay 確認付款
+        // =============================================
+        const confirmLinePay = async (transactionId, order) => {
+          if (!LINE_PAY.ENDPOINT) {
+            setLinePayError("LINE Pay 未設定");
+            return;
+          }
+
+          setIsConfirmingLinePay(true);
+          try {
+            // btoa 無法直接處理 UTF-8，使用 TextEncoder 轉換
+            const payloadData = JSON.stringify({
+              transactionId: transactionId,
+              amount: order.total,
+              orderId: order.id,
+              sandbox: LINE_PAY.SANDBOX,
+            });
+            const encoder = new TextEncoder();
+            const payloadBytes = encoder.encode(payloadData);
+            let binaryString = "";
+            for (let i = 0; i < payloadBytes.length; i++) {
+              binaryString += String.fromCharCode(payloadBytes[i]);
+            }
+            const payload = btoa(binaryString);
+
+            const response = await fetch(
+              `${LINE_PAY.ENDPOINT}?action=linePayConfirm&data=${encodeURIComponent(payload)}`
+            );
+            const result = await response.json();
+
+            if (result.success) {
+              // 更新訂單狀態
+              const updatedOrder = {
+                ...order,
+                paymentStatus: "paid",
+                linePayConfirmedAt: Date.now(),
+                linePayInfo: result.info,
+              };
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
+              setOrderResult(updatedOrder);
+              setLinePayConfirmed(true);
+            } else {
+              throw new Error(result.error || "付款確認失敗");
+            }
+          } catch (error) {
+            console.error("LINE Pay Confirm Error:", error);
+            setLinePayError(error.message);
+          } finally {
+            setIsConfirmingLinePay(false);
+          }
+        };
 
         // =============================================
         // LINE Login (LIFF) 初始化
@@ -493,19 +573,19 @@
           <div className="min-h-screen bg-[#f5f5f7] pb-20">
             <div className="w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto bg-white min-h-screen shadow-2xl overflow-hidden flex flex-col">
               {/* 成功頁面 Header */}
-              <div className="bg-[#1d1d1f] text-white p-6 sm:p-8 md:p-10 text-center rounded-b-[2rem] shadow-lg relative z-10 safe-area-top">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-lg shadow-green-500/30">
-                  <Check className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 text-white stroke-[3]" />
+              <div className="bg-[#1d1d1f] text-white p-8 sm:p-10 md:p-12 text-center rounded-b-[2rem] shadow-lg relative z-10 safe-area-top">
+                <div className="w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] md:w-20 md:h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-5 shadow-lg shadow-green-500/30">
+                  <Check className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 text-white stroke-[3]" />
                 </div>
-                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-1">訂單已送出</h2>
+                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2">訂單已送出</h2>
                 <p className="text-gray-400 text-xs sm:text-sm">
                   請完成付款並傳送資料至官方 Line 確認
                 </p>
               </div>
 
-              <div className="px-4 sm:px-6 md:px-8 -mt-6 relative z-20 flex-grow">
+              <div className="px-4 sm:px-6 md:px-8 -mt-6 pt-2 relative z-20 flex-grow">
                 {restored && (
-                  <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-2 rounded-xl flex items-center gap-2 text-sm shadow-sm">
+                  <div className="mb-4 sm:mb-6 bg-blue-50 border border-blue-200 text-blue-800 p-3 sm:p-4 md:p-5 rounded-xl sm:rounded-2xl flex items-center gap-2 text-sm shadow-sm">
                     <AlertCircle className="w-4 h-4" /> 這是您尚未清除的歷史訂單
                   </div>
                 )}
@@ -563,7 +643,7 @@
                         </div>
                         <div>
                           <p className="text-[10px] sm:text-xs text-gray-400">資訊來源</p>
-                          <p className="font-medium text-sm sm:text-base text-[#6d28d9]">
+                          <p className="font-medium text-sm sm:text-base text-[#1d1d1f]">
                             {orderResult.customer.source || "-"}
                           </p>
                         </div>
@@ -580,48 +660,52 @@
                           {orderResult.customer.address || "-"}
                         </p>
                       </div>
-                      {(orderResult.customer.appointmentDate ||
-                        orderResult.customer.appointmentTime) && (
-                        <div className="bg-purple-50 rounded-xl p-3 sm:p-4 border border-purple-100">
-                          <p className="text-[10px] sm:text-xs text-purple-600 font-bold mb-1.5 flex items-center gap-1.5">
-                            <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> 預約時間
-                          </p>
-                          <div className="space-y-1">
-                            {orderResult.customer.appointmentDate && (
-                              <p className="font-bold text-base sm:text-lg text-purple-900">
-                                {new Date(orderResult.customer.appointmentDate).toLocaleDateString(
-                                  "zh-TW",
-                                  {
-                                    year: "numeric",
-                                    month: "long",
-                                    day: "numeric",
-                                    weekday: "short",
-                                  }
-                                )}
-                              </p>
-                            )}
-                            {(orderResult.customer.appointmentPeriod ||
-                              orderResult.customer.appointmentTime) && (
-                              <p className="text-sm sm:text-base text-purple-700 flex items-center gap-2">
-                                {orderResult.customer.appointmentPeriod && (
-                                  <span className="bg-purple-100 px-2 py-0.5 rounded text-xs font-medium">
-                                    {orderResult.customer.appointmentPeriod === "morning" && "上午"}
-                                    {orderResult.customer.appointmentPeriod === "afternoon" &&
-                                      "下午"}
-                                    {orderResult.customer.appointmentPeriod === "evening" && "晚上"}
-                                  </span>
-                                )}
-                                {orderResult.customer.appointmentTime && (
-                                  <span className="font-semibold">
-                                    {orderResult.customer.appointmentTime}
-                                  </span>
-                                )}
-                              </p>
-                            )}
+                    </div>
+                    {/* 預約時間區塊 */}
+                    {(orderResult.customer.appointmentDate ||
+                      orderResult.customer.appointmentTime) && (
+                      <div className="text-sm border-b border-dashed border-gray-200 pb-3 sm:pb-4 space-y-2 sm:space-y-3">
+                        <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                          <div>
+                            <p className="text-[10px] sm:text-xs text-gray-400">預約日期</p>
+                            <p className="font-medium text-sm sm:text-base text-[#1d1d1f]">
+                              {orderResult.customer.appointmentDate
+                                ? new Date(orderResult.customer.appointmentDate).toLocaleDateString(
+                                    "zh-TW",
+                                    {
+                                      year: "numeric",
+                                      month: "long",
+                                      day: "numeric",
+                                      weekday: "short",
+                                    }
+                                  )
+                                : "-"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] sm:text-xs text-gray-400">預約時段</p>
+                            <p className="font-medium text-sm sm:text-base text-[#1d1d1f]">
+                              {orderResult.customer.appointmentPeriod && (
+                                <span>
+                                  {orderResult.customer.appointmentPeriod === "morning" && "上午"}
+                                  {orderResult.customer.appointmentPeriod === "afternoon" && "下午"}
+                                  {orderResult.customer.appointmentPeriod === "evening" && "晚上"}
+                                </span>
+                              )}
+                              {orderResult.customer.appointmentPeriod &&
+                                orderResult.customer.appointmentTime &&
+                                " "}
+                              {orderResult.customer.appointmentTime && (
+                                <span>{orderResult.customer.appointmentTime}</span>
+                              )}
+                              {!orderResult.customer.appointmentPeriod &&
+                                !orderResult.customer.appointmentTime &&
+                                "-"}
+                            </p>
                           </div>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {/* 訂購項目 */}
                     <div>
@@ -631,11 +715,11 @@
                           const product = initialProducts.find(p => p.id === parseInt(id));
                           return (
                             <li key={id} className="flex justify-between text-xs sm:text-sm">
-                              <span className="text-gray-600">
+                              <span className="text-[#1d1d1f]">
                                 {product.name}{" "}
-                                <span className="text-gray-400 text-[10px] sm:text-xs">x{qty}</span>
+                                <span className="text-gray-500 text-[10px] sm:text-xs">x{qty}</span>
                               </span>
-                              <span className="font-medium">
+                              <span className="font-medium text-[#1d1d1f]">
                                 NT$ {(product.price * qty).toLocaleString()}
                               </span>
                             </li>
@@ -671,14 +755,14 @@
                   >
                     <button
                       onClick={downloadReceiptImage}
-                      className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-blue-600 text-[10px] sm:text-xs font-bold border-r border-gray-200 py-2 active:bg-blue-50 transition-colors"
+                      className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-[#1d1d1f] text-[10px] sm:text-xs font-bold border-r border-gray-200 py-2 active:bg-gray-100 transition-colors"
                     >
                       <ImageIcon className="w-3 h-3 sm:w-4 sm:h-4" />{" "}
                       <span id="download-btn-text">下載圖片</span>
                     </button>
                     <button
                       onClick={() => copyToClipboard(generateOrderText(orderResult), false)}
-                      className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-[#6d28d9] text-[10px] sm:text-xs font-bold border-r border-gray-200 py-2 active:bg-purple-50 transition-colors"
+                      className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-[#1d1d1f] text-[10px] sm:text-xs font-bold border-r border-gray-200 py-2 active:bg-gray-100 transition-colors"
                     >
                       <Copy className="w-3 h-3 sm:w-4 sm:h-4" /> 複製文字
                     </button>
@@ -691,35 +775,84 @@
                   </div>
                 </div>
 
-                {/* 付款資訊 */}
-                <div className="bg-white rounded-xl sm:rounded-2xl border border-red-100 p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-sm relative">
-                  <div className="absolute top-0 right-0 bg-red-50 text-red-600 text-[8px] sm:text-[10px] font-bold px-2 py-1 rounded-bl-lg border-l border-b border-red-100">
-                    待付款
+                {/* LINE Pay 確認中提示 */}
+                {isConfirmingLinePay && (
+                  <div className="bg-[#06C755]/10 border border-[#06C755]/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6 text-center">
+                    <div className="w-8 h-8 border-[3px] border-[#06C755] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                    <p className="text-sm font-bold text-[#06C755]">正在確認 LINE Pay 付款...</p>
+                    <p className="text-xs text-gray-500 mt-1">請稍候</p>
                   </div>
-                  <h3 className="font-bold text-[#1d1d1f] mb-2 sm:mb-3 flex items-center gap-2 text-xs sm:text-sm">
-                    <CreditCard className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" /> 付款資訊
-                  </h3>
-                  <div className="bg-red-50 rounded p-2 mb-2 sm:mb-3 flex items-center justify-between text-[10px] sm:text-xs text-red-700">
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 匯款剩餘時間
+                )}
+
+                {/* LINE Pay 付款成功 */}
+                {orderResult?.paymentStatus === "paid" &&
+                  orderResult?.paymentMethod === "linepay" && (
+                    <div className="bg-[#06C755]/10 border border-[#06C755] rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-sm relative overflow-hidden">
+                      <div className="absolute top-0 right-0 bg-[#06C755] text-white text-[8px] sm:text-[10px] font-bold px-2 py-1 rounded-bl-lg">
+                        已付款
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Wallet className="w-6 h-6 text-[#06C755] flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-sm font-bold text-[#1d1d1f]">LINE Pay 付款完成</p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {orderResult.linePayConfirmedAt &&
+                              new Date(orderResult.linePayConfirmedAt).toLocaleString("zh-TW")}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <CountdownTimer deadline={orderResult.deadline} />
+                  )}
+
+                {/* LINE Pay 付款失敗 */}
+                {linePayError && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-sm">
+                    <h3 className="font-bold text-red-600 mb-2 flex items-center gap-2 text-xs sm:text-sm">
+                      <AlertCircle className="w-4 h-4" /> LINE Pay 付款失敗
+                    </h3>
+                    <p className="text-xs text-red-600 mb-3">{linePayError}</p>
+                    <p className="text-xs text-gray-500">請改用銀行轉帳或重新訂購</p>
                   </div>
-                  <div className="space-y-1 text-[10px] sm:text-xs text-gray-600">
-                    <div className="flex justify-between">
-                      <span>銀行</span>
-                      <span className="font-mono font-bold text-black">
-                        {PAYMENT.BANK_CODE} ({PAYMENT.BANK_NAME})
-                      </span>
+                )}
+
+                {/* 銀行轉帳付款資訊 - LINE Pay 確認中或已付款時隱藏 */}
+                {!isConfirmingLinePay &&
+                  !(
+                    orderResult?.paymentStatus === "paid" &&
+                    orderResult?.paymentMethod === "linepay"
+                  ) && (
+                    <div className="bg-white rounded-xl sm:rounded-2xl border border-red-100 p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-sm relative">
+                      <div className="absolute top-0 right-0 bg-red-50 text-red-600 text-[8px] sm:text-[10px] font-bold px-2 py-1 rounded-bl-lg border-l border-b border-red-100">
+                        {orderResult?.paymentMethod === "linepay" ? "LINE Pay 待付款" : "待付款"}
+                      </div>
+                      <h3 className="font-bold text-[#1d1d1f] mb-2 sm:mb-3 flex items-center gap-2 text-xs sm:text-sm">
+                        <CreditCard className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
+                        {orderResult?.paymentMethod === "linepay"
+                          ? "備用付款方式：銀行轉帳"
+                          : "付款資訊"}
+                      </h3>
+                      <div className="bg-red-50 rounded p-2 mb-2 sm:mb-3 flex items-center justify-between text-[10px] sm:text-xs text-red-700">
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 匯款剩餘時間
+                        </div>
+                        <CountdownTimer deadline={orderResult.deadline} />
+                      </div>
+                      <div className="space-y-1 text-[10px] sm:text-xs text-gray-600">
+                        <div className="flex justify-between">
+                          <span>銀行</span>
+                          <span className="font-mono font-bold text-black">
+                            {PAYMENT.BANK_CODE} ({PAYMENT.BANK_NAME})
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>帳號</span>
+                          <span className="font-mono font-bold text-black">
+                            {PAYMENT.ACCOUNT_NUMBER}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span>帳號</span>
-                      <span className="font-mono font-bold text-black">
-                        {PAYMENT.ACCOUNT_NUMBER}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                  )}
 
                 {/* 操作按鈕 */}
                 <div className="space-y-2 sm:space-y-3 pb-6 sm:pb-8 safe-area-bottom">
@@ -783,22 +916,22 @@
                   {!isLineLoggedIn && (
                     <button
                       onClick={handleShowLineQR}
-                      className="w-full py-2.5 sm:py-3 rounded-xl bg-white border-2 border-[#06C755] text-[#06C755] text-xs sm:text-sm font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                      className="w-full py-3 sm:py-4 rounded-xl bg-white border-2 border-[#06C755] text-[#06C755] text-sm sm:text-base font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
                     >
-                      <QrCode className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> 改用 QR Code 手動傳送
+                      <QrCode className="w-4 h-4 sm:w-5 sm:h-5" /> 改用 QR Code 手動傳送
                     </button>
                   )}
 
                   <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     <button
                       onClick={handleBackToEdit}
-                      className="py-2.5 sm:py-3 rounded-xl bg-gray-100 text-gray-700 text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 active:bg-gray-200 transition-colors"
+                      className="py-2.5 sm:py-3 rounded-xl bg-white text-gray-700 text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 active:bg-gray-50 transition-colors"
                     >
                       <ArrowLeft className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 返回修改
                     </button>
                     <button
                       onClick={handleNewOrder}
-                      className="py-2.5 sm:py-3 rounded-xl bg-white border border-gray-200 text-gray-600 text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 active:bg-gray-50 transition-colors"
+                      className="py-2.5 sm:py-3 rounded-xl bg-white text-gray-600 text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 active:bg-gray-50 transition-colors"
                     >
                       <RefreshCw className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 建立新單
                     </button>

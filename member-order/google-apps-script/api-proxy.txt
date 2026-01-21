@@ -25,6 +25,7 @@
 
 const LINE_PUSH_API = 'https://api.line.me/v2/bot/message/push';
 const CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3/calendars';
+const DEFAULT_CALENDAR_DAYS = 30;
 
 /**
  * 處理 GET 請求（用於繞過 CORS）
@@ -337,10 +338,10 @@ function callLinePushApi(token, payload) {
  */
 function getCalendarEvents(apiKey, calendarId, params) {
   try {
-    // 預設取得未來 30 天的事件
+    // 預設取得未來 DEFAULT_CALENDAR_DAYS 天的事件
     const now = new Date();
     const timeMin = params.timeMin || now.toISOString();
-    const futureDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const futureDate = new Date(now.getTime() + DEFAULT_CALENDAR_DAYS * 24 * 60 * 60 * 1000);
     const timeMax = params.timeMax || futureDate.toISOString();
     const maxResults = params.maxResults || 50;
 

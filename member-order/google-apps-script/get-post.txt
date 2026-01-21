@@ -4,7 +4,6 @@
 // 【安全性設定】
 // 1. 到「設定」(齒輪圖示) > 「腳本屬性」
 // 2. 新增屬性：GOOGLE_SHEET_ID = 你的試算表 ID
-//    (例如：182ZsNsbZNhF7RmgW3egw9Zg2Z3Tp-XCclHZgGmSvI34)
 
 function doGet(e) {
   return ContentService.createTextOutput(
@@ -34,7 +33,15 @@ function doPost(e) {
 
     const ss = SpreadsheetApp.openById(sheetId);
     const sheet = ss.getSheets()[0];
+
+    // =============================================
+    // 處理新增/更新訂單請求
+    // =============================================
     const itemsText = data.itemsSummary || JSON.stringify(data.items);
+
+    // 付款方式處理：bank → 銀行轉帳, linepay → LINE Pay
+    const paymentMethodText = data.paymentMethod === 'bank' ? '銀行轉帳' :
+                              data.paymentMethod === 'linepay' ? 'LINE Pay' : '';
 
     // 準備要寫入的資料列
     const rowData = [
@@ -57,7 +64,8 @@ function doPost(e) {
       data.customerAppointmentTime,
       itemsText,
       data.total,
-      data.signature
+      data.signature,
+      paymentMethodText
     ];
 
     // 如果是更新模式，找到原訂單並覆寫

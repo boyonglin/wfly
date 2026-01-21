@@ -2,21 +2,28 @@
 // LINE Pay API 串接 - Google Apps Script
 // =============================================
 // 使用前請先設定腳本屬性：
-// 1. LINEPAY_CHANNEL_ID - 你的 Channel ID
-// 2. LINEPAY_CHANNEL_SECRET - 你的 Channel Secret Key
-// 3. LINEPAY_SANDBOX - true（測試）或 false（正式）
+// 1. LINEPAY_CHANNEL_ID - Channel ID
+// 2. LINEPAY_CHANNEL_SECRET - Channel Secret Key
+//
+// 取得方式：
+// 合作商店中心 > 開發者工具 > 管理連結金鑰
+// https://pay.line.me/portal/tw/auth/login
 // =============================================
 
 /**
  * LINE Pay 設定
+ * @param {boolean} isSandbox - 是否使用 Sandbox 環境（由前端傳入）
  */
-function getLinePayConfig() {
+function getLinePayConfig(isSandbox) {
   const props = PropertiesService.getScriptProperties();
-  const isSandbox = props.getProperty('LINEPAY_SANDBOX') === 'true';
+
+  // 用 trim() 去除可能的空白
+  const channelId = (props.getProperty('LINEPAY_CHANNEL_ID') || '').trim();
+  const channelSecret = (props.getProperty('LINEPAY_CHANNEL_SECRET') || '').trim();
 
   return {
-    channelId: props.getProperty('LINEPAY_CHANNEL_ID'),
-    channelSecret: props.getProperty('LINEPAY_CHANNEL_SECRET'),
+    channelId: channelId,
+    channelSecret: channelSecret,
     apiUrl: isSandbox
       ? 'https://sandbox-api-pay.line.me'
       : 'https://api-pay.line.me',
@@ -26,12 +33,26 @@ function getLinePayConfig() {
 
 /**
  * 產生 LINE Pay API 簽章
+ * LINE Pay API 簽章格式（參考官方文件）：
+ * MAC = HMAC-SHA256(encode(ChannelSecret), encode(ChannelSecret + apiPath + RequestBody + Nonce))
+ * Signature = Base64(MAC)
+ *
+ * 將 key 和 message 都先轉成 byte array
  */
 function generateLinePaySignature(channelSecret, uri, requestBody, nonce) {
+  // 組合訊息：ChannelSecret + URI + RequestBody + Nonce
   const message = channelSecret + uri + requestBody + nonce;
-  const signature = Utilities.base64Encode(
-    Utilities.computeHmacSha256Signature(message, channelSecret)
-  );
+
+  // 將字串轉換為 byte array（模擬 TextEncoder.encode()）
+  const keyBytes = Utilities.newBlob(channelSecret).getBytes();
+  const messageBytes = Utilities.newBlob(message).getBytes();
+
+  // 使用 byte array 版本的 HMAC-SHA256
+  const signatureBytes = Utilities.computeHmacSha256Signature(messageBytes, keyBytes);
+
+  // 轉換為 Base64
+  const signature = Utilities.base64Encode(signatureBytes);
+
   return signature;
 }
 
@@ -42,13 +63,15 @@ function generateLinePaySignature(channelSecret, uri, requestBody, nonce) {
  * @param {string} productName - 商品名稱
  * @param {string} confirmUrl - 付款成功後導回的網址
  * @param {string} cancelUrl - 取消付款後導回的網址
+ * @param {boolean} sandbox - 是否使用 Sandbox 環境
  */
-function linePayRequest(orderId, amount, productName, confirmUrl, cancelUrl) {
-  const config = getLinePayConfig();
+function linePayRequest(orderId, amount, productName, confirmUrl, cancelUrl, sandbox) {
+  const config = getLinePayConfig(sandbox);
   const uri = '/v3/payments/request';
   const nonce = Utilities.getUuid();
 
-  const requestBody = JSON.stringify({
+  // 建立請求資料物件
+  const requestData = {
     amount: amount,
     currency: 'TWD',
     orderId: orderId,
@@ -65,14 +88,11 @@ function linePayRequest(orderId, amount, productName, confirmUrl, cancelUrl) {
     redirectUrls: {
       confirmUrl: confirmUrl,
       cancelUrl: cancelUrl
-    },
-    options: {
-      display: {
-        locale: 'zh_TW'
-      }
     }
-  });
+  };
 
+  // 簽章和 payload 必須用完全相同的 JSON 字串
+  const requestBody = JSON.stringify(requestData);
   const signature = generateLinePaySignature(config.channelSecret, uri, requestBody, nonce);
 
   const options = {
@@ -89,12 +109,13 @@ function linePayRequest(orderId, amount, productName, confirmUrl, cancelUrl) {
 
   try {
     const response = UrlFetchApp.fetch(config.apiUrl + uri, options);
-    const result = JSON.parse(response.getContentText());
+    const responseText = response.getContentText();
+    const result = JSON.parse(responseText);
 
     if (result.returnCode === '0000') {
       return {
         success: true,
-        transactionId: result.info.transactionId,
+        transactionId: String(result.info.transactionId),
         paymentUrl: result.info.paymentUrl.web
       };
     } else {
@@ -116,9 +137,10 @@ function linePayRequest(orderId, amount, productName, confirmUrl, cancelUrl) {
  * LINE Pay Confirm API - 確認付款
  * @param {string} transactionId - LINE Pay 交易 ID
  * @param {number} amount - 金額（必須與 Request 時相同）
+ * @param {boolean} sandbox - 是否使用 Sandbox 環境
  */
-function linePayConfirm(transactionId, amount) {
-  const config = getLinePayConfig();
+function linePayConfirm(transactionId, amount, sandbox) {
+  const config = getLinePayConfig(sandbox);
   const uri = '/v3/payments/' + transactionId + '/confirm';
   const nonce = Utilities.getUuid();
 
@@ -167,9 +189,65 @@ function linePayConfirm(transactionId, amount) {
 }
 
 // =============================================
-// doGet / doPost 處理範例
+// 金額驗證 - 從 Google Sheets 取得訂單金額
 // =============================================
-// 請將以下程式碼整合到你現有的 doGet 或 doPost 函式中
+
+/**
+ * 從 Google Sheets 驗證訂單金額
+ * @param {string} orderId - 訂單編號
+ * @param {number} amount - 前端傳入的金額
+ * @returns {object} { valid: boolean, actualAmount?: number, error?: string }
+ */
+function validateOrderAmount(orderId, amount) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const sheetId = props.getProperty('GOOGLE_SHEET_ID');
+
+    if (!sheetId) {
+      // 若未設定 GOOGLE_SHEET_ID，跳過驗證（向下相容）
+      Logger.log('GOOGLE_SHEET_ID not set, skipping amount validation');
+      return { valid: true };
+    }
+
+    const ss = SpreadsheetApp.openById(sheetId);
+    const sheet = ss.getSheets()[0];
+    const lastRow = sheet.getLastRow();
+
+    if (lastRow <= 1) {
+      return { valid: false, error: '找不到訂單資料' };
+    }
+
+    // 搜尋訂單 (B欄是 orderId, S欄是 total)
+    const dataRange = sheet.getRange(2, 2, lastRow - 1, 18); // B到S欄
+    const data = dataRange.getValues();
+
+    for (let i = 0; i < data.length; i++) {
+      if (data[i][0] === orderId) {
+        const actualAmount = Number(data[i][17]); // S欄 (index 17) 是 total
+        if (Math.abs(actualAmount - amount) < 0.01) {
+          return { valid: true, actualAmount: actualAmount };
+        } else {
+          Logger.log('Amount mismatch: expected ' + actualAmount + ', got ' + amount);
+          return {
+            valid: false,
+            actualAmount: actualAmount,
+            error: '金額不符：預期 ' + actualAmount + '，收到 ' + amount
+          };
+        }
+      }
+    }
+
+    return { valid: false, error: '找不到訂單: ' + orderId };
+  } catch (error) {
+    Logger.log('validateOrderAmount error: ' + error.message);
+    // 驗證失敗時不阻擋付款，記錄警告即可
+    return { valid: true, warning: error.message };
+  }
+}
+
+// =============================================
+// doGet 處理 LINE Pay API 請求
+// =============================================
 
 function doGet(e) {
   const action = e.parameter.action;
@@ -177,46 +255,45 @@ function doGet(e) {
 
   // LINE Pay 建立付款請求
   if (action === 'linePayRequest') {
-    const { orderId, amount, productName, confirmUrl, cancelUrl } = data;
-    const result = linePayRequest(orderId, amount, productName, confirmUrl, cancelUrl);
+    const { orderId, amount, productName, confirmUrl, cancelUrl, sandbox } = data;
+
+    // 伺服器端金額驗證
+    const validation = validateOrderAmount(orderId, amount);
+    if (!validation.valid) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        error: validation.error || '金額驗證失敗'
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const result = linePayRequest(orderId, amount, productName, confirmUrl, cancelUrl, sandbox);
     return ContentService.createTextOutput(JSON.stringify(result))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
   // LINE Pay 確認付款
   if (action === 'linePayConfirm') {
-    const { transactionId, amount } = data;
-    const result = linePayConfirm(transactionId, amount);
+    const { transactionId, amount, orderId, sandbox } = data;
 
-    // 如果確認成功，可以在這裡更新 Google Sheet 的付款狀態
-    if (result.success) {
-      // 範例：更新訂單狀態
-      // updateOrderPaymentStatus(data.orderId, 'PAID', transactionId);
+    // 確認付款時也驗證金額（如有提供 orderId）
+    if (orderId) {
+      const validation = validateOrderAmount(orderId, amount);
+      if (!validation.valid) {
+        return ContentService.createTextOutput(JSON.stringify({
+          success: false,
+          error: validation.error || '金額驗證失敗'
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
     }
 
+    const result = linePayConfirm(transactionId, amount, sandbox);
     return ContentService.createTextOutput(JSON.stringify(result))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  // 其他 action 處理...
-  return ContentService.createTextOutput(JSON.stringify({ error: 'Unknown action' }))
-    .setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify({
+    status: 'ok',
+    message: 'LINE Pay API is running',
+    usage: 'GET ?action=linePayRequest|linePayConfirm&data=BASE64_ENCODED_JSON'
+  })).setMimeType(ContentService.MimeType.JSON);
 }
-
-// =============================================
-// 輔助函式：更新訂單付款狀態（範例）
-// =============================================
-// function updateOrderPaymentStatus(orderId, status, transactionId) {
-//   const ss = SpreadsheetApp.openById('YOUR_SHEET_ID');
-//   const sheet = ss.getSheetByName('訂單');
-//   const data = sheet.getDataRange().getValues();
-//
-//   for (let i = 1; i < data.length; i++) {
-//     if (data[i][0] === orderId) { // 假設訂單編號在第一欄
-//       sheet.getRange(i + 1, 10).setValue(status); // 付款狀態欄
-//       sheet.getRange(i + 1, 11).setValue(transactionId); // LINE Pay 交易 ID 欄
-//       sheet.getRange(i + 1, 12).setValue(new Date()); // 付款時間
-//       break;
-//     }
-//   }
-// }

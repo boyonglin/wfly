@@ -34,7 +34,8 @@
     <!-- 4. 引入自訂樣式 -->
     <link rel="stylesheet" href="styles.css" />
 
-    <!-- 5. 引入設定檔 (必須在 React 之前載入) -->
+    <!-- 5. 引入設定檔 (config-api.js 必須在 config.js 之前載入) -->
+    <script src="config-api.js"></script>
     <script src="config.js"></script>
   </head>
   <body class="bg-[#f5f5f7]">
@@ -66,6 +67,8 @@
         ShieldCheck,
         Save,
         Trash2,
+        CreditCard,
+        Wallet,
       } from "https://esm.sh/lucide-react@0.263.1";
 
       // =============================================
@@ -78,6 +81,7 @@
         LOCATIONS,
         DEFAULT_LOCATION,
         PAYMENT,
+        LINE_PAY,
         ORDER_ID_PREFIX,
         API,
       } = window.APP_CONFIG;
@@ -138,6 +142,11 @@
 
         // 編輯模式 - 保留原訂單編號
         const [editingOrderId, setEditingOrderId] = useState(null);
+
+        // 付款方式選擇（bank: 銀行轉帳, linepay: LINE Pay）
+        const [paymentMethod, setPaymentMethod] = useState(
+          LINE_PAY.ENABLED && LINE_PAY.ENDPOINT ? "linepay" : "bank"
+        );
 
         // 自定義下拉選單狀態
         const [showPeriodDropdown, setShowPeriodDropdown] = useState(false);
@@ -262,9 +271,11 @@
           for (let i = 1; i <= daysInMonth; i++) {
             days.push({ date: new Date(year, month, i), isCurrentMonth: true });
           }
-          // 補滿至 42 格 (6 週)
-          const remaining = 42 - days.length;
-          for (let i = 1; i <= remaining; i++) {
+          // 補滿至該週結束（只補到包含當月最後一天的那週）
+          const lastDayOfWeek = lastDay.getDay();
+          // 週一開始，計算該週剩餘天數 (週日=0 -> 需補0天, 週一=1 -> 需補6天, ...)
+          const daysToFillWeek = lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek;
+          for (let i = 1; i <= daysToFillWeek; i++) {
             days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false });
           }
           return days;
@@ -348,6 +359,28 @@
           window.addEventListener("scroll", handleScroll);
           return () => window.removeEventListener("scroll", handleScroll);
         }, []);
+
+        // =============================================
+        // 檢查表單是否為空
+        // =============================================
+        const isFormEmpty = () => {
+          // 檢查顧問資料（排除 location，因為有預設值）
+          const consultantEmpty = !consultantInfo.name && !consultantInfo.id;
+
+          // 檢查客戶資料（排除 appointmentPeriod，因為有預設值）
+          const fieldsToCheck = Object.entries(customerInfo)
+            .filter(([key]) => key !== "appointmentPeriod")
+            .map(([, val]) => val);
+          const customerEmpty = fieldsToCheck.every(val => !val);
+
+          // 檢查購物車
+          const cartEmpty = Object.keys(cart).length === 0;
+
+          // 檢查簽名
+          const signatureEmpty = !signatureData;
+
+          return consultantEmpty && customerEmpty && cartEmpty && signatureEmpty;
+        };
 
         // =============================================
         // 自動儲存 Effect
@@ -576,6 +609,8 @@
             items: finalOrder.items,
             total: finalOrder.total,
             signature: finalOrder.signature,
+            // 付款相關欄位
+            paymentMethod: finalOrder.paymentMethod || "", // bank 或 linepay
           };
 
           console.log("Sending to Google Sheets:", payload);
@@ -604,7 +639,7 @@
 
         const getInputClass = isError => {
           const baseClass =
-            "w-full p-3 rounded-xl border outline-none transition-all placeholder:text-gray-400";
+            "w-full p-3 rounded-xl border outline-none transition-all placeholder:text-gray-400 text-sm sm:text-base";
           if (isError) {
             return `${baseClass} border-red-500 ring-2 ring-red-500/20 bg-red-50 text-red-900`;
           }
@@ -671,6 +706,7 @@
             date: new Date().toLocaleString("zh-TW"),
             signature: signatureData,
             deadline: deadline,
+            paymentMethod: paymentMethod, // 付款方式
           };
 
           try {
@@ -682,7 +718,76 @@
             return;
           }
 
-          // 儲存訂單並清除草稿
+          // LINE Pay 付款流程
+          if (paymentMethod === "linepay" && LINE_PAY.ENABLED && LINE_PAY.ENDPOINT) {
+            try {
+              // 產生商品名稱
+              const productNames = Object.entries(cart)
+                .filter(([_, qty]) => qty > 0)
+                .map(([id, qty]) => {
+                  const product = initialProducts.find(p => p.id === parseInt(id));
+                  return product ? `${product.name}x${qty}` : "";
+                })
+                .filter(Boolean)
+                .join(", ");
+
+              // 呼叫 GAS 建立 LINE Pay 付款請求
+              // 使用 encodeURIComponent + unescape 處理中文字元
+              const payloadData = JSON.stringify({
+                orderId: orderId,
+                amount: calculateTotal(),
+                productName: productNames || "吾飛藝術銀行服務",
+                confirmUrl: LINE_PAY.getConfirmUrl(),
+                cancelUrl: LINE_PAY.getCancelUrl(),
+                sandbox: LINE_PAY.SANDBOX, // 傳遞 sandbox 設定給 GAS
+              });
+              // btoa 無法直接處理 UTF-8，使用 TextEncoder 轉換
+              const encoder = new TextEncoder();
+              const payloadBytes = encoder.encode(payloadData);
+              let binaryString = "";
+              for (let i = 0; i < payloadBytes.length; i++) {
+                binaryString += String.fromCharCode(payloadBytes[i]);
+              }
+              const payload = btoa(binaryString);
+
+              const response = await fetch(
+                `${LINE_PAY.ENDPOINT}?action=linePayRequest&data=${encodeURIComponent(payload)}`
+              );
+              const responseText = await response.text();
+              const fixedText = responseText.replace(
+                /"transactionId"\s*:\s*(\d+)/g,
+                '"transactionId":"$1"'
+              );
+              const result = JSON.parse(fixedText);
+
+              if (result.success && result.paymentUrl) {
+                // 儲存訂單資訊（含 LINE Pay transactionId）
+                finalOrder.linePayTransactionId = String(result.transactionId);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(finalOrder));
+                localStorage.removeItem(DRAFT_KEY);
+
+                // 導向 LINE Pay 付款頁面
+                window.location.href = result.paymentUrl;
+                return;
+              } else {
+                throw new Error(result.error || "LINE Pay 建立付款請求失敗");
+              }
+            } catch (err) {
+              console.error("LINE Pay Error:", err);
+              alert(`LINE Pay 付款失敗：${err.message}\n\n將改為銀行轉帳方式`);
+              // 失敗時改為銀行轉帳，並更新 UI 狀態與 Google Sheets
+              setPaymentMethod("bank");
+              finalOrder.paymentMethod = "bank";
+              finalOrder.isUpdate = true; // 標記為更新模式
+              try {
+                await sendToGoogleSheets(finalOrder);
+              } catch (updateErr) {
+                console.error("Failed to update payment method:", updateErr);
+              }
+            }
+          }
+
+          // 儲存訂單並清除草稿（銀行轉帳或 LINE Pay 未啟用時）
           localStorage.setItem(STORAGE_KEY, JSON.stringify(finalOrder));
           localStorage.removeItem(DRAFT_KEY);
 
@@ -706,9 +811,11 @@
                   </span>
                   吾飛藝術銀行
                 </div>
-                <div className="text-[8px] sm:text-[10px] text-gray-400 flex items-center gap-1">
-                  <Save className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 草稿已自動暫存
-                </div>
+                {!isFormEmpty() && (
+                  <div className="text-[8px] sm:text-[10px] text-gray-400 flex items-center gap-1">
+                    <Save className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 草稿已自動暫存
+                  </div>
+                )}
               </div>
             </div>
 
@@ -832,7 +939,7 @@
                       value={customerInfo.address}
                       onChange={handleInputChange}
                       placeholder="地址"
-                      className="w-full p-3 sm:p-4 rounded-xl border border-gray-200 outline-none focus:border-purple-500 bg-white placeholder-gray-400 text-sm sm:text-base"
+                      className={getInputClass()}
                     />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
@@ -842,7 +949,7 @@
                       value={customerInfo.company}
                       onChange={handleInputChange}
                       placeholder="公司名稱"
-                      className="w-full p-3 sm:p-4 rounded-xl border border-gray-200 outline-none focus:border-purple-500 bg-white placeholder-gray-400 text-sm sm:text-base"
+                      className={getInputClass()}
                     />
                     <input
                       type="text"
@@ -850,11 +957,10 @@
                       value={customerInfo.taxId}
                       onChange={handleInputChange}
                       placeholder="統一編號"
-                      className="w-full p-3 sm:p-4 rounded-xl border border-gray-200 outline-none focus:border-purple-500 bg-white placeholder-gray-400 text-sm sm:text-base"
+                      className={getInputClass()}
                     />
                   </div>
-                  <div className="relative">
-                    <Info className="absolute left-3 sm:left-4 top-3 sm:top-4 w-4 h-4 sm:w-5 sm:h-5 text-purple-600" />
+                  <div>
                     <input
                       id="customer_source"
                       type="text"
@@ -862,7 +968,7 @@
                       value={customerInfo.source}
                       onChange={handleInputChange}
                       placeholder="資訊來源 (例: 網路搜尋) *"
-                      className={`${getInputClass(errors.customer_source)} pl-10 sm:pl-12 text-sm sm:text-base`}
+                      className={getInputClass(errors.customer_source)}
                     />
                   </div>
                 </div>
@@ -1051,6 +1157,8 @@
                         date.toDateString() ===
                           new Date(customerInfo.appointmentDate).toDateString();
 
+                      const isPast = isPastDate(date);
+
                       return (
                         <div
                           key={idx}
@@ -1065,9 +1173,13 @@
                               }
                             }
                           }}
-                          className={`min-h-[60px] sm:min-h-[72px] md:min-h-[85px] p-1 sm:p-1.5 border-b border-r border-gray-100 cursor-pointer transition-colors ${
-                            !isCurrentMonth ? "bg-gray-50/50" : "hover:bg-gray-50"
-                          } ${isSelected ? "bg-purple-50 ring-1 ring-purple-400 ring-inset" : ""} ${
+                          className={`min-h-[60px] sm:min-h-[72px] md:min-h-[85px] p-1 sm:p-1.5 border-b border-r border-gray-100 transition-colors ${
+                            !isCurrentMonth
+                              ? "bg-gray-50/50"
+                              : isPast
+                                ? ""
+                                : "cursor-pointer hover:bg-gray-50"
+                          } ${isSelected ? "bg-purple-50 ring-2 ring-purple-600 ring-inset rounded-lg" : ""} ${
                             idx % 7 === 6 ? "border-r-0" : ""
                           }`}
                         >
@@ -1079,7 +1191,7 @@
                                 : isToday
                                   ? "text-red-500 font-normal"
                                   : "text-[#1d1d1f]"
-                            }`}
+                            } ${isPastDate(date) ? "line-through decoration-1 opacity-50" : ""}`}
                           >
                             {date.getDate()}
                           </div>
@@ -1114,7 +1226,7 @@
                   )}
 
                   {/* 預約區域 */}
-                  <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 space-y-3">
+                  <div className="p-3 sm:p-4 space-y-3">
                     {calendarError && (
                       <div className="text-xs sm:text-sm text-red-500 flex items-center gap-2">
                         <Info className="w-4 h-4 flex-shrink-0" />
@@ -1133,8 +1245,8 @@
                         <span
                           className={
                             customerInfo.appointmentDate
-                              ? "text-[#1d1d1f] font-medium"
-                              : "text-gray-400"
+                              ? "text-[#1d1d1f] font-medium text-sm sm:text-base"
+                              : "text-gray-400 text-sm sm:text-base"
                           }
                         >
                           {customerInfo.appointmentDate
@@ -1380,6 +1492,106 @@
                     </p>
                   </div>
                 </div>
+              </section>
+
+              {/* 付款方式選擇區塊 */}
+              <section>
+                <h3 className="text-base sm:text-lg font-bold border-b border-gray-200 pb-2 text-[#1d1d1f] mb-3 sm:mb-4">
+                  付款方式
+                </h3>
+                <div className="space-y-2 sm:space-y-3">
+                  {/* LINE Pay 選項 */}
+                  {LINE_PAY.ENABLED && (
+                    <label
+                      className={`relative flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border-2 cursor-pointer transition-all overflow-hidden ${
+                        paymentMethod === "linepay"
+                          ? "border-[#06C755] bg-[#06C755]/5"
+                          : "border-gray-200 bg-white hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="absolute top-0 right-0 bg-[#06C755] text-white text-[8px] sm:text-[10px] font-bold px-2 sm:px-3 py-0.5 sm:py-1 rounded-bl-xl z-10">
+                        推薦
+                      </div>
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value="linepay"
+                        checked={paymentMethod === "linepay"}
+                        onChange={e => setPaymentMethod(e.target.value)}
+                        className="sr-only"
+                      />
+                      <div
+                        className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                          paymentMethod === "linepay"
+                            ? "border-[#06C755] bg-[#06C755]"
+                            : "border-gray-300"
+                        }`}
+                      >
+                        {paymentMethod === "linepay" && (
+                          <Check className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-[#06C755]" />
+                          <span className="font-bold text-sm sm:text-base text-[#1d1d1f]">
+                            LINE Pay
+                          </span>
+                        </div>
+                        <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
+                          立即線上付款，快速安全
+                        </p>
+                      </div>
+                    </label>
+                  )}
+
+                  {/* 銀行轉帳選項 */}
+                  <label
+                    className={`flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                      paymentMethod === "bank"
+                        ? "border-purple-500 bg-purple-50/50"
+                        : "border-gray-200 bg-white hover:border-gray-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="bank"
+                      checked={paymentMethod === "bank"}
+                      onChange={e => setPaymentMethod(e.target.value)}
+                      className="sr-only"
+                    />
+                    <div
+                      className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                        paymentMethod === "bank"
+                          ? "border-purple-500 bg-purple-500"
+                          : "border-gray-300"
+                      }`}
+                    >
+                      {paymentMethod === "bank" && (
+                        <Check className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 text-purple-500" />
+                        <span className="font-bold text-sm sm:text-base text-[#1d1d1f]">
+                          銀行轉帳
+                        </span>
+                      </div>
+                      <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
+                        {PAYMENT.BANK_CODE} {PAYMENT.BANK_NAME}，24 小時內完成匯款
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* LINE Pay 未設定提示 */}
+                {LINE_PAY.ENABLED && !LINE_PAY.ENDPOINT && paymentMethod === "linepay" && (
+                  <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-700">
+                    LINE Pay 尚未設定完成，請先完成 GAS 部署並填入 ENDPOINT
+                  </div>
+                )}
               </section>
             </div>
 

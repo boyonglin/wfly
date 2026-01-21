@@ -1,113 +1,67 @@
 /**
- * 吾飛藝術銀行 - 會員服務訂購單 設定檔
- * =============================================
- * 結構:
- * 1. API 設定 (Google Apps Script)
- * 2. LocalStorage Keys
- * 3. 服務據點選項
- * 4. 付款資訊
- * 5. Line 官方帳號資訊
- * 6. 產品資料定義
+ * =====================================================================
+ * 吾飛藝術銀行 - 前端設定檔
+ * =====================================================================
+ *
+ * 📁 檔案結構:
+ *   1. LocalStorage 鍵值
+ *   2. 服務據點
+ *   3. 銀行轉帳付款資訊
+ *   4. LINE 官方帳號
+ *   5. 訂單編號前綴
+ *   6. 產品資料
+ *
+ * =====================================================================
  */
 
-// =============================================
-// 1. API 設定 (Google Apps Script)
-// =============================================
-// 【工程師設定區】請填入部署好的 Google Apps Script URL 與目標 Sheet ID
-// 1) 在試算表「182ZsNsbZNhF7RmgW3egw9Zg2Z3Tp-XCclHZgGmSvI34」-> 擴充功能 -> Apps Script
-// 2) 貼上 doPost 範例，並部署為網路應用程式 (任何人皆可存取)
-// 3) 將部署後的 URL 貼到 GOOGLE_SCRIPT_URL
+/* global CONFIG_API */
+
 const CONFIG = {
-  // Google Apps Script API
-  // 【安全性】Sheet ID 已移至後端腳本屬性，不再暴露於前端
-  GOOGLE_SCRIPT_URL:
-    "https://script.google.com/macros/s/AKfycbxb8FP1E9TbMa2j7OkuaQoulk7S21rIVFcETDxfCj61BLsJ_717uhKr1PgxaRDPOY4heA/exec",
+  // ─────────────────────────────────────────────────────────────────────
+  // 1. LocalStorage 鍵值
+  // ─────────────────────────────────────────────────────────────────────
+  STORAGE_KEY: "wufei_prod_v1_order", // 已完成訂單
+  DRAFT_KEY: "wufei_prod_v1_draft", // 表單草稿
 
-  // =============================================
-  // 2. LocalStorage Keys
-  // =============================================
-  STORAGE_KEY: "wufei_prod_v1_order",
-  DRAFT_KEY: "wufei_prod_v1_draft",
-
-  // =============================================
-  // 3. 服務據點選項
-  // =============================================
+  // ─────────────────────────────────────────────────────────────────────
+  // 2. 服務據點
+  // ─────────────────────────────────────────────────────────────────────
   LOCATIONS: [
     { value: "桃園館", label: "桃園館" },
     { value: "大安館", label: "大安館" },
   ],
-
-  // 預設據點
   DEFAULT_LOCATION: "桃園館",
 
-  // =============================================
-  // 4. 付款資訊
-  // =============================================
+  // ─────────────────────────────────────────────────────────────────────
+  // 3. 銀行轉帳付款資訊
+  // ─────────────────────────────────────────────────────────────────────
   PAYMENT: {
     BANK_CODE: "822",
     BANK_NAME: "中國信託",
     ACCOUNT_NUMBER: "1234-5678-9012",
-    // 付款期限 (毫秒) - 24 小時
-    DEADLINE_MS: 24 * 60 * 60 * 1000,
+    DEADLINE_MS: 24 * 60 * 60 * 1000, // 付款期限：24 小時
   },
 
-  // =============================================
-  // 5. LINE 官方帳號資訊 & API 代理設定
-  // =============================================
+  // ─────────────────────────────────────────────────────────────────────
+  // 4. LINE 官方帳號
+  // ─────────────────────────────────────────────────────────────────────
   LINE: {
     OFFICIAL_ACCOUNT_ID: "@324vsvvv",
     ADD_FRIEND_URL: "https://line.me/R/ti/p/@324vsvvv",
     QR_CODE_URL:
       "https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://line.me/R/ti/p/@324vsvvv",
-
-    // =============================================
-    // LINE Login 設定 (用於自動發送訂單給客戶)
-    // =============================================
-    // 請到 LINE Developers Console 建立 LINE Login Channel
-    // https://developers.line.biz/console/
-    LOGIN_CHANNEL_ID: "2008930980-bjQhoGJN", // 【請填入】LINE Login Channel ID
   },
 
-  // =============================================
-  // API 代理端點設定 (Google Apps Script)
-  // =============================================
-  // 此端點用於多種 API 代理，包括：
-  // - LINE Push 推播 (action=pushOrderCard)
-  // - Google Calendar 讀取 (action=getCalendarEvents)
-  // =============================================
-  API: {
-    PROXY_ENDPOINT:
-      "https://script.google.com/macros/s/AKfycbwazweHXIEcursFmwhUQfIaLGsICL0TA1OB4x-Td3I6mIMt_4s7My1vGoq3x8GNngpviA/exec",
-  },
-
-  // =============================================
-  // 6. 訂單編號前綴
-  // =============================================
+  // ─────────────────────────────────────────────────────────────────────
+  // 5. 訂單編號前綴
+  // ─────────────────────────────────────────────────────────────────────
   ORDER_ID_PREFIX: "WFB",
 };
 
-// =============================================
-// 7. 行事曆設定 (透過 Google Apps Script 代理)
-// =============================================
-CONFIG.CALENDAR = {
-  // 【安全設計】API Key 存放在 Google Apps Script 的腳本屬性中
-  // 前端透過 LINE Push API Endpoint 代理取得行事曆資料
-  //
-  // 設定步驟：
-  // 1) 到 Google Apps Script 專案 > 設定 > 腳本屬性
-  // 2) 新增：GOOGLE_CALENDAR_API_KEY = 你的 Calendar API Key
-  // 3) 新增：GOOGLE_CALENDAR_ID = shared.calendar.vibe@gmail.com
-  // 4) 前端使用 action=getCalendarEvents 呼叫
-  //
-  // 使用方式（與 LINE Push 共用同一個 Apps Script）：
-  // GET ?action=getCalendarEvents&data=BASE64({timeMin, timeMax})
-  CALENDAR_ID: "shared.calendar.vibe@gmail.com", // 僅供顯示用，實際呼叫由後端處理
-};
-
-// =============================================
-// 8. 產品資料定義
-// =============================================
-// 注意：icon 屬性需要在 React 中動態賦值，這裡僅提供資料結構
+// ═══════════════════════════════════════════════════════════════════════
+// 6. 產品資料
+// ═══════════════════════════════════════════════════════════════════════
+// iconName 對應 Lucide 圖標名稱，會在 React 中動態轉換成元件
 const PRODUCTS = [
   {
     id: 1,
@@ -117,7 +71,7 @@ const PRODUCTS = [
     period: "/30min",
     description: "透過獨家光譜技術，快速掃描個人當下的能量狀態與色彩頻率。",
     features: ["個人能量場分析", "專屬色彩頻率解碼", "提供平衡建議方案"],
-    iconName: "Sparkles", // 對應 Lucide icon 名稱
+    iconName: "Sparkles",
     color: "from-pink-400 to-rose-500",
   },
   {
@@ -167,7 +121,17 @@ const PRODUCTS = [
   },
 ];
 
-// 匯出設定 (供 ES Module 使用)
-// 由於是在瀏覽器端直接使用，這裡將設定掛載到 window 全域物件
+// ═══════════════════════════════════════════════════════════════════════
+// 合併 API 設定並匯出至全域
+// ═══════════════════════════════════════════════════════════════════════
+// 將 CONFIG_API 的屬性合併到 CONFIG（需在 config-api.js 之後載入）
+if (typeof CONFIG_API !== "undefined") {
+  Object.assign(CONFIG, CONFIG_API);
+  // 合併 LINE Login 到 LINE 物件
+  if (CONFIG_API.LINE_LOGIN) {
+    CONFIG.LINE.LOGIN_CHANNEL_ID = CONFIG_API.LINE_LOGIN.CHANNEL_ID;
+  }
+}
+
 window.APP_CONFIG = CONFIG;
 window.APP_PRODUCTS = PRODUCTS;
