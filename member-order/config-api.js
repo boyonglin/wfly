@@ -37,7 +37,7 @@ const CONFIG_API = {
     ENABLED: true, // 啟用開關
     SANDBOX: true, // 測試模式（正式上線請改 false）
     ENDPOINT:
-      "https://script.google.com/macros/s/AKfycbztB2V8fneuecDge_LU2Tw1R8cergFnpt_JF4Zao2sKG-mhvqLXW0lBkbRfLoj37Ck_wQ/exec",
+      "https://script.google.com/macros/s/AKfycbxOauRcjZjhi22ah0LxCktmRpl4NejZTevjj1adv-Pz09TbjAVqX2N2CdTkQjGlu83U5Q/exec",
 
     // 付款完成/取消後的跳轉網址（自動偵測本機或正式環境）
     getConfirmUrl: () =>

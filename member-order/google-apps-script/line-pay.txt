@@ -17,7 +17,7 @@
 function getLinePayConfig(isSandbox) {
   const props = PropertiesService.getScriptProperties();
 
-  // ⚠️ 用 trim() 去除可能的空白
+  // 用 trim() 去除可能的空白
   const channelId = (props.getProperty('LINEPAY_CHANNEL_ID') || '').trim();
   const channelSecret = (props.getProperty('LINEPAY_CHANNEL_SECRET') || '').trim();
 
@@ -37,13 +37,13 @@ function getLinePayConfig(isSandbox) {
  * MAC = HMAC-SHA256(encode(ChannelSecret), encode(ChannelSecret + apiPath + RequestBody + Nonce))
  * Signature = Base64(MAC)
  *
- * 重點：key 和 message 都要先轉成 byte array！
+ * 將 key 和 message 都先轉成 byte array
  */
 function generateLinePaySignature(channelSecret, uri, requestBody, nonce) {
   // 組合訊息：ChannelSecret + URI + RequestBody + Nonce
   const message = channelSecret + uri + requestBody + nonce;
 
-  // ⚠️ 重點：將字串轉換為 byte array（模擬 TextEncoder.encode()）
+  // 將字串轉換為 byte array（模擬 TextEncoder.encode()）
   const keyBytes = Utilities.newBlob(channelSecret).getBytes();
   const messageBytes = Utilities.newBlob(message).getBytes();
 
@@ -91,7 +91,7 @@ function linePayRequest(orderId, amount, productName, confirmUrl, cancelUrl, san
     }
   };
 
-  // ⚠️ 重要：簽章和 payload 必須用完全相同的 JSON 字串
+  // 簽章和 payload 必須用完全相同的 JSON 字串
   const requestBody = JSON.stringify(requestData);
   const signature = generateLinePaySignature(config.channelSecret, uri, requestBody, nonce);
 
@@ -189,6 +189,63 @@ function linePayConfirm(transactionId, amount, sandbox) {
 }
 
 // =============================================
+// 金額驗證 - 從 Google Sheets 取得訂單金額
+// =============================================
+
+/**
+ * 從 Google Sheets 驗證訂單金額
+ * @param {string} orderId - 訂單編號
+ * @param {number} amount - 前端傳入的金額
+ * @returns {object} { valid: boolean, actualAmount?: number, error?: string }
+ */
+function validateOrderAmount(orderId, amount) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const sheetId = props.getProperty('GOOGLE_SHEET_ID');
+
+    if (!sheetId) {
+      // 若未設定 GOOGLE_SHEET_ID，跳過驗證（向下相容）
+      Logger.log('GOOGLE_SHEET_ID not set, skipping amount validation');
+      return { valid: true };
+    }
+
+    const ss = SpreadsheetApp.openById(sheetId);
+    const sheet = ss.getSheets()[0];
+    const lastRow = sheet.getLastRow();
+
+    if (lastRow <= 1) {
+      return { valid: false, error: '找不到訂單資料' };
+    }
+
+    // 搜尋訂單 (B欄是 orderId, S欄是 total)
+    const dataRange = sheet.getRange(2, 2, lastRow - 1, 18); // B到S欄
+    const data = dataRange.getValues();
+
+    for (let i = 0; i < data.length; i++) {
+      if (data[i][0] === orderId) {
+        const actualAmount = Number(data[i][17]); // S欄 (index 17) 是 total
+        if (Math.abs(actualAmount - amount) < 0.01) {
+          return { valid: true, actualAmount: actualAmount };
+        } else {
+          Logger.log('Amount mismatch: expected ' + actualAmount + ', got ' + amount);
+          return {
+            valid: false,
+            actualAmount: actualAmount,
+            error: '金額不符：預期 ' + actualAmount + '，收到 ' + amount
+          };
+        }
+      }
+    }
+
+    return { valid: false, error: '找不到訂單: ' + orderId };
+  } catch (error) {
+    Logger.log('validateOrderAmount error: ' + error.message);
+    // 驗證失敗時不阻擋付款，記錄警告即可
+    return { valid: true, warning: error.message };
+  }
+}
+
+// =============================================
 // doGet 處理 LINE Pay API 請求
 // =============================================
 
@@ -199,6 +256,16 @@ function doGet(e) {
   // LINE Pay 建立付款請求
   if (action === 'linePayRequest') {
     const { orderId, amount, productName, confirmUrl, cancelUrl, sandbox } = data;
+
+    // 伺服器端金額驗證
+    const validation = validateOrderAmount(orderId, amount);
+    if (!validation.valid) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        error: validation.error || '金額驗證失敗'
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     const result = linePayRequest(orderId, amount, productName, confirmUrl, cancelUrl, sandbox);
     return ContentService.createTextOutput(JSON.stringify(result))
       .setMimeType(ContentService.MimeType.JSON);
@@ -206,7 +273,19 @@ function doGet(e) {
 
   // LINE Pay 確認付款
   if (action === 'linePayConfirm') {
-    const { transactionId, amount, sandbox } = data;
+    const { transactionId, amount, orderId, sandbox } = data;
+
+    // 確認付款時也驗證金額（如有提供 orderId）
+    if (orderId) {
+      const validation = validateOrderAmount(orderId, amount);
+      if (!validation.valid) {
+        return ContentService.createTextOutput(JSON.stringify({
+          success: false,
+          error: validation.error || '金額驗證失敗'
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
     const result = linePayConfirm(transactionId, amount, sandbox);
     return ContentService.createTextOutput(JSON.stringify(result))
       .setMimeType(ContentService.MimeType.JSON);

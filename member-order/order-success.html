@@ -72,8 +72,7 @@
       // =============================================
       // 從全域設定取得常數
       // =============================================
-      const { STORAGE_KEY, DRAFT_KEY, PAYMENT, LINE_PAY, LINE, API, GOOGLE_SCRIPT_URL } =
-        window.APP_CONFIG;
+      const { STORAGE_KEY, DRAFT_KEY, PAYMENT, LINE_PAY, LINE, API } = window.APP_CONFIG;
 
       // Icon 映射表
       const ICON_MAP = {
@@ -575,7 +574,7 @@
             <div className="w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto bg-white min-h-screen shadow-2xl overflow-hidden flex flex-col">
               {/* 成功頁面 Header */}
               <div className="bg-[#1d1d1f] text-white p-8 sm:p-10 md:p-12 text-center rounded-b-[2rem] shadow-lg relative z-10 safe-area-top">
-                <div className="w-16 h-16 sm:w-18 sm:h-18 md:w-20 md:h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-5 shadow-lg shadow-green-500/30">
+                <div className="w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] md:w-20 md:h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-5 shadow-lg shadow-green-500/30">
                   <Check className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 text-white stroke-[3]" />
                 </div>
                 <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2">訂單已送出</h2>
@@ -779,7 +778,7 @@
                 {/* LINE Pay 確認中提示 */}
                 {isConfirmingLinePay && (
                   <div className="bg-[#06C755]/10 border border-[#06C755]/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6 text-center">
-                    <div className="w-8 h-8 border-3 border-[#06C755] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                    <div className="w-8 h-8 border-[3px] border-[#06C755] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
                     <p className="text-sm font-bold text-[#06C755]">正在確認 LINE Pay 付款...</p>
                     <p className="text-xs text-gray-500 mt-1">請稍候</p>
                   </div>
@@ -816,42 +815,44 @@
                   </div>
                 )}
 
-                {/* 銀行轉帳付款資訊 - 只在非 LINE Pay 已付款時顯示 */}
-                {!(
-                  orderResult?.paymentStatus === "paid" && orderResult?.paymentMethod === "linepay"
-                ) && (
-                  <div className="bg-white rounded-xl sm:rounded-2xl border border-red-100 p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-sm relative">
-                    <div className="absolute top-0 right-0 bg-red-50 text-red-600 text-[8px] sm:text-[10px] font-bold px-2 py-1 rounded-bl-lg border-l border-b border-red-100">
-                      {orderResult?.paymentMethod === "linepay" ? "LINE Pay 待付款" : "待付款"}
-                    </div>
-                    <h3 className="font-bold text-[#1d1d1f] mb-2 sm:mb-3 flex items-center gap-2 text-xs sm:text-sm">
-                      <CreditCard className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
-                      {orderResult?.paymentMethod === "linepay"
-                        ? "備用付款方式：銀行轉帳"
-                        : "付款資訊"}
-                    </h3>
-                    <div className="bg-red-50 rounded p-2 mb-2 sm:mb-3 flex items-center justify-between text-[10px] sm:text-xs text-red-700">
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 匯款剩餘時間
+                {/* 銀行轉帳付款資訊 - LINE Pay 確認中或已付款時隱藏 */}
+                {!isConfirmingLinePay &&
+                  !(
+                    orderResult?.paymentStatus === "paid" &&
+                    orderResult?.paymentMethod === "linepay"
+                  ) && (
+                    <div className="bg-white rounded-xl sm:rounded-2xl border border-red-100 p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-sm relative">
+                      <div className="absolute top-0 right-0 bg-red-50 text-red-600 text-[8px] sm:text-[10px] font-bold px-2 py-1 rounded-bl-lg border-l border-b border-red-100">
+                        {orderResult?.paymentMethod === "linepay" ? "LINE Pay 待付款" : "待付款"}
                       </div>
-                      <CountdownTimer deadline={orderResult.deadline} />
-                    </div>
-                    <div className="space-y-1 text-[10px] sm:text-xs text-gray-600">
-                      <div className="flex justify-between">
-                        <span>銀行</span>
-                        <span className="font-mono font-bold text-black">
-                          {PAYMENT.BANK_CODE} ({PAYMENT.BANK_NAME})
-                        </span>
+                      <h3 className="font-bold text-[#1d1d1f] mb-2 sm:mb-3 flex items-center gap-2 text-xs sm:text-sm">
+                        <CreditCard className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
+                        {orderResult?.paymentMethod === "linepay"
+                          ? "備用付款方式：銀行轉帳"
+                          : "付款資訊"}
+                      </h3>
+                      <div className="bg-red-50 rounded p-2 mb-2 sm:mb-3 flex items-center justify-between text-[10px] sm:text-xs text-red-700">
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 匯款剩餘時間
+                        </div>
+                        <CountdownTimer deadline={orderResult.deadline} />
                       </div>
-                      <div className="flex justify-between">
-                        <span>帳號</span>
-                        <span className="font-mono font-bold text-black">
-                          {PAYMENT.ACCOUNT_NUMBER}
-                        </span>
+                      <div className="space-y-1 text-[10px] sm:text-xs text-gray-600">
+                        <div className="flex justify-between">
+                          <span>銀行</span>
+                          <span className="font-mono font-bold text-black">
+                            {PAYMENT.BANK_CODE} ({PAYMENT.BANK_NAME})
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>帳號</span>
+                          <span className="font-mono font-bold text-black">
+                            {PAYMENT.ACCOUNT_NUMBER}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {/* 操作按鈕 */}
                 <div className="space-y-2 sm:space-y-3 pb-6 sm:pb-8 safe-area-bottom">

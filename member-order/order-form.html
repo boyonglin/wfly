@@ -753,22 +753,12 @@
               const response = await fetch(
                 `${LINE_PAY.ENDPOINT}?action=linePayRequest&data=${encodeURIComponent(payload)}`
               );
-              // ⚠️ 先取得原始文字，用正則將 transactionId 的數字轉為字串
-              // 避免 JSON.parse 時大數字（19位）失去精度
               const responseText = await response.text();
-              console.log("[LINE Pay Debug] Raw response:", responseText);
               const fixedText = responseText.replace(
                 /"transactionId"\s*:\s*(\d+)/g,
                 '"transactionId":"$1"'
               );
-              console.log("[LINE Pay Debug] Fixed response:", fixedText);
               const result = JSON.parse(fixedText);
-              console.log(
-                "[LINE Pay Debug] Parsed transactionId:",
-                result.transactionId,
-                "type:",
-                typeof result.transactionId
-              );
 
               if (result.success && result.paymentUrl) {
                 // 儲存訂單資訊（含 LINE Pay transactionId）
@@ -785,7 +775,8 @@
             } catch (err) {
               console.error("LINE Pay Error:", err);
               alert(`LINE Pay 付款失敗：${err.message}\n\n將改為銀行轉帳方式`);
-              // 失敗時改為銀行轉帳，並更新 Google Sheets
+              // 失敗時改為銀行轉帳，並更新 UI 狀態與 Google Sheets
+              setPaymentMethod("bank");
               finalOrder.paymentMethod = "bank";
               finalOrder.isUpdate = true; // 標記為更新模式
               try {
@@ -1598,7 +1589,7 @@
                 {/* LINE Pay 未設定提示 */}
                 {LINE_PAY.ENABLED && !LINE_PAY.ENDPOINT && paymentMethod === "linepay" && (
                   <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-700">
-                    ⚠️ LINE Pay 尚未設定完成，請先完成 GAS 部署並填入 ENDPOINT
+                    LINE Pay 尚未設定完成，請先完成 GAS 部署並填入 ENDPOINT
                   </div>
                 )}
               </section>
