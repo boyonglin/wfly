@@ -19,8 +19,8 @@
 // 3) 將部署後的 URL 貼到 GOOGLE_SCRIPT_URL
 const CONFIG = {
     // Google Apps Script API
-    GOOGLE_SCRIPT_URL: "https://script.google.com/macros/s/AKfycby85Ru3dcOoFnuZnIGdlbEG-GKC7wJAxx7ZrGUrwsnhk57DVS3UltEWWrem2HGikXXu5g/exec",
-    GOOGLE_SHEET_ID: "182ZsNsbZNhF7RmgW3egw9Zg2Z3Tp-XCclHZgGmSvI34",
+    // 【安全性】Sheet ID 已移至後端腳本屬性，不再暴露於前端
+    GOOGLE_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxb8FP1E9TbMa2j7OkuaQoulk7S21rIVFcETDxfCj61BLsJ_717uhKr1PgxaRDPOY4heA/exec",
 
     // =============================================
     // 2. LocalStorage Keys
@@ -46,8 +46,8 @@ const CONFIG = {
         BANK_CODE: '822',
         BANK_NAME: '中國信託',
         ACCOUNT_NUMBER: '1234-5678-9012',
-        // 付款期限 (毫秒) - 24 小時
-        DEADLINE_MS: 24 * 60 * 60 * 1000
+        // 付款期限 (毫秒) - 12 小時 (縮短以降低敏感資料暴露風險)
+        DEADLINE_MS: 12 * 60 * 60 * 1000
     },
 
     // =============================================

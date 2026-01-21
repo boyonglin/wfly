@@ -1,5 +1,10 @@
 // Google Apps Script 範例：貼到試算表的 Apps Script 編輯器
 // 完成後「部署為網路應用程式」，權限設任何人可存取
+//
+// 【安全性設定】
+// 1. 到「設定」(齒輪圖示) > 「腳本屬性」
+// 2. 新增屬性：GOOGLE_SHEET_ID = 你的試算表 ID
+//    (例如：182ZsNsbZNhF7RmgW3egw9Zg2Z3Tp-XCclHZgGmSvI34)
 
 function doGet(e) {
   return ContentService.createTextOutput(
@@ -18,7 +23,15 @@ function doPost(e) {
     const data = JSON.parse(e.postData.contents);
     Logger.log('Parsed data: ' + JSON.stringify(data));
 
-    const ss = SpreadsheetApp.openById(data.sheetId);
+    // 【安全性】從腳本屬性取得 Sheet ID，不再從前端接收
+    const props = PropertiesService.getScriptProperties();
+    const sheetId = props.getProperty('GOOGLE_SHEET_ID');
+
+    if (!sheetId) {
+      throw new Error('Server config error: Missing GOOGLE_SHEET_ID in script properties');
+    }
+
+    const ss = SpreadsheetApp.openById(sheetId);
     const sheet = ss.getSheets()[0];
     const itemsText = data.itemsSummary || JSON.stringify(data.items);
 

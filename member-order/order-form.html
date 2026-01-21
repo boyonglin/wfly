@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>吾飛藝術銀行 - 會員服務訂購單</title>
 
+    <!-- 0. Preconnect 優化第三方資源載入 -->
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://esm.sh">
+    <link rel="preconnect" href="https://script.google.com">
+    <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
+    <link rel="dns-prefetch" href="https://unpkg.com">
+    <link rel="dns-prefetch" href="https://esm.sh">
+
     <!-- 1. 引入 Tailwind CSS (樣式框架) -->
     <script src="https://cdn.tailwindcss.com"></script>
 
@@ -39,7 +48,7 @@
         // =============================================
         // 從全域設定取得常數
         // =============================================
-        const { GOOGLE_SCRIPT_URL, GOOGLE_SHEET_ID, STORAGE_KEY, DRAFT_KEY, LOCATIONS, DEFAULT_LOCATION, PAYMENT, ORDER_ID_PREFIX, CALENDAR, LINE } = window.APP_CONFIG;
+        const { GOOGLE_SCRIPT_URL, STORAGE_KEY, DRAFT_KEY, LOCATIONS, DEFAULT_LOCATION, PAYMENT, ORDER_ID_PREFIX, CALENDAR, LINE } = window.APP_CONFIG;
 
         // Icon 映射表
         const ICON_MAP = {
@@ -88,10 +97,8 @@
             // 自定義下拉選單狀態
             const [showPeriodDropdown, setShowPeriodDropdown] = useState(false);
             const [showTimeDropdown, setShowTimeDropdown] = useState(false);
-            const [showDatePicker, setShowDatePicker] = useState(false);
             const periodRef = useRef(null);
             const timeRef = useRef(null);
-            const datePickerRef = useRef(null);
 
             // 自定義行事曆狀態
             const [calendarEvents, setCalendarEvents] = useState([]);
@@ -99,10 +106,7 @@
             const [calendarError, setCalendarError] = useState('');
             const [calendarMonth, setCalendarMonth] = useState(new Date());
 
-            // 日期選擇器相關狀態
-            const [currentMonth, setCurrentMonth] = useState(new Date());
-
-            // 日期選擇器輔助函數
+            // 日期輔助函數
             const getDaysInMonth = (date) => {
                 const year = date.getFullYear();
                 const month = date.getMonth();
@@ -307,7 +311,6 @@
                     // 捲動時關閉所有下拉選單
                     setShowPeriodDropdown(false);
                     setShowTimeDropdown(false);
-                    setShowDatePicker(false);
                 };
                 window.addEventListener('scroll', handleScroll);
                 return () => window.removeEventListener('scroll', handleScroll);
@@ -333,25 +336,26 @@
             // =============================================
             useEffect(() => {
                 const handleClickOutside = (event) => {
-                    // 檢查是否點擊在任何下拉選單觸發按鈕上
-                    const isPeriodButton = periodRef.current?.querySelector('button:first-child')?.contains(event.target);
-                    const isTimeButton = timeRef.current?.querySelector('button:first-child')?.contains(event.target);
-                    const isDateButton = datePickerRef.current?.querySelector('button:first-child')?.contains(event.target);
+                    // 檢查是否點擊在時段下拉選單區域內
+                    const periodDropdown = document.querySelector('[data-dropdown="period"]');
+                    const timeDropdown = document.querySelector('[data-dropdown="time"]');
 
-                    if (!isPeriodButton && showPeriodDropdown) {
+                    const isInsidePeriodRef = periodRef.current?.contains(event.target);
+                    const isInsidePeriodDropdown = periodDropdown?.contains(event.target);
+                    const isInsideTimeRef = timeRef.current?.contains(event.target);
+                    const isInsideTimeDropdown = timeDropdown?.contains(event.target);
+
+                    if (showPeriodDropdown && !isInsidePeriodRef && !isInsidePeriodDropdown) {
                         setShowPeriodDropdown(false);
                     }
-                    if (!isTimeButton && showTimeDropdown) {
+                    if (showTimeDropdown && !isInsideTimeRef && !isInsideTimeDropdown) {
                         setShowTimeDropdown(false);
-                    }
-                    if (!isDateButton && showDatePicker) {
-                        setShowDatePicker(false);
                     }
                 };
 
                 document.addEventListener('mousedown', handleClickOutside);
                 return () => document.removeEventListener('mousedown', handleClickOutside);
-            }, [showPeriodDropdown, showTimeDropdown, showDatePicker]);
+            }, [showPeriodDropdown, showTimeDropdown]);
 
             // =============================================
             // 簽名板 Canvas Effects
@@ -514,7 +518,7 @@
                 }).join(", ");
 
                 const payload = {
-                    sheetId: GOOGLE_SHEET_ID,
+                    // 【安全性】sheetId 已移至後端腳本屬性
                     orderId: finalOrder.id,
                     isUpdate: finalOrder.isUpdate || false,  // 標記是否為更新
                     timestamp: finalOrder.date,
@@ -869,263 +873,144 @@
                                             {calendarError}
                                         </div>
                                     )}
-                                    <p className="text-xs sm:text-sm text-gray-600 flex items-center gap-2">
-                                        <Info className="w-4 h-4 text-purple-600 flex-shrink-0" />
-                                        點選日期可快速選擇預約日，或使用下方選擇器。
-                                    </p>
 
-                                    <div className="space-y-3">
-                                        {/* 自定義日期選擇器 */}
-                                        <div className="space-y-1" ref={datePickerRef}>
-                                            <label className="text-[10px] sm:text-xs text-gray-400 font-medium">預約日期 <span className="text-red-500">*</span></label>
+                                    {/* 已選擇日期顯示 */}
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] sm:text-xs text-gray-400 font-medium">預約日期 <span className="text-red-500">*</span></label>
+                                        <div className={`p-3 rounded-xl border ${errors.customer_appointmentDate ? 'border-red-500 bg-red-50' : 'border-gray-200 bg-white'} flex items-center justify-between`}>
+                                            <span className={customerInfo.appointmentDate ? 'text-[#1d1d1f] font-medium' : 'text-gray-400'}>
+                                                {customerInfo.appointmentDate ? new Date(customerInfo.appointmentDate).toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }) : '請從上方行事曆點選日期'}
+                                            </span>
+                                            {customerInfo.appointmentDate && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCustomerInfo(prev => ({ ...prev, appointmentDate: '' }))}
+                                                    className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                                                >
+                                                    清除
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                                        {/* 時段選擇 - 自定義下拉選單 */}
+                                        <div className="space-y-1" ref={periodRef}>
+                                            <label className="text-[10px] sm:text-xs text-gray-400 font-medium">時段 <span className="text-red-500">*</span></label>
                                             <div className="relative">
                                                 <button
                                                     type="button"
                                                     onClick={() => {
-                                                        setShowDatePicker(!showDatePicker);
-                                                        setShowPeriodDropdown(false);
+                                                        setShowPeriodDropdown(!showPeriodDropdown);
                                                         setShowTimeDropdown(false);
                                                     }}
-                                                    className={`${getInputClass(errors.customer_appointmentDate)} text-sm sm:text-base text-left flex items-center justify-between w-full`}
+                                                    className={`${getInputClass(errors.customer_appointmentPeriod)} text-sm sm:text-base text-left flex items-center justify-between w-full`}
                                                 >
-                                                    <span className={customerInfo.appointmentDate ? 'text-[#1d1d1f]' : 'text-gray-400'}>
-                                                        {customerInfo.appointmentDate ? new Date(customerInfo.appointmentDate).toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' }) : '選擇日期'}
+                                                    <span>
+                                                        {customerInfo.appointmentPeriod === 'morning' && '上午'}
+                                                        {customerInfo.appointmentPeriod === 'afternoon' && '下午'}
+                                                        {customerInfo.appointmentPeriod === 'evening' && '晚上'}
                                                     </span>
-                                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${showDatePicker ? 'rotate-180' : ''}`} />
+                                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${showPeriodDropdown ? 'rotate-180' : ''}`} />
                                                 </button>
 
-                                                {showDatePicker && (
-                                                    <div className="fixed inset-0 z-[100]" onClick={() => setShowDatePicker(false)}>
-                                                        <div
-                                                            className="absolute bg-white rounded-xl border border-gray-200 shadow-2xl p-3 sm:p-4 animate-slide-down"
-                                                            style={{
-                                                                top: datePickerRef.current ? datePickerRef.current.getBoundingClientRect().bottom + 4 : 'auto',
-                                                                left: datePickerRef.current ? datePickerRef.current.getBoundingClientRect().left : '16px',
-                                                                maxWidth: datePickerRef.current ? datePickerRef.current.getBoundingClientRect().width : 'auto'
-                                                            }}
-                                                            onClick={(e) => e.stopPropagation()}
-                                                        >
-                                                        {/* 月份導航 */}
-                                                        <div className="flex items-center justify-between mb-3">
+                                                {showPeriodDropdown && (
+                                                    <div data-dropdown="period" className="fixed z-[90] bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden animate-slide-down" style={{
+                                                        top: periodRef.current ? periodRef.current.getBoundingClientRect().bottom + 4 : 'auto',
+                                                        left: periodRef.current ? periodRef.current.getBoundingClientRect().left : '16px',
+                                                        width: periodRef.current ? periodRef.current.getBoundingClientRect().width : 'auto'
+                                                    }}>
+                                                        {[
+                                                            { value: 'morning', label: '上午', time: '09:00 - 12:00' },
+                                                            { value: 'afternoon', label: '下午', time: '13:00 - 17:00' },
+                                                            { value: 'evening', label: '晚上', time: '18:00 - 21:00' }
+                                                        ].map((period) => (
                                                             <button
-                                                                type="button"
-                                                                onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}
-                                                                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                                                            >
-                                                                <ChevronDown className="w-4 h-4 rotate-90 text-gray-600" />
-                                                            </button>
-                                                            <div className="text-sm sm:text-base font-bold text-[#1d1d1f]">
-                                                                {currentMonth.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long' })}
-                                                            </div>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}
-                                                                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                                                            >
-                                                                <ChevronDown className="w-4 h-4 -rotate-90 text-gray-600" />
-                                                            </button>
-                                                        </div>
-
-                                                        {/* 星期標題 */}
-                                                        <div className="grid grid-cols-7 gap-1 mb-2">
-                                                            {['日', '一', '二', '三', '四', '五', '六'].map((day, i) => (
-                                                                <div key={i} className="text-center text-[10px] sm:text-xs font-medium text-gray-400 py-1">
-                                                                    {day}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-
-                                                        {/* 日期格子 */}
-                                                        <div className="grid grid-cols-7 gap-1">
-                                                            {getDaysInMonth(currentMonth).map((date, index) => {
-                                                                if (!date) {
-                                                                    return <div key={`empty-${index}`} className="aspect-square" />;
-                                                                }
-
-                                                                const selected = customerInfo.appointmentDate && isSameDay(date, new Date(customerInfo.appointmentDate));
-                                                                const today = isToday(date);
-                                                                const past = isPastDate(date);
-
-                                                                return (
-                                                                    <button
-                                                                        key={index}
-                                                                        type="button"
-                                                                        disabled={past}
-                                                                        onClick={() => {
-                                                                            setCustomerInfo(prev => ({ ...prev, appointmentDate: formatDateString(date) }));
-                                                                            setShowDatePicker(false);
-                                                                            if (errors.customer_appointmentDate) {
-                                                                                setErrors(prev => ({ ...prev, customer_appointmentDate: false }));
-                                                                            }
-                                                                        }}
-                                                                        className={`aspect-square flex items-center justify-center text-xs sm:text-sm rounded-lg transition-all ${
-                                                                            past
-                                                                                ? 'text-gray-300 cursor-not-allowed'
-                                                                                : selected
-                                                                                ? 'bg-purple-600 text-white font-bold shadow-lg shadow-purple-500/30'
-                                                                                : today
-                                                                                ? 'bg-purple-50 text-purple-600 font-bold hover:bg-purple-100'
-                                                                                : 'text-[#1d1d1f] hover:bg-gray-100'
-                                                                        }`}
-                                                                    >
-                                                                        {date.getDate()}
-                                                                    </button>
-                                                                );
-                                                            })}
-                                                        </div>
-
-                                                        {/* 快速選擇 */}
-                                                        <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
-                                                            <button
+                                                                key={period.value}
                                                                 type="button"
                                                                 onClick={() => {
-                                                                    setCurrentMonth(new Date());
-                                                                    setCustomerInfo(prev => ({ ...prev, appointmentDate: formatDateString(new Date()) }));
-                                                                    setShowDatePicker(false);
-                                                                    if (errors.customer_appointmentDate) {
-                                                                        setErrors(prev => ({ ...prev, customer_appointmentDate: false }));
+                                                                    setCustomerInfo(prev => ({ ...prev, appointmentPeriod: period.value, appointmentTime: '' }));
+                                                                    setShowPeriodDropdown(false);
+                                                                    if (errors.customer_appointmentPeriod) {
+                                                                        setErrors(prev => ({ ...prev, customer_appointmentPeriod: false }));
                                                                     }
                                                                 }}
-                                                                className="flex-1 py-2 text-xs sm:text-sm font-medium text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
+                                                                className={`w-full px-3 py-2.5 sm:px-4 sm:py-3 text-left hover:bg-purple-50 transition-colors flex items-center justify-between group ${
+                                                                    customerInfo.appointmentPeriod === period.value ? 'bg-purple-50' : ''
+                                                                }`}
                                                             >
-                                                                今天
+                                                                <div>
+                                                                    <div className="text-sm sm:text-base font-medium text-[#1d1d1f]">{period.label}</div>
+                                                                    <div className="text-[10px] sm:text-xs text-gray-400">{period.time}</div>
+                                                                </div>
+                                                                {customerInfo.appointmentPeriod === period.value && (
+                                                                    <Check className="w-4 h-4 text-purple-600" />
+                                                                )}
                                                             </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setCustomerInfo(prev => ({ ...prev, appointmentDate: '' }));
-                                                                    setShowDatePicker(false);
-                                                                }}
-                                                                className="flex-1 py-2 text-xs sm:text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                                                            >
-                                                                清除
-                                                            </button>
-                                                        </div>
-                                                        </div>
+                                                        ))}
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                                            {/* 時段選擇 - 自定義下拉選單 */}
-                                            <div className="space-y-1" ref={periodRef}>
-                                                <label className="text-[10px] sm:text-xs text-gray-400 font-medium">時段 <span className="text-red-500">*</span></label>
-                                                <div className="relative">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setShowPeriodDropdown(!showPeriodDropdown);
-                                                            setShowTimeDropdown(false);
-                                                        }}
-                                                        className={`${getInputClass(errors.customer_appointmentPeriod)} text-sm sm:text-base text-left flex items-center justify-between w-full`}
-                                                    >
-                                                        <span>
-                                                            {customerInfo.appointmentPeriod === 'morning' && '上午'}
-                                                            {customerInfo.appointmentPeriod === 'afternoon' && '下午'}
-                                                            {customerInfo.appointmentPeriod === 'evening' && '晚上'}
-                                                        </span>
-                                                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${showPeriodDropdown ? 'rotate-180' : ''}`} />
-                                                    </button>
+                                        {/* 時間選擇 - 自定義下拉選單 */}
+                                        <div className="space-y-1" ref={timeRef}>
+                                            <label className="text-[10px] sm:text-xs text-gray-400 font-medium">時間 <span className="text-red-500">*</span></label>
+                                            <div className="relative">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setShowTimeDropdown(!showTimeDropdown);
+                                                        setShowPeriodDropdown(false);
+                                                    }}
+                                                    className={`${getInputClass(errors.customer_appointmentTime)} text-sm sm:text-base text-left flex items-center justify-between w-full`}
+                                                >
+                                                    <span className={customerInfo.appointmentTime ? 'text-[#1d1d1f]' : 'text-gray-400'}>
+                                                        {customerInfo.appointmentTime || '選擇時間'}
+                                                    </span>
+                                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${showTimeDropdown ? 'rotate-180' : ''}`} />
+                                                </button>
 
-                                                    {showPeriodDropdown && (
-                                                        <div className="fixed z-[90] bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden animate-slide-down" onClick={(e) => e.stopPropagation()} style={{
-                                                            top: periodRef.current ? periodRef.current.getBoundingClientRect().bottom + 4 : 'auto',
-                                                            left: periodRef.current ? periodRef.current.getBoundingClientRect().left : '16px',
-                                                            width: periodRef.current ? periodRef.current.getBoundingClientRect().width : 'auto'
-                                                        }}>
-                                                            {[
-                                                                { value: 'morning', label: '上午', time: '09:00 - 12:00' },
-                                                                { value: 'afternoon', label: '下午', time: '13:00 - 17:00' },
-                                                                { value: 'evening', label: '晚上', time: '18:00 - 21:00' }
-                                                            ].map((period) => (
+                                                {showTimeDropdown && (
+                                                    <div data-dropdown="time" className="fixed z-[90] bg-white rounded-xl border border-gray-200 shadow-xl max-h-[240px] overflow-y-auto animate-slide-down custom-scrollbar" style={{
+                                                        top: timeRef.current ? timeRef.current.getBoundingClientRect().bottom + 4 : 'auto',
+                                                        left: timeRef.current ? timeRef.current.getBoundingClientRect().left : '16px',
+                                                        width: timeRef.current ? timeRef.current.getBoundingClientRect().width : 'auto'
+                                                    }}>
+                                                        {(() => {
+                                                            const times = [];
+                                                            if (customerInfo.appointmentPeriod === 'morning') {
+                                                                times.push('09:00', '09:30', '10:00', '10:30', '11:00', '11:30');
+                                                            } else if (customerInfo.appointmentPeriod === 'afternoon') {
+                                                                times.push('13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30');
+                                                            } else if (customerInfo.appointmentPeriod === 'evening') {
+                                                                times.push('18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00');
+                                                            }
+
+                                                            return times.map((time) => (
                                                                 <button
-                                                                    key={period.value}
+                                                                    key={time}
                                                                     type="button"
                                                                     onClick={() => {
-                                                                        setCustomerInfo(prev => ({ ...prev, appointmentPeriod: period.value, appointmentTime: '' }));
-                                                                        setShowPeriodDropdown(false);
-                                                                        if (errors.customer_appointmentPeriod) {
-                                                                            setErrors(prev => ({ ...prev, customer_appointmentPeriod: false }));
+                                                                        setCustomerInfo(prev => ({ ...prev, appointmentTime: time }));
+                                                                        setShowTimeDropdown(false);
+                                                                        if (errors.customer_appointmentTime) {
+                                                                            setErrors(prev => ({ ...prev, customer_appointmentTime: false }));
                                                                         }
                                                                     }}
-                                                                    className={`w-full px-3 py-2.5 sm:px-4 sm:py-3 text-left hover:bg-purple-50 transition-colors flex items-center justify-between group ${
-                                                                        customerInfo.appointmentPeriod === period.value ? 'bg-purple-50' : ''
+                                                                    className={`w-full px-3 py-2.5 sm:px-4 sm:py-3 text-left hover:bg-purple-50 transition-colors flex items-center justify-between ${
+                                                                        customerInfo.appointmentTime === time ? 'bg-purple-50' : ''
                                                                     }`}
                                                                 >
-                                                                    <div>
-                                                                        <div className="text-sm sm:text-base font-medium text-[#1d1d1f]">{period.label}</div>
-                                                                        <div className="text-[10px] sm:text-xs text-gray-400">{period.time}</div>
-                                                                    </div>
-                                                                    {customerInfo.appointmentPeriod === period.value && (
+                                                                    <span className="text-sm sm:text-base font-medium text-[#1d1d1f]">{time}</span>
+                                                                    {customerInfo.appointmentTime === time && (
                                                                         <Check className="w-4 h-4 text-purple-600" />
                                                                     )}
                                                                 </button>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* 時間選擇 - 自定義下拉選單 */}
-                                            <div className="space-y-1" ref={timeRef}>
-                                                <label className="text-[10px] sm:text-xs text-gray-400 font-medium">時間 <span className="text-red-500">*</span></label>
-                                                <div className="relative">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setShowTimeDropdown(!showTimeDropdown);
-                                                            setShowPeriodDropdown(false);
-                                                        }}
-                                                        className={`${getInputClass(errors.customer_appointmentTime)} text-sm sm:text-base text-left flex items-center justify-between w-full`}
-                                                    >
-                                                        <span className={customerInfo.appointmentTime ? 'text-[#1d1d1f]' : 'text-gray-400'}>
-                                                            {customerInfo.appointmentTime || '選擇時間'}
-                                                        </span>
-                                                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${showTimeDropdown ? 'rotate-180' : ''}`} />
-                                                    </button>
-
-                                                    {showTimeDropdown && (
-                                                        <div className="fixed z-[90] bg-white rounded-xl border border-gray-200 shadow-xl max-h-[240px] overflow-y-auto animate-slide-down custom-scrollbar" onClick={(e) => e.stopPropagation()} style={{
-                                                            top: timeRef.current ? timeRef.current.getBoundingClientRect().bottom + 4 : 'auto',
-                                                            left: timeRef.current ? timeRef.current.getBoundingClientRect().left : '16px',
-                                                            width: timeRef.current ? timeRef.current.getBoundingClientRect().width : 'auto'
-                                                        }}>
-                                                            {(() => {
-                                                                const times = [];
-                                                                if (customerInfo.appointmentPeriod === 'morning') {
-                                                                    times.push('09:00', '09:30', '10:00', '10:30', '11:00', '11:30');
-                                                                } else if (customerInfo.appointmentPeriod === 'afternoon') {
-                                                                    times.push('13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30');
-                                                                } else if (customerInfo.appointmentPeriod === 'evening') {
-                                                                    times.push('18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00');
-                                                                }
-
-                                                                return times.map((time) => (
-                                                                    <button
-                                                                        key={time}
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            setCustomerInfo(prev => ({ ...prev, appointmentTime: time }));
-                                                                            setShowTimeDropdown(false);
-                                                                            if (errors.customer_appointmentTime) {
-                                                                                setErrors(prev => ({ ...prev, customer_appointmentTime: false }));
-                                                                            }
-                                                                        }}
-                                                                        className={`w-full px-3 py-2.5 sm:px-4 sm:py-3 text-left hover:bg-purple-50 transition-colors flex items-center justify-between ${
-                                                                            customerInfo.appointmentTime === time ? 'bg-purple-50' : ''
-                                                                        }`}
-                                                                    >
-                                                                        <span className="text-sm sm:text-base font-medium text-[#1d1d1f]">{time}</span>
-                                                                        {customerInfo.appointmentTime === time && (
-                                                                            <Check className="w-4 h-4 text-purple-600" />
-                                                                        )}
-                                                                    </button>
-                                                                ));
-                                                            })()}
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                            ));
+                                                        })()}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
