@@ -259,6 +259,24 @@ function pushOrderCard(token, userId, orderData) {
               { type: 'text', text: orderData.consultantName + ' (' + orderData.consultantLocation + ')', size: 'sm', color: '#111111', flex: 3, align: 'end', wrap: true }
             ]
           },
+          // 預約時間
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: '預約時間', size: 'sm', color: '#888888', flex: 2 },
+              { type: 'text', text: orderData.appointmentDate + ' ' + orderData.appointmentTime, size: 'sm', color: '#111111', flex: 3, align: 'end' }
+            ]
+          },
+          // 付款方式
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: '付款方式', size: 'sm', color: '#888888', flex: 2 },
+              { type: 'text', text: orderData.paymentMethod === 'linepay' ? 'LINE Pay' : '匯款', size: 'sm', color: '#111111', flex: 3, align: 'end' }
+            ]
+          },
           // 分隔線
           { type: 'separator', margin: 'lg' },
           // 訂購項目標題
