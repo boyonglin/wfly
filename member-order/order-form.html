@@ -150,15 +150,15 @@
         // 付款方式選擇（bank: 銀行轉帳, linepay: LINE Pay, creditcard: 信用卡, installment: 分期付款）
         const [paymentMethod, setPaymentMethod] = useState(() => {
           // 優先順序：LINE Pay > 信用卡 > 分期付款 > 銀行轉帳
-          if (LINE_PAY.ENABLED && LINE_PAY.ENDPOINT) return "linepay";
-          if (CREDIT_CARD.ENABLED && CREDIT_CARD.ENDPOINT) return "creditcard";
-          if (INSTALLMENT.ENABLED && INSTALLMENT.ENDPOINT) return "installment";
+          if (LINE_PAY?.ENABLED && LINE_PAY?.ENDPOINT) return "linepay";
+          if (CREDIT_CARD?.ENABLED && CREDIT_CARD?.ENDPOINT) return "creditcard";
+          if (INSTALLMENT?.ENABLED && INSTALLMENT?.ENDPOINT) return "installment";
           return "bank";
         });
 
         // 分期付款期數選擇
         const [installmentPeriod, setInstallmentPeriod] = useState(
-          INSTALLMENT.PERIODS && INSTALLMENT.PERIODS.length > 0 ? INSTALLMENT.PERIODS[0].months : 3
+          INSTALLMENT?.PERIODS && INSTALLMENT.PERIODS.length > 0 ? INSTALLMENT.PERIODS[0].months : 3
         );
 
         // 自定義下拉選單狀態
@@ -803,7 +803,7 @@
           }
 
           // 信用卡付款流程
-          if (paymentMethod === "creditcard" && CREDIT_CARD.ENABLED && CREDIT_CARD.ENDPOINT) {
+          if (paymentMethod === "creditcard" && CREDIT_CARD?.ENABLED && CREDIT_CARD?.ENDPOINT) {
             try {
               // 產生商品名稱
               const productNames = Object.entries(cart)
@@ -861,12 +861,12 @@
           }
 
           // 分期付款流程
-          if (paymentMethod === "installment" && INSTALLMENT.ENABLED && INSTALLMENT.ENDPOINT) {
+          if (paymentMethod === "installment" && INSTALLMENT?.ENABLED && INSTALLMENT?.ENDPOINT) {
             try {
               // 檢查金額是否符合最低分期金額
-              if (finalOrder.total < INSTALLMENT.MIN_AMOUNT) {
+              if (finalOrder.total < (INSTALLMENT?.MIN_AMOUNT || 3000)) {
                 alert(
-                  `訂單金額 NT$ ${finalOrder.total.toLocaleString()} 未達分期最低金額 NT$ ${INSTALLMENT.MIN_AMOUNT.toLocaleString()}\n\n將改為銀行轉帳方式`
+                  `訂單金額 NT$ ${finalOrder.total.toLocaleString()} 未達分期最低金額 NT$ ${(INSTALLMENT?.MIN_AMOUNT || 3000).toLocaleString()}\n\n將改為銀行轉帳方式`
                 );
                 setPaymentMethod("bank");
                 finalOrder.paymentMethod = "bank";
@@ -1689,7 +1689,7 @@
                   )}
 
                   {/* 信用卡付款選項 */}
-                  {CREDIT_CARD.ENABLED && (
+                  {CREDIT_CARD?.ENABLED && (
                     <label
                       className={`flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border-2 cursor-pointer transition-all ${
                         paymentMethod === "creditcard"
@@ -1724,14 +1724,16 @@
                           </span>
                         </div>
                         <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
-                          支援 {CREDIT_CARD.SUPPORTED_CARDS.join(" / ")}
+                          支援{" "}
+                          {CREDIT_CARD?.SUPPORTED_CARDS?.join(" / ") ||
+                            "VISA / Mastercard / JCB / UnionPay"}
                         </p>
                       </div>
                     </label>
                   )}
 
                   {/* 分期付款選項 */}
-                  {INSTALLMENT.ENABLED && (
+                  {INSTALLMENT?.ENABLED && (
                     <label
                       className={`flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border-2 cursor-pointer transition-all ${
                         paymentMethod === "installment"
@@ -1767,45 +1769,49 @@
                         </div>
                         <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
                           3 / 6 / 12 / 18 / 24 期，最低 NT${" "}
-                          {INSTALLMENT.MIN_AMOUNT.toLocaleString()}
+                          {(INSTALLMENT?.MIN_AMOUNT || 3000).toLocaleString()}
                         </p>
                       </div>
                     </label>
                   )}
 
                   {/* 分期期數選擇 */}
-                  {paymentMethod === "installment" && INSTALLMENT.ENABLED && (
-                    <div className="ml-9 sm:ml-11 mt-2 space-y-2">
-                      <p className="text-xs sm:text-sm font-semibold text-gray-700">
-                        選擇分期期數：
-                      </p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {INSTALLMENT.PERIODS.map(period => (
-                          <label
-                            key={period.months}
-                            className={`flex items-center justify-center p-2 rounded-lg border-2 cursor-pointer transition-all ${
-                              installmentPeriod === period.months
-                                ? "border-orange-500 bg-orange-50 text-orange-700"
-                                : "border-gray-200 bg-white hover:border-gray-300"
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name="installmentPeriod"
-                              value={period.months}
-                              checked={installmentPeriod === period.months}
-                              onChange={e => setInstallmentPeriod(Number(e.target.value))}
-                              className="sr-only"
-                            />
-                            <div className="text-center">
-                              <div className="text-xs sm:text-sm font-bold">{period.label}</div>
-                              <div className="text-[10px] text-gray-500">手續費 {period.fee}%</div>
-                            </div>
-                          </label>
-                        ))}
+                  {paymentMethod === "installment" &&
+                    INSTALLMENT?.ENABLED &&
+                    INSTALLMENT?.PERIODS && (
+                      <div className="ml-9 sm:ml-11 mt-2 space-y-2">
+                        <p className="text-xs sm:text-sm font-semibold text-gray-700">
+                          選擇分期期數：
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {INSTALLMENT.PERIODS.map(period => (
+                            <label
+                              key={period.months}
+                              className={`flex items-center justify-center p-2 rounded-lg border-2 cursor-pointer transition-all ${
+                                installmentPeriod === period.months
+                                  ? "border-orange-500 bg-orange-50 text-orange-700"
+                                  : "border-gray-200 bg-white hover:border-gray-300"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="installmentPeriod"
+                                value={period.months}
+                                checked={installmentPeriod === period.months}
+                                onChange={e => setInstallmentPeriod(Number(e.target.value))}
+                                className="sr-only"
+                              />
+                              <div className="text-center">
+                                <div className="text-xs sm:text-sm font-bold">{period.label}</div>
+                                <div className="text-[10px] text-gray-500">
+                                  手續費 {period.fee}%
+                                </div>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
                   {/* 銀行轉帳選項 */}
                   <label
