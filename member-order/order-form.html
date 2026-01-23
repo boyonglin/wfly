@@ -105,6 +105,9 @@
         icon: React.createElement(ICON_MAP[product.iconName], { className: "w-8 h-8" }),
       }));
 
+      // 常數定義
+      const DEFAULT_MIN_INSTALLMENT_AMOUNT = 3000; // 分期付款最低金額（新台幣）
+
       // =============================================
       // 訂單填寫表單元件
       // =============================================
@@ -624,7 +627,7 @@
             signature: finalOrder.signature,
             // 付款相關欄位
             paymentMethod: finalOrder.paymentMethod || "", // bank / linepay / creditcard / installment
-            installmentPeriod: paymentMethod === "installment" ? installmentPeriod : null, // 分期期數
+            installmentPeriod: paymentMethod === "installment" ? installmentPeriod : undefined, // 分期期數
           };
 
           console.log("Sending to Google Sheets:", payload);
@@ -721,7 +724,7 @@
             signature: signatureData,
             deadline: deadline,
             paymentMethod: paymentMethod, // 付款方式
-            installmentPeriod: paymentMethod === "installment" ? installmentPeriod : null, // 分期期數
+            installmentPeriod: paymentMethod === "installment" ? installmentPeriod : undefined, // 分期期數
           };
 
           try {
@@ -864,9 +867,9 @@
           if (paymentMethod === "installment" && INSTALLMENT?.ENABLED && INSTALLMENT?.ENDPOINT) {
             try {
               // 檢查金額是否符合最低分期金額
-              if (finalOrder.total < (INSTALLMENT?.MIN_AMOUNT || 3000)) {
+              if (finalOrder.total < (INSTALLMENT?.MIN_AMOUNT || DEFAULT_MIN_INSTALLMENT_AMOUNT)) {
                 alert(
-                  `訂單金額 NT$ ${finalOrder.total.toLocaleString()} 未達分期最低金額 NT$ ${(INSTALLMENT?.MIN_AMOUNT || 3000).toLocaleString()}\n\n將改為銀行轉帳方式`
+                  `訂單金額 NT$ ${finalOrder.total.toLocaleString()} 未達分期最低金額 NT$ ${(INSTALLMENT?.MIN_AMOUNT || DEFAULT_MIN_INSTALLMENT_AMOUNT).toLocaleString()}\n\n將改為銀行轉帳方式`
                 );
                 setPaymentMethod("bank");
                 finalOrder.paymentMethod = "bank";
@@ -1769,7 +1772,9 @@
                         </div>
                         <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
                           3 / 6 / 12 / 18 / 24 期，最低 NT${" "}
-                          {(INSTALLMENT?.MIN_AMOUNT || 3000).toLocaleString()}
+                          {(
+                            INSTALLMENT?.MIN_AMOUNT || DEFAULT_MIN_INSTALLMENT_AMOUNT
+                          ).toLocaleString()}
                         </p>
                       </div>
                     </label>
