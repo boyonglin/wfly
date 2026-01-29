@@ -20,14 +20,12 @@ export const KeywordSearchSchema = z.object({
     .int()
     .min(1)
     .default(1)
-    .optional()
     .describe("Page number (default: 1)"),
   limit: z.number()
     .int()
     .min(1)
     .max(100)
     .default(20)
-    .optional()
     .describe("Items per page (default: 20, max: 100)"),
   sortBy: z.nativeEnum(SortBy)
     .optional()

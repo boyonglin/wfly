@@ -235,7 +235,7 @@ function formatSkillsResponse(
   skills.forEach(skill => lines.push(...renderSkill(skill)));
 
   if (pagination?.hasNext) {
-    lines.push(`*More results available. Use page=${pagination.page + 1} to see more.*`);
+    lines.push(`*More results available. Call this tool again with \`page: ${pagination.page + 1}\` to see more.*`);
   }
 
   return lines.join("\n");
