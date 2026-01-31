@@ -13,12 +13,13 @@
 
       body {
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         min-height: 100vh;
         display: flex;
         justify-content: center;
         align-items: center;
         padding: 20px;
+        position: relative;
+        overflow-x: hidden;
       }
 
       .container {
@@ -115,15 +116,14 @@
   <body>
     <div class="container">
       <div class="header">
-        <h1>✨ WFLY Projects</h1>
-        <p>Welcome to our project showcase</p>
+        <h1>WFLY Projects</h1>
       </div>
 
       <div class="projects-grid">
-        <!-- BOSS心商學 -->
+        <!-- BOSS 心商學 -->
         <a href="BOSS心商學/boss.html" class="project-card" style="text-decoration: none">
           <div class="emoji">👔</div>
-          <h2>BOSS心商學</h2>
+          <h2>BOSS 心商學</h2>
           <p>探索商業情商課程和資源，提升領導力和溝通技巧。</p>
           <span class="project-link">進入項目 →</span>
         </a>
@@ -153,5 +153,10 @@
         </a>
       </div>
     </div>
+
+    <script src="shared/wfly-background.js"></script>
+    <script>
+      window.WFLYBackground && window.WFLYBackground.init();
+    </script>
   </body>
 </html>
