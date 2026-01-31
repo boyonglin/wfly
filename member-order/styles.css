@@ -216,10 +216,6 @@ input[type="date"] {
   animation: glow-pulse 2s ease-in-out infinite;
 }
 
-.animate-pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
-}
-
 /* 自定義捲軸樣式 */
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
@@ -528,6 +524,11 @@ input[type="date"] {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  font-family:
+    "DM Sans",
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
 }
 
 .gcg-dropdown-item {

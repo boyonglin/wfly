@@ -43,7 +43,10 @@
     <script src="config-api.js"></script>
     <script src="config.js"></script>
 
-    <!-- 7. 引入 LINE Login SDK -->
+    <!-- 7. 引入共用工具函式 -->
+    <script src="utils.js"></script>
+
+    <!-- 8. 引入 LINE Login SDK -->
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   </head>
   <body class="gcg-bg">
@@ -160,6 +163,10 @@
         const [isConfirmingLinePay, setIsConfirmingLinePay] = useState(false);
         const [linePayConfirmed, setLinePayConfirmed] = useState(false);
         const [linePayError, setLinePayError] = useState(null);
+        const [shoplineError, setShoplineError] = useState(null);
+
+        // SHOPLINE Payments 相關狀態
+        const [isConfirmingShopline, setIsConfirmingShopline] = useState(false);
 
         // ezPay 電子發票相關狀態
         const [isIssuingInvoice, setIsIssuingInvoice] = useState(false);
@@ -176,8 +183,8 @@
           // 檢查 URL 參數
           const urlParams = new URLSearchParams(window.location.search);
           const transactionId = urlParams.get("transactionId"); // LINE Pay 回傳
-          const shoplinePaymentStatus = urlParams.get("payment_status"); // SHOPLINE 回傳
-          const shoplineOrderId = urlParams.get("order_id"); // SHOPLINE 回傳
+          const shoplineTradeOrderId = urlParams.get("tradeOrderId"); // SHOPLINE 回傳的 tradeOrderId
+          const isNewOrder = urlParams.get("new") === "1"; // 從表單頁剛提交過來的新訂單
 
           try {
             const savedOrder = localStorage.getItem(STORAGE_KEY);
@@ -185,9 +192,6 @@
               const parsedOrder = JSON.parse(savedOrder);
               // 檢查訂單是否過期
               if (parsedOrder.deadline && parsedOrder.deadline > Date.now()) {
-                setOrderResult(parsedOrder);
-                setRestored(true);
-
                 // 處理 LINE Pay transactionId 回傳
                 // LINE Pay API 本身有防重複機制（return code 1152, 1198）
                 if (
@@ -195,23 +199,33 @@
                   parsedOrder.paymentMethod === "linepay" &&
                   parsedOrder.paymentStatus !== "paid"
                 ) {
+                  setOrderResult(parsedOrder);
+                  // 付款回傳不算歷史訂單
                   confirmLinePay(transactionId, parsedOrder);
                 }
 
-                // 處理 SHOPLINE Payments 回傳
-                // SHOPLINE 付款完成後會導回此頁，可能帶 payment_status=completed
-                else if (
-                  shoplinePaymentStatus === "completed" &&
-                  parsedOrder.paymentStatus !== "paid"
-                ) {
-                  // SHOPLINE 的付款確認是透過 Webhook 在後端處理
-                  // 這裡只更新前端顯示狀態，並嘗試開發票（如果 Webhook 尚未處理）
-                  handleShoplinePaymentReturn(parsedOrder);
+                // 處理 SHOPLINE Payments 回傳（用 tradeOrderId 主動查詢付款狀態）
+                else if (shoplineTradeOrderId && parsedOrder.paymentStatus !== "paid") {
+                  setOrderResult(parsedOrder);
+                  // 付款回傳不算歷史訂單
+                  // 用 tradeOrderId 查詢真正的付款狀態
+                  handleShoplinePaymentReturn(parsedOrder, shoplineTradeOrderId);
                 }
 
-                // 如果已付款但尚未開發票，嘗試補開發票
-                else if (parsedOrder.paymentStatus === "paid" && !parsedOrder.invoiceNumber) {
-                  issueInvoiceAfterPayment(parsedOrder);
+                // 一般情況：顯示訂單頁面
+                // pending 狀態會顯示「前往付款」按鈕
+                // paid 狀態會顯示付款成功
+                // processing 狀態會顯示處理中
+                else {
+                  setOrderResult(parsedOrder);
+                  // 只有非新訂單（重新訪問）才顯示歷史訂單提示
+                  if (!isNewOrder) {
+                    setRestored(true);
+                  }
+                  // 若已付款但尚未開發票，嘗試補開
+                  if (parsedOrder.paymentStatus === "paid" && !parsedOrder.invoiceNumber) {
+                    issueInvoiceAfterPayment(parsedOrder);
+                  }
                 }
               } else {
                 // 訂單已過期，跳轉回表單頁
@@ -228,39 +242,153 @@
           }
 
           // 清除 URL 參數（避免重新整理時重複確認）
-          if (transactionId || shoplinePaymentStatus) {
+          if (transactionId || shoplineTradeOrderId || isNewOrder) {
             window.history.replaceState({}, document.title, window.location.pathname);
           }
         }, []);
 
         // =============================================
         // SHOPLINE Payments 付款返回處理
+        // 使用 safeAsyncCall 包裝，防止 API 失敗導致 UI 崩潰
         // =============================================
-        const handleShoplinePaymentReturn = async order => {
-          // SHOPLINE 付款成功後導回，但實際確認是透過 Webhook
-          // 這裡嘗試從後端查詢最新的付款狀態
-          try {
-            const { SHOPLINE_PAYMENTS } = window.CONFIG_API || {};
-            if (!SHOPLINE_PAYMENTS?.ENDPOINT) {
-              console.log("SHOPLINE Payments not configured");
-              return;
+        const handleShoplinePaymentReturn = async (order, tradeOrderId) => {
+          const { SHOPLINE_PAYMENTS } = window.CONFIG_API || {};
+          if (!SHOPLINE_PAYMENTS?.ENDPOINT) {
+            console.log("SHOPLINE Payments not configured");
+            setOrderResult(order); // 顯示原始訂單狀態
+            return;
+          }
+
+          setIsConfirmingShopline(true);
+          setShoplineError(null);
+
+          // 使用 safeAsyncCall 包裝 API 查詢，防止異常導致頁面崩潰
+          await window.WFLYUtils.safeAsyncCall(
+            async () => {
+              // 查詢付款狀態
+              const response = await fetch(
+                `${SHOPLINE_PAYMENTS.ENDPOINT}?action=queryPayment&tradeOrderId=${encodeURIComponent(tradeOrderId)}&sandbox=${SHOPLINE_PAYMENTS.SANDBOX}`
+              );
+
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: 查詢付款狀態失敗`);
+              }
+
+              const result = await response.json();
+              console.log("SHOPLINE Payment Query Result:", result);
+
+              if (result.success && result.data) {
+                const paymentData = result.data;
+                const paymentStatus = paymentData.status;
+
+                if (paymentStatus === "SUCCEEDED") {
+                  // 付款成功！更新訂單狀態
+                  const updatedOrder = {
+                    ...order,
+                    paymentStatus: "paid",
+                    shoplineTradeOrderId: tradeOrderId,
+                    shoplinePaymentMethod: paymentData.payment?.paymentMethod || "",
+                    shoplineConfirmedAt: Date.now(),
+                  };
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
+                  setOrderResult(updatedOrder);
+
+                  // 更新 Google Sheet 付款狀態（非阻塞）
+                  updateSheetPaymentStatus(updatedOrder, paymentData).catch(err =>
+                    console.warn("Sheet update failed (non-blocking):", err)
+                  );
+
+                  // 付款成功後自動開立發票（非阻塞）
+                  issueInvoiceAfterPayment(updatedOrder).catch(err =>
+                    console.warn("Invoice issue failed (non-blocking):", err)
+                  );
+                } else if (paymentStatus === "PROCESSING" || paymentStatus === "PENDING") {
+                  // 付款處理中
+                  const updatedOrder = {
+                    ...order,
+                    paymentStatus: "processing",
+                    shoplineTradeOrderId: tradeOrderId,
+                  };
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
+                  setOrderResult(updatedOrder);
+                } else if (paymentStatus === "FAILED") {
+                  // 付款失敗 - 留在頁面顯示錯誤，提供重新付款選項
+                  console.log("Payment failed, status:", paymentStatus);
+                  const failedOrder = {
+                    ...order,
+                    paymentStatus: "failed",
+                    shoplineTradeOrderId: tradeOrderId,
+                    paymentFailReason: paymentData.failReason || "付款失敗",
+                  };
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(failedOrder));
+                  setOrderResult(failedOrder);
+                } else {
+                  // 取消或其他狀態 - 回到待付款狀態
+                  console.log("Payment cancelled or other status:", paymentStatus);
+                  const resetOrder = {
+                    ...order,
+                    paymentStatus: "pending",
+                    shoplineTradeOrderId: null,
+                  };
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(resetOrder));
+                  setOrderResult(resetOrder);
+                }
+              } else {
+                // 查詢失敗，回到待付款狀態讓使用者可以重新付款
+                console.error("Query failed:", result.error);
+                const resetOrder = {
+                  ...order,
+                  paymentStatus: "pending",
+                  shoplineTradeOrderId: null,
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(resetOrder));
+                setOrderResult(resetOrder);
+              }
+            },
+            {
+              onError: error => {
+                console.error("SHOPLINE Payment Return Error:", error);
+                // 發生錯誤時，保持訂單顯示並提示用戶
+                setOrderResult(order);
+                setShoplineError("付款狀態查詢失敗，請稍後重新整理頁面或聯繫客服");
+              },
+              errorMessage: "SHOPLINE 付款狀態查詢失敗",
             }
+          );
 
-            // 查詢訂單付款狀態（如果後端有提供查詢 API）
-            // 或者直接更新本地狀態顯示「付款處理中」
-            const updatedOrder = {
-              ...order,
-              paymentStatus: "processing", // 暫時標記為處理中
-              shoplineReturnAt: Date.now(),
+          setIsConfirmingShopline(false);
+        };
+
+        // =============================================
+        // 更新 Google Sheet 付款狀態
+        // =============================================
+        const updateSheetPaymentStatus = async (order, paymentData) => {
+          try {
+            const { GOOGLE_SCRIPT_URL } = window.CONFIG_API || {};
+            if (!GOOGLE_SCRIPT_URL) return;
+
+            // 呼叫 GAS 更新付款狀態
+            const updateData = {
+              action: "updatePaymentStatus",
+              orderId: order.id,
+              paymentStatus: "已付款",
+              paymentMethod: paymentData.payment?.paymentMethod || "SHOPLINE Payments",
+              tradeOrderId: paymentData.tradeOrderId || "",
+              paidAmount: paymentData.payment?.paidAmount?.value
+                ? paymentData.payment.paidAmount.value / 100
+                : order.total,
+              paidAt: new Date().toLocaleString("zh-TW"),
+              installmentCount: order.installmentCount || "", // 分期期數
             };
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
-            setOrderResult(updatedOrder);
 
-            // 顯示提示：付款正在確認中
-            // Webhook 會在背景更新 Google Sheet
-            // 用戶可稍後重新整理頁面查看最新狀態
+            const payload = window.WFLYUtils.encodeToBase64(updateData);
+
+            await fetch(
+              `${GOOGLE_SCRIPT_URL}?action=updatePaymentStatus&data=${encodeURIComponent(payload)}`
+            );
+            console.log("Sheet payment status updated");
           } catch (error) {
-            console.error("SHOPLINE Payment Return Error:", error);
+            console.error("Update sheet error:", error);
           }
         };
 
@@ -275,20 +403,14 @@
 
           setIsConfirmingLinePay(true);
           try {
-            // btoa 無法直接處理 UTF-8，使用 TextEncoder 轉換
-            const payloadData = JSON.stringify({
+            // Base64 編碼（支援 UTF-8）
+            const payloadData = {
               transactionId: transactionId,
               amount: order.total,
               orderId: order.id,
               sandbox: LINE_PAY.SANDBOX,
-            });
-            const encoder = new TextEncoder();
-            const payloadBytes = encoder.encode(payloadData);
-            let binaryString = "";
-            for (let i = 0; i < payloadBytes.length; i++) {
-              binaryString += String.fromCharCode(payloadBytes[i]);
-            }
-            const payload = btoa(binaryString);
+            };
+            const payload = window.WFLYUtils.encodeToBase64(payloadData);
 
             const response = await fetch(
               `${LINE_PAY.ENDPOINT}?action=linePayConfirm&data=${encodeURIComponent(payload)}`
@@ -310,11 +432,28 @@
               // 付款成功後自動開立發票
               await issueInvoiceAfterPayment(updatedOrder);
             } else {
-              throw new Error(result.error || "付款確認失敗");
+              // LINE Pay 確認失敗 - 導回表單頁讓使用者重新選擇付款方式
+              console.log("LINE Pay confirmation failed:", result.error);
+              const resetOrder = {
+                ...order,
+                paymentStatus: "pending",
+                linePayTransactionId: null,
+              };
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(resetOrder));
+              window.location.href = "order-form.html?paymentCancelled=true";
+              return;
             }
           } catch (error) {
             console.error("LINE Pay Confirm Error:", error);
-            setLinePayError(error.message);
+            // 發生錯誤也導回表單頁
+            const resetOrder = {
+              ...order,
+              paymentStatus: "pending",
+              linePayTransactionId: null,
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(resetOrder));
+            window.location.href = "order-form.html?paymentCancelled=true";
+            return;
           } finally {
             setIsConfirmingLinePay(false);
           }
@@ -378,8 +517,8 @@
               invoiceData.buyerAddress = order.customer.address || "";
             }
 
-            // 編碼資料
-            const encodedData = btoa(unescape(encodeURIComponent(JSON.stringify(invoiceData))));
+            // Base64 編碼（支援 UTF-8）
+            const encodedData = window.WFLYUtils.encodeToBase64(invoiceData);
 
             // 呼叫發票 API
             const response = await fetch(
@@ -519,12 +658,12 @@
               consultantLocation: orderResult.consultant.location,
             };
 
-            // 將資料編碼為 Base64
+            // Base64 編碼（支援 UTF-8）
             const dataToSend = {
               userId: lineProfile.userId,
               orderData: orderData,
             };
-            const base64Data = btoa(unescape(encodeURIComponent(JSON.stringify(dataToSend))));
+            const base64Data = window.WFLYUtils.encodeToBase64(dataToSend);
 
             // 使用 JSONP 方式呼叫 Google Apps Script（繞過 CORS）
             const result = await new Promise((resolve, reject) => {
@@ -727,6 +866,9 @@
                   taxId: "",
                   source: "",
                   notes: "",
+                  appointmentDate: "",
+                  appointmentTime: "",
+                  appointmentPeriod: "morning",
                 },
                 cart: {},
                 signatureData: null,
@@ -767,7 +909,7 @@
             <div className="w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto min-h-screen flex flex-col">
               {/* 成功頁面 Header - GCG Glass Style */}
               <div className="gcg-glass text-white p-8 sm:p-10 md:p-12 text-center rounded-b-3xl shadow-xl relative z-10 safe-area-top border-b border-white/10">
-                <div className="w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] md:w-20 md:h-20 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-5 shadow-lg shadow-green-500/30 animate-pulse-glow">
+                <div className="w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] md:w-20 md:h-20 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-5">
                   <Check className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 text-white stroke-[3]" />
                 </div>
                 <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent tracking-tight">
@@ -982,6 +1124,25 @@
                   </div>
                 )}
 
+                {/* SHOPLINE Payments 確認中提示 */}
+                {isConfirmingShopline && orderResult?.paymentStatus !== "paid" && (
+                  <div className="gcg-glass border border-blue-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6 text-center backdrop-blur-xl">
+                    <div className="w-8 h-8 border-[3px] border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                    <p className="text-sm font-bold text-blue-400">
+                      正在確認
+                      {orderResult?.shoplinePaymentType === "atm"
+                        ? " ATM 轉帳"
+                        : orderResult?.shoplinePaymentType === "linepay"
+                          ? " LINE Pay "
+                          : orderResult?.shoplinePaymentType === "installment"
+                            ? "分期付款"
+                            : "信用卡付款"}
+                      ...
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">請稍候</p>
+                  </div>
+                )}
+
                 {/* LINE Pay 付款成功 */}
                 {orderResult?.paymentStatus === "paid" &&
                   orderResult?.paymentMethod === "linepay" && (
@@ -1039,6 +1200,57 @@
                     </div>
                   </div>
                 )}
+
+                {/* 付款失敗狀態 - 顯示錯誤訊息 */}
+                {orderResult?.paymentStatus === "failed" && (
+                  <div className="gcg-glass border border-red-500/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md relative overflow-hidden backdrop-blur-xl">
+                    <div className="absolute top-0 right-0 bg-gradient-to-r from-red-500 to-rose-500 text-white text-[8px] sm:text-[10px] font-bold px-3 py-1.5 rounded-bl-lg uppercase tracking-wider">
+                      付款失敗
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <X className="w-6 h-6 text-red-400 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-white">付款未成功</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {orderResult.paymentFailReason ||
+                            "您的付款因信用卡問題或其他原因未能完成，請點擊下方「返回修改」重新選擇付款方式"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 待付款狀態 - 顯示前往付款按鈕 */}
+                {(!orderResult?.paymentStatus || orderResult?.paymentStatus === "pending") &&
+                  !isConfirmingLinePay &&
+                  !isConfirmingShopline &&
+                  orderResult?.paymentMethod && (
+                    <div className="gcg-glass border border-orange-500/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md relative overflow-hidden backdrop-blur-xl">
+                      <div className="absolute top-0 right-0 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-[8px] sm:text-[10px] font-bold px-3 py-1.5 rounded-bl-lg uppercase tracking-wider">
+                        待付款
+                      </div>
+                      <div className="flex items-start gap-3 mb-3">
+                        <AlertCircle className="w-6 h-6 text-orange-400 flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-sm font-bold text-white">尚未完成付款</p>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            {orderResult?.sessionUrl
+                              ? "您的付款尚未完成，請點擊下方按鈕繼續付款"
+                              : "請點擊「返回修改」重新提交訂單以取得付款連結"}
+                          </p>
+                        </div>
+                      </div>
+                      {orderResult?.sessionUrl && (
+                        <a
+                          href={orderResult.sessionUrl}
+                          className="w-full py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm font-bold flex items-center justify-center gap-2 hover:from-orange-600 hover:to-amber-600 active:scale-[0.98] transition-all duration-200"
+                        >
+                          <CreditCard className="w-4 h-4" />
+                          前往付款
+                        </a>
+                      )}
+                    </div>
+                  )}
 
                 {/* 電子發票開立中 */}
                 {isIssuingInvoice && (
@@ -1098,6 +1310,17 @@
                         </button>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* SHOPLINE Payments 查詢失敗 */}
+                {shoplineError && (
+                  <div className="gcg-glass border border-red-500/30 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md backdrop-blur-xl">
+                    <h3 className="font-bold text-red-400 mb-2 flex items-center gap-2 text-xs sm:text-sm">
+                      <AlertCircle className="w-4 h-4" /> 付款狀態查詢失敗
+                    </h3>
+                    <p className="text-xs text-red-400 mb-3">{shoplineError}</p>
+                    <p className="text-xs text-slate-500">請稍後重新整理或聯繫客服</p>
                   </div>
                 )}
 
@@ -1173,7 +1396,7 @@
                       <button
                         onClick={isLineLoggedIn ? sendOrderToLine : handleLineLogin}
                         disabled={isSendingToLine}
-                        className={`w-full py-3.5 sm:py-4 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all duration-200 ${
+                        className={`w-full py-3 sm:py-3.5 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all duration-200 ${
                           isSendingToLine
                             ? "bg-slate-700 text-slate-400 cursor-not-allowed"
                             : "gcg-btn-primary"
@@ -1266,7 +1489,7 @@
                     <a
                       href={LINE.ADD_FRIEND_URL}
                       target="_blank"
-                      className="w-full py-2.5 sm:py-3 rounded-xl gcg-btn-primary text-sm sm:text-base font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-500/30 active:scale-95 transition-all duration-200"
+                      className="w-full py-2.5 sm:py-3 rounded-xl gcg-btn-primary text-sm sm:text-base font-bold flex items-center justify-center gap-2 active:scale-95 transition-all duration-200"
                     >
                       開啟 LINE App <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 rotate-180" />
                     </a>
