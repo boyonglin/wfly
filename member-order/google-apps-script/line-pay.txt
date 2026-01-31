@@ -217,13 +217,13 @@ function validateOrderAmount(orderId, amount) {
       return { valid: false, error: '找不到訂單資料' };
     }
 
-    // 搜尋訂單 (B欄是 orderId, S欄是 total)
-    const dataRange = sheet.getRange(2, 2, lastRow - 1, 18); // B到S欄
+    // 搜尋訂單 (B欄是 orderId, D欄是 total)
+    const dataRange = sheet.getRange(2, 2, lastRow - 1, 3); // B到D欄
     const data = dataRange.getValues();
 
     for (let i = 0; i < data.length; i++) {
       if (data[i][0] === orderId) {
-        const actualAmount = Number(data[i][17]); // S欄 (index 17) 是 total
+        const actualAmount = Number(data[i][2]); // D欄 (index 2) 是 total
         if (Math.abs(actualAmount - amount) < 0.01) {
           return { valid: true, actualAmount: actualAmount };
         } else {

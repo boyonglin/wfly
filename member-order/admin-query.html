@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SHOPLINE Payments 交易查詢</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        min-height: 100vh;
+        color: #fff;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+      }
+
+      h1 {
+        text-align: center;
+        margin-bottom: 30px;
+        font-size: 1.8rem;
+      }
+
+      .query-section {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 20px;
+      }
+
+      .query-section h2 {
+        font-size: 1.2rem;
+        margin-bottom: 16px;
+        color: #64b5f6;
+      }
+
+      .form-row {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
+
+      .form-group {
+        flex: 1;
+        min-width: 200px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 0.9rem;
+        color: #aaa;
+      }
+
+      input,
+      select {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        color: #fff;
+        font-size: 1rem;
+      }
+
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: #64b5f6;
+      }
+
+      button {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-primary {
+        background: #2196f3;
+        color: #fff;
+      }
+
+      .btn-primary:hover {
+        background: #1976d2;
+      }
+
+      .btn-primary:disabled {
+        background: #666;
+        cursor: not-allowed;
+      }
+
+      .result-section {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 24px;
+        margin-top: 20px;
+      }
+
+      .result-section h3 {
+        margin-bottom: 16px;
+        color: #64b5f6;
+      }
+
+      .result-content {
+        background: #0d1117;
+        border-radius: 8px;
+        padding: 16px;
+        overflow-x: auto;
+        font-family: "Monaco", "Consolas", monospace;
+        font-size: 0.85rem;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+
+      .status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+      }
+
+      .status-SUCCEEDED,
+      .status-CAPTURED {
+        background: #4caf50;
+      }
+      .status-CREATED,
+      .status-PENDING,
+      .status-AUTHORIZED {
+        background: #ff9800;
+      }
+      .status-FAILED,
+      .status-CANCELLED {
+        background: #f44336;
+      }
+      .status-EXPIRED {
+        background: #9e9e9e;
+      }
+
+      .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+
+      .info-card {
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        padding: 16px;
+      }
+
+      .info-card .label {
+        font-size: 0.8rem;
+        color: #aaa;
+        margin-bottom: 4px;
+      }
+
+      .info-card .value {
+        font-size: 1.1rem;
+        font-weight: 600;
+      }
+
+      .loading {
+        text-align: center;
+        padding: 40px;
+        color: #aaa;
+      }
+
+      .error {
+        background: rgba(244, 67, 54, 0.2);
+        border: 1px solid #f44336;
+        border-radius: 8px;
+        padding: 16px;
+        color: #ff8a80;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 20px;
+      }
+
+      .tab {
+        padding: 10px 20px;
+        background: rgba(255, 255, 255, 0.1);
+        border: none;
+        border-radius: 8px;
+        color: #aaa;
+        cursor: pointer;
+      }
+
+      .tab.active {
+        background: #2196f3;
+        color: #fff;
+      }
+
+      .history-list {
+        max-height: 300px;
+        overflow-y: auto;
+      }
+
+      .history-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .history-item:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .history-item .id {
+        font-family: monospace;
+        color: #64b5f6;
+      }
+
+      .history-item .time {
+        font-size: 0.8rem;
+        color: #aaa;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔍 SHOPLINE Payments 交易查詢</h1>
+
+      <!-- 查詢區塊 -->
+      <div class="query-section">
+        <h2>查詢交易</h2>
+        <div class="tabs">
+          <button class="tab active" data-tab="session">結帳交易 (Session)</button>
+          <button class="tab" data-tab="payment">付款交易 (tradeOrderId)</button>
+        </div>
+
+        <div id="sessionForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Session ID（se_xxx 格式）</label>
+              <input type="text" id="sessionId" placeholder="se_01022502286885089464780754095" />
+            </div>
+            <div class="form-group" style="flex: 0 0 auto">
+              <label>&nbsp;</label>
+              <button class="btn-primary" onclick="querySession()">查詢</button>
+            </div>
+          </div>
+          <p style="color: #aaa; font-size: 0.85rem; margin-top: 8px">
+            💡 Session ID 在建立結帳交易時回傳，格式為
+            <code style="background: rgba(255, 255, 255, 0.1); padding: 2px 6px; border-radius: 4px"
+              >se_xxx</code
+            >
+          </p>
+        </div>
+
+        <div id="paymentForm" style="display: none">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Trade Order ID（付款完成後 URL 中的 tradeOrderId）</label>
+              <input type="text" id="paymentId" placeholder="10012601317374129265836826856" />
+            </div>
+            <div class="form-group" style="flex: 0 0 auto">
+              <label>&nbsp;</label>
+              <button class="btn-primary" onclick="queryPayment()">查詢</button>
+            </div>
+          </div>
+          <p style="color: #aaa; font-size: 0.85rem; margin-top: 8px">
+            💡 Trade Order ID 在付款完成導回時的 URL 參數中，例如：<code
+              style="background: rgba(255, 255, 255, 0.1); padding: 2px 6px; border-radius: 4px"
+              >?tradeOrderId=100xxx</code
+            >
+          </p>
+        </div>
+      </div>
+
+      <!-- 查詢歷史 -->
+      <div class="query-section">
+        <h2>查詢歷史</h2>
+        <div class="history-list" id="historyList">
+          <div class="loading">尚無查詢紀錄</div>
+        </div>
+      </div>
+
+      <!-- 結果區塊 -->
+      <div class="result-section" id="resultSection" style="display: none">
+        <h3>查詢結果</h3>
+        <div id="resultSummary"></div>
+        <details style="margin-top: 16px">
+          <summary style="cursor: pointer; color: #64b5f6">查看完整 JSON</summary>
+          <div class="result-content" id="resultJson"></div>
+        </details>
+      </div>
+    </div>
+
+    <script src="config-api.js"></script>
+    <script>
+      // 查詢歷史
+      let queryHistory = JSON.parse(localStorage.getItem("slp_query_history") || "[]");
+
+      // Tab 切換
+      document.querySelectorAll(".tab").forEach(tab => {
+        tab.addEventListener("click", () => {
+          document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+          tab.classList.add("active");
+
+          const tabName = tab.dataset.tab;
+          document.getElementById("sessionForm").style.display =
+            tabName === "session" ? "block" : "none";
+          document.getElementById("paymentForm").style.display =
+            tabName === "payment" ? "block" : "none";
+        });
+      });
+
+      // 渲染歷史
+      function renderHistory() {
+        const container = document.getElementById("historyList");
+        if (queryHistory.length === 0) {
+          container.innerHTML = '<div class="loading">尚無查詢紀錄</div>';
+          return;
+        }
+
+        container.innerHTML = queryHistory
+          .slice(0, 20)
+          .map(
+            item => `
+                <div class="history-item" onclick="requery('${item.type}', '${item.id}')">
+                    <div>
+                        <span class="id">${item.id}</span>
+                        <span class="status-badge status-${item.status || "PENDING"}">${item.status || "未知"}</span>
+                    </div>
+                    <div class="time">${item.time}</div>
+                </div>
+            `
+          )
+          .join("");
+      }
+
+      function requery(type, id) {
+        if (type === "session") {
+          document.getElementById("sessionId").value = id;
+          querySession();
+        } else {
+          document.getElementById("paymentId").value = id;
+          queryPayment();
+        }
+      }
+
+      // 查詢結帳交易
+      async function querySession() {
+        const sessionId = document.getElementById("sessionId").value.trim();
+        if (!sessionId) {
+          alert("請輸入 Session ID 或訂單編號");
+          return;
+        }
+
+        showLoading();
+
+        try {
+          const endpoint = CONFIG_API.SHOPLINE_PAYMENTS.ENDPOINT;
+          const sandbox = CONFIG_API.SHOPLINE_PAYMENTS.SANDBOX;
+
+          const response = await fetch(
+            `${endpoint}?action=querySession&sessionId=${encodeURIComponent(sessionId)}&sandbox=${sandbox}`
+          );
+          const result = await response.json();
+
+          if (result.success) {
+            displaySessionResult(result.data);
+            addToHistory("session", sessionId, result.data.status);
+          } else {
+            showError(result.error || "查詢失敗");
+          }
+        } catch (error) {
+          showError("網路錯誤: " + error.message);
+        }
+      }
+
+      // 查詢付款交易（使用 tradeOrderId）
+      async function queryPayment() {
+        const tradeOrderId = document.getElementById("paymentId").value.trim();
+        if (!tradeOrderId) {
+          alert("請輸入 Trade Order ID");
+          return;
+        }
+
+        showLoading();
+
+        try {
+          const endpoint = CONFIG_API.SHOPLINE_PAYMENTS.ENDPOINT;
+          const sandbox = CONFIG_API.SHOPLINE_PAYMENTS.SANDBOX;
+
+          const response = await fetch(
+            `${endpoint}?action=queryPayment&tradeOrderId=${encodeURIComponent(tradeOrderId)}&sandbox=${sandbox}`
+          );
+          const result = await response.json();
+
+          if (result.success) {
+            displayPaymentResult(result.data);
+            addToHistory("payment", tradeOrderId, result.data.status);
+          } else {
+            showError(result.error || "查詢失敗");
+          }
+        } catch (error) {
+          showError("網路錯誤: " + error.message);
+        }
+      }
+
+      function showLoading() {
+        const section = document.getElementById("resultSection");
+        section.style.display = "block";
+        document.getElementById("resultSummary").innerHTML = '<div class="loading">查詢中...</div>';
+        document.getElementById("resultJson").textContent = "";
+      }
+
+      function showError(message) {
+        document.getElementById("resultSummary").innerHTML = `<div class="error">${message}</div>`;
+      }
+
+      function renderInfoCard(label, value, extra = "") {
+        return `
+                <div class="info-card">
+                    <div class="label">${label}</div>
+                    <div class="value">${value}</div>
+                    ${extra}
+                </div>
+            `;
+      }
+
+      function displaySessionResult(data) {
+        const amount = data.amount ? data.amount.value / 100 : 0;
+        const createTime = data.createTime
+          ? new Date(parseInt(data.createTime)).toLocaleString("zh-TW")
+          : "-";
+        const paymentIdLink = data.paymentId
+          ? `<div class="value" style="font-size: 0.9rem; cursor: pointer; color: #64b5f6;" onclick="document.getElementById('paymentId').value='${data.paymentId}'; document.querySelector('[data-tab=payment]').click(); queryPayment();">查詢付款</div>`
+          : "";
+
+        document.getElementById("resultSummary").innerHTML = `
+                <div class="info-grid">
+                    ${renderInfoCard("Session ID", `<span style="font-size: 0.9rem;">${data.sessionId || "-"}</span>`)}
+                    ${renderInfoCard("訂單編號", data.referenceId || "-")}
+                    ${renderInfoCard("狀態", `<span class="status-badge status-${data.status}">${data.status || "-"}</span>`)}
+                    ${renderInfoCard("金額", `NT$ ${amount.toLocaleString()}`)}
+                    ${renderInfoCard("建立時間", `<span style="font-size: 0.9rem;">${createTime}</span>`)}
+                    ${data.paymentId ? renderInfoCard("Payment ID", `<span style="font-size: 0.9rem;">${data.paymentId}</span>`, paymentIdLink) : ""}
+                </div>
+            `;
+
+        document.getElementById("resultJson").textContent = JSON.stringify(data, null, 2);
+      }
+
+      function displayPaymentResult(data) {
+        // SHOPLINE Payment 回傳結構：data.order.amount 或 data.payment.paidAmount
+        const amount =
+          data.payment?.paidAmount?.value || data.order?.amount?.value || data.amount?.value || 0;
+        const displayAmount = amount / 100;
+        const createTime = data.order?.createTime
+          ? new Date(parseInt(data.order.createTime)).toLocaleString("zh-TW")
+          : "-";
+        const paymentMethod = data.payment?.paymentMethod || "-";
+        const cardInfo = data.payment?.creditCard
+          ? `${data.payment.creditCard.brand} ****${data.payment.creditCard.last4}`
+          : "";
+        const orderId = data.referenceOrderId || data.order?.referenceOrderId || "-";
+
+        document.getElementById("resultSummary").innerHTML = `
+                <div class="info-grid">
+                    ${renderInfoCard("Trade Order ID", `<span style="font-size: 0.85rem;">${data.tradeOrderId || "-"}</span>`)}
+                    ${renderInfoCard("訂單編號", `<span style="font-size: 0.9rem;">${orderId}</span>`)}
+                    ${renderInfoCard("狀態", `<span class="status-badge status-${data.status}">${data.status || "-"}</span>`)}
+                    ${renderInfoCard("付款方式", `${paymentMethod}${cardInfo ? '<br><small style="color:#aaa;">' + cardInfo + "</small>" : ""}`)}
+                    ${renderInfoCard("金額", `NT$ ${displayAmount.toLocaleString()}`)}
+                    ${renderInfoCard("建立時間", `<span style="font-size: 0.9rem;">${createTime}</span>`)}
+                </div>
+            `;
+
+        document.getElementById("resultJson").textContent = JSON.stringify(data, null, 2);
+      }
+
+      function addToHistory(type, id, status) {
+        queryHistory = queryHistory.filter(h => h.id !== id);
+        queryHistory.unshift({
+          type,
+          id,
+          status,
+          time: new Date().toLocaleString("zh-TW"),
+        });
+        queryHistory = queryHistory.slice(0, 50);
+        localStorage.setItem("slp_query_history", JSON.stringify(queryHistory));
+        renderHistory();
+      }
+
+      // 初始化
+      renderHistory();
+    </script>
+  </body>
+</html>

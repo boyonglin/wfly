@@ -1,0 +1,948 @@
+// =============================================
+// SHOPLINE Payments API 串接 - Google Apps Script
+// =============================================
+// 使用前請先設定腳本屬性（GAS 編輯器 → 專案設定 → 腳本屬性）：
+//
+// ┌─────────────────────────┬────────────────────────────────────────────────┐
+// │ 屬性名稱                 │ 說明                                            │
+// ├─────────────────────────┼────────────────────────────────────────────────┤
+// │ SHOPLINE_MERCHANT_ID    │ SHOPLINE 特店 ID                               │
+// │ SHOPLINE_API_KEY        │ API 金鑰（sk_ 開頭）                            │
+// │ SHOPLINE_SIGN_KEY       │ 簽章金鑰（設定 Webhook 後由 SHOPLINE 提供）      │
+// │ GOOGLE_SHEET_ID         │ Google Sheet ID                                │
+// └─────────────────────────┴────────────────────────────────────────────────┘
+//
+// Webhook 設定：
+//   將此 GAS 部署 URL + ?action=webhook 提供給 SHOPLINE 設定
+//   例如：https://script.google.com/.../exec?action=webhook
+//
+// 沙盒測試卡號：https://docs.shoplinepayments.com/
+// =============================================
+
+// 試算表欄位設定 (1-based index)
+const SHEET_COLS = {
+  ORDER_ID: 2,           // B欄 訂單編號
+  CUSTOMER_NAME: 7,      // G欄 客戶姓名
+  CUSTOMER_EMAIL: 10,    // J欄 Email
+  ADDRESS: 11,           // K欄 地址
+  COMPANY: 12,           // L欄 公司抬頭
+  TAX_ID: 13,            // M欄 統一編號
+  PAYMENT_STATUS: 21,    // U欄 付款狀態
+  UPDATE_TIME: 22,       // V欄 更新時間
+  TRADE_ORDER_ID: 23,    // W欄 交易 ID
+  PAYMENT_METHOD: 24,    // X欄 付款方式
+  INVOICE_NUMBER: 25,    // Y欄 發票號碼
+  INVOICE_RANDOM: 26,    // Z欄 發票隨機碼
+  INVOICE_TIME: 27       // AA欄 發票開立時間
+};
+
+/**
+ * SHOPLINE Payments 設定
+ * @param {boolean} isSandbox - 是否使用 Sandbox 環境
+ */
+function getShoplineConfig(isSandbox) {
+  const props = PropertiesService.getScriptProperties();
+
+  return {
+    merchantId: (props.getProperty('SHOPLINE_MERCHANT_ID') || '').trim(),
+    apiKey: (props.getProperty('SHOPLINE_API_KEY') || '').trim(),
+    signKey: (props.getProperty('SHOPLINE_SIGN_KEY') || '').trim(),
+    apiUrl: isSandbox
+      ? 'https://api-sandbox.shoplinepayments.com'
+      : 'https://api.shoplinepayments.com',
+    isSandbox: isSandbox
+  };
+}
+
+/**
+ * 產生唯一的請求 ID
+ */
+function generateRequestId() {
+  return Utilities.getUuid().replace(/-/g, '').substring(0, 32);
+}
+
+// =============================================
+// 建立結帳交易 (Checkout Session)
+// =============================================
+
+/**
+ * 建立結帳交易
+ * @param {Object} params - 參數
+ * @param {string} params.orderId - 訂單編號
+ * @param {number} params.amount - 金額（台幣，會自動轉換為 *100）
+ * @param {string} params.returnUrl - 付款完成導回網址
+ * @param {string[]} params.paymentMethods - 允許的付款方式
+ * @param {Object} params.paymentOptions - 付款方式選項（分期設定等）
+ * @param {Object} params.customer - 顧客資訊
+ * @param {Object} params.order - 訂單資訊
+ * @param {boolean} params.sandbox - 是否使用 Sandbox
+ */
+function createCheckoutSession(params) {
+  const config = getShoplineConfig(params.sandbox);
+  const requestId = generateRequestId();
+
+  // 建立請求資料
+  const requestData = {
+    referenceId: params.orderId,
+    amount: {
+      value: Math.round(params.amount * 100), // 台幣轉換：1元 = 100
+      currency: 'TWD'
+    },
+    language: 'zh-TW',
+    expireTime: params.expireTime || 60, // 預設 60 分鐘
+    returnUrl: params.returnUrl,
+    mode: 'regular',
+    allowPaymentMethodList: params.paymentMethods || ['CreditCard', 'LinePay', 'VirtualAccount']
+  };
+
+  // 信用卡分期設定
+  if (params.paymentOptions) {
+    requestData.paymentMethodOptions = {};
+
+    // 信用卡分期
+    if (params.paymentOptions.creditCardInstallments) {
+      requestData.paymentMethodOptions.CreditCard = {
+        installmentCounts: params.paymentOptions.creditCardInstallments
+      };
+    }
+
+    // ATM 虛擬帳號付款期限
+    if (params.paymentOptions.virtualAccountExpireTime) {
+      requestData.paymentMethodOptions.VirtualAccount = {
+        paymentExpireTime: params.paymentOptions.virtualAccountExpireTime
+      };
+    }
+  }
+
+  // 拆分顧客姓名為 firstName 和 lastName
+  const customerName = params.customer?.name || '顧客';
+  // 假設第一個字是姓，其餘是名（中文姓名習慣）
+  const lastName = customerName.substring(0, 1) || '顧';
+  const firstName = customerName.substring(1) || '客';
+
+  // 顧客資訊（必填）
+  const personalInfo = {
+    firstName: firstName,
+    lastName: lastName,
+    email: params.customer?.email || '',
+    phone: params.customer?.phone || ''
+  };
+
+  // 地址資訊（必填）- 使用顧客提供的地址或預設值
+  const addressInfo = {
+    countryCode: 'TW',
+    city: params.customer?.city || '台北市',
+    district: params.customer?.district || '',
+    street: params.customer?.address || '電子寄送',
+    postcode: params.customer?.postcode || ''
+  };
+
+  requestData.customer = {
+    referenceCustomerId: params.customer?.id || params.orderId,
+    type: '0', // 一般顧客
+    personalInfo: personalInfo
+  };
+
+  // 帳單資訊（必填，包含 address）
+  requestData.billing = {
+    personalInfo: personalInfo,
+    address: addressInfo
+  };
+
+  // 訂單資訊（必填，包含 shipping）
+  requestData.order = {
+    products: (params.order?.products || [{
+      id: params.orderId,
+      name: '訂單商品',
+      quantity: 1,
+      price: params.amount
+    }]).map(p => ({
+      id: String(p.id),
+      name: p.name,
+      quantity: p.quantity,
+      amount: {
+        value: Math.round(p.price * 100),
+        currency: 'TWD'
+      },
+      desc: p.description || p.name
+    })),
+    // shipping 是必填的（包含 carrier 和 address）
+    shipping: {
+      shippingMethod: params.order?.shippingMethod || '電子寄送',
+      carrier: params.order?.carrier || '電子寄送',
+      personalInfo: personalInfo,
+      address: addressInfo
+    }
+  };
+
+  // 客戶端資訊（必填）
+  requestData.client = {
+    ip: params.clientIp || '127.0.0.1'
+  };
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'merchantId': config.merchantId,
+      'apiKey': config.apiKey,
+      'requestId': requestId
+    },
+    payload: JSON.stringify(requestData),
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(
+      config.apiUrl + '/api/v1/trade/sessions/create',
+      options
+    );
+
+    const httpCode = response.getResponseCode();
+    const responseText = response.getContentText();
+
+    Logger.log('SHOPLINE Response [' + httpCode + ']: ' + responseText);
+
+    if (httpCode === 200) {
+      const result = JSON.parse(responseText);
+      return {
+        success: true,
+        sessionId: result.sessionId,
+        referenceId: result.referenceId,
+        sessionUrl: result.sessionUrl,
+        status: result.status,
+        createTime: result.createTime
+      };
+    } else {
+      const errorResult = JSON.parse(responseText);
+      return {
+        success: false,
+        error: errorResult.msg || '建立結帳交易失敗',
+        code: errorResult.code,
+        httpCode: httpCode
+      };
+    }
+  } catch (error) {
+    Logger.log('createCheckoutSession error: ' + error.message);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// =============================================
+// 查詢結帳交易
+// =============================================
+
+/**
+ * 查詢結帳交易狀態
+ * @param {string} sessionId - 結帳交易 ID (se_xxx 格式)
+ * @param {boolean} sandbox - 是否使用 Sandbox
+ */
+function queryCheckoutSession(sessionId, sandbox) {
+  const config = getShoplineConfig(sandbox);
+  const requestId = generateRequestId();
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'merchantId': config.merchantId,
+      'apiKey': config.apiKey,
+      'requestId': requestId
+    },
+    payload: JSON.stringify({ sessionId: sessionId }),
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(
+      config.apiUrl + '/api/v1/trade/sessions/query',
+      options
+    );
+
+    const httpCode = response.getResponseCode();
+    const responseText = response.getContentText();
+
+    if (httpCode === 200) {
+      const result = JSON.parse(responseText);
+      return {
+        success: true,
+        data: result
+      };
+    } else {
+      const errorResult = JSON.parse(responseText);
+      return {
+        success: false,
+        error: errorResult.msg || '查詢失敗',
+        code: errorResult.code
+      };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+/**
+ * 查詢付款交易狀態
+ * @param {string} tradeOrderId - 付款交易 ID (10xxx 格式)
+ * @param {boolean} sandbox - 是否使用 Sandbox
+ */
+function queryPayment(tradeOrderId, sandbox) {
+  const config = getShoplineConfig(sandbox);
+  const requestId = generateRequestId();
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'merchantId': config.merchantId,
+      'apiKey': config.apiKey,
+      'requestId': requestId
+    },
+    payload: JSON.stringify({ tradeOrderId: tradeOrderId }),
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(
+      config.apiUrl + '/api/v1/trade/payment/get',
+      options
+    );
+
+    const httpCode = response.getResponseCode();
+    const responseText = response.getContentText();
+
+    if (httpCode === 200) {
+      const result = JSON.parse(responseText);
+      return {
+        success: true,
+        data: result
+      };
+    } else {
+      const errorResult = JSON.parse(responseText);
+      return {
+        success: false,
+        error: errorResult.msg || '查詢失敗',
+        code: errorResult.code
+      };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// =============================================
+// Webhook 處理 - 接收付款通知
+// =============================================
+
+
+// =============================================
+// Sheet 操作工具函數
+// =============================================
+
+/**
+ * 尋找訂單並更新
+ * @param {string} orderId - 訂單編號
+ * @param {Object} updates - 要更新的欄位值 { colIndex: value }
+ * @returns {number|null} 更新的列號，若找不到則回傳 null
+ */
+function updateSheetOrder(orderId, updates) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const sheetId = props.getProperty('GOOGLE_SHEET_ID');
+
+    if (!sheetId) {
+      Logger.log('GOOGLE_SHEET_ID not set');
+      return null;
+    }
+
+    const ss = SpreadsheetApp.openById(sheetId);
+    const sheet = ss.getSheets()[0];
+    const lastRow = sheet.getLastRow();
+
+    if (lastRow <= 1) return null;
+
+    // 尋找訂單 (假設 B 欄是 Order ID)
+    const dataRange = sheet.getRange(2, SHEET_COLS.ORDER_ID, lastRow - 1, 1);
+    const orderIds = dataRange.getValues();
+    let rowIndex = -1;
+
+    for (let i = 0; i < orderIds.length; i++) {
+      if (orderIds[i][0] === orderId) {
+        rowIndex = i + 2;
+        break;
+      }
+    }
+
+    if (rowIndex === -1) {
+      Logger.log('Order not found: ' + orderId);
+      return null;
+    }
+
+    // 執行更新
+    Object.keys(updates).forEach(col => {
+      sheet.getRange(rowIndex, parseInt(col)).setValue(updates[col]);
+    });
+
+    Logger.log('Updated order: ' + orderId + ' at row ' + rowIndex);
+    return rowIndex;
+
+  } catch (error) {
+    Logger.log('updateSheetOrder error: ' + error.message);
+    return null;
+  }
+}
+
+/**
+ * 紀錄 Webhook 到 Google Sheet（方便確認 Webhook 有收到）
+ * @param {string} timestamp - 時間戳
+ * @param {string} bodyString - Webhook 內容
+ */
+function logWebhookToSheet(timestamp, bodyString) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const sheetId = props.getProperty('GOOGLE_SHEET_ID');
+
+    if (!sheetId) return;
+
+    const ss = SpreadsheetApp.openById(sheetId);
+    let logSheet = ss.getSheetByName('SLP_WEBHOOK_LOG');
+
+    // 如果沒有 LOG 工作表，建立一個
+    if (!logSheet) {
+      logSheet = ss.insertSheet('SLP_WEBHOOK_LOG');
+      logSheet.appendRow(['時間', 'Timestamp', '事件類型', '訂單編號', 'tradeOrderId', '狀態', '完整資料']);
+      logSheet.getRange(1, 1, 1, 7).setFontWeight('bold').setBackground('#4a86e8').setFontColor('#ffffff');
+    }
+
+    // 解析 Webhook 資料
+    let eventType = '-';
+    let orderId = '-';
+    let tradeOrderId = '-';
+    let status = '-';
+
+    try {
+      const data = JSON.parse(bodyString);
+      eventType = data.type || '-';
+      orderId = data.data?.referenceOrderId || data.data?.order?.referenceOrderId || '-';
+      tradeOrderId = data.data?.tradeOrderId || '-';
+      status = data.data?.status || '-';
+    } catch (e) {
+      eventType = 'PARSE_ERROR';
+    }
+
+    // 寫入記錄
+    logSheet.appendRow([
+      new Date().toLocaleString('zh-TW'),
+      timestamp,
+      eventType,
+      orderId,
+      tradeOrderId,
+      status,
+      bodyString.substring(0, 50000) // 限制長度避免超過 cell 限制
+    ]);
+
+    Logger.log('Webhook logged to sheet');
+  } catch (error) {
+    Logger.log('logWebhookToSheet error: ' + error.message);
+  }
+}
+
+/**
+ * 驗證 Webhook 簽章
+ * @param {string} timestamp - Header 中的 timestamp
+ * @param {string} bodyString - 請求 body 字串
+ * @param {string} receivedSign - Header 中的 sign
+ * @param {string} signKey - 特店簽章金鑰
+ */
+function verifyWebhookSignature(timestamp, bodyString, receivedSign, signKey) {
+  // 組合 payload: {timestamp}.{bodyString}
+  const payload = timestamp + '.' + bodyString;
+
+  // 計算 HMAC-SHA256
+  const keyBytes = Utilities.newBlob(signKey).getBytes();
+  const payloadBytes = Utilities.newBlob(payload).getBytes();
+  const signatureBytes = Utilities.computeHmacSha256Signature(payloadBytes, keyBytes);
+
+  // 轉換為 hex 字串
+  const expectedSign = signatureBytes.map(function(byte) {
+    return ('0' + (byte & 0xff).toString(16)).slice(-2);
+  }).join('');
+
+  return expectedSign === receivedSign;
+}
+
+/**
+ * 處理付款成功 - 更新 Google Sheet 並開立發票
+ * @param {Object} data - Webhook 資料
+ */
+function handlePaymentSuccess(data) {
+  try {
+    const orderId = data.referenceOrderId || data.order?.referenceOrderId;
+
+    const updates = {};
+    updates[SHEET_COLS.PAYMENT_STATUS] = '已付款';
+    updates[SHEET_COLS.UPDATE_TIME] = new Date().toLocaleString('zh-TW');
+    updates[SHEET_COLS.TRADE_ORDER_ID] = data.tradeOrderId || '';
+    updates[SHEET_COLS.PAYMENT_METHOD] = data.payment?.paymentMethod || '';
+
+    const rowIndex = updateSheetOrder(orderId, updates);
+
+    if (rowIndex) {
+      // 取得 Sheet 物件供 issueInvoiceForOrder 使用
+      const props = PropertiesService.getScriptProperties();
+      const ss = SpreadsheetApp.openById(props.getProperty('GOOGLE_SHEET_ID'));
+      const sheet = ss.getSheets()[0];
+
+      // =============================================
+      // 自動開立 ezPay 電子發票
+      // =============================================
+      const invoiceResult = issueInvoiceForOrder(sheet, rowIndex, orderId, data);
+      if (invoiceResult.success) {
+        Logger.log('Invoice issued: ' + invoiceResult.invoiceNumber);
+      } else {
+        Logger.log('Invoice issue failed: ' + invoiceResult.error);
+      }
+
+      return {
+        success: true,
+        orderId: orderId,
+        invoice: invoiceResult
+      };
+    }
+
+    return { success: false, error: '找不到訂單: ' + orderId };
+  } catch (error) {
+    Logger.log('handlePaymentSuccess error: ' + error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * 從 Google Sheet 讀取訂單資料並開立發票
+ * @param {Sheet} sheet - Google Sheet
+ * @param {number} rowIndex - 訂單所在列
+ * @param {string} orderId - 訂單編號
+ * @param {Object} paymentData - 付款資料
+ */
+function issueInvoiceForOrder(sheet, rowIndex, orderId, paymentData) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+
+    // 檢查 ezPay 設定
+    const merchantId = props.getProperty('EZPAY_MERCHANT_ID');
+    const hashKey = props.getProperty('EZPAY_HASH_KEY');
+    const hashIV = props.getProperty('EZPAY_HASH_IV');
+
+    if (!merchantId || !hashKey || !hashIV) {
+      Logger.log('ezPay Invoice not configured, skipping');
+      return { success: false, error: 'ezPay 未設定' };
+    }
+
+    // 從 Sheet 讀取訂單資料
+    const rowValues = sheet.getRange(rowIndex, 1, 1, 30).getValues()[0];
+
+    const customerName = rowValues[SHEET_COLS.CUSTOMER_NAME - 1] || '客戶';
+    const customerEmail = rowValues[SHEET_COLS.CUSTOMER_EMAIL - 1] || '';
+    const companyName = rowValues[SHEET_COLS.COMPANY - 1] || '';
+    const taxId = rowValues[SHEET_COLS.TAX_ID - 1] || '';
+    const totalAmount = paymentData.amount || paymentData.payment?.amount || 0;
+
+    // 判斷 B2B 或 B2C
+    const isB2B = taxId && taxId.length === 8;
+
+    // 準備發票資料
+    const invoiceData = {
+      MerchantID_: merchantId,
+      RespondType: 'JSON',
+      Version: '1.5',
+      TimeStamp: Math.floor(Date.now() / 1000).toString(),
+      MerchantOrderNo: orderId,
+      Status: '1',
+      Category: isB2B ? 'B2B' : 'B2C',
+      BuyerName: isB2B ? companyName : customerName,
+      BuyerEmail: customerEmail,
+      PrintFlag: isB2B ? 'Y' : 'N',
+      TaxType: '1',
+      TaxRate: '5',
+      Amt: Math.round(totalAmount / 1.05).toString(),
+      TaxAmt: Math.round(totalAmount - totalAmount / 1.05).toString(),
+      TotalAmt: totalAmount.toString(),
+      ItemName: '吾飛藝術銀行服務',
+      ItemCount: '1',
+      ItemUnit: '式',
+      ItemPrice: totalAmount.toString(),
+      ItemAmt: totalAmount.toString(),
+    };
+
+    if (isB2B) {
+      invoiceData.BuyerUBN = taxId;
+      invoiceData.BuyerAddress = rowValues[SHEET_COLS.ADDRESS - 1] || '';
+    } else {
+      // B2C 使用手機載具（如有提供）或 ezPay 會員載具
+      invoiceData.CarrierType = '0'; // ezPay 電子發票載具
+      invoiceData.PrintFlag = 'N';
+    }
+
+    // 呼叫 ezPay API 開立發票
+    const result = callEzPayInvoiceAPI(invoiceData, hashKey, hashIV);
+
+    if (result.success) {
+      // 更新 Sheet 發票欄位
+      sheet.getRange(rowIndex, SHEET_COLS.INVOICE_NUMBER).setValue(result.invoiceNumber);
+      sheet.getRange(rowIndex, SHEET_COLS.INVOICE_RANDOM).setValue(result.randomNum || '');
+      sheet.getRange(rowIndex, SHEET_COLS.INVOICE_TIME).setValue(new Date().toLocaleString('zh-TW'));
+    }
+
+    return result;
+
+  } catch (error) {
+    Logger.log('issueInvoiceForOrder error: ' + error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * 呼叫 ezPay 開立發票 API
+ * 注意：此函數需要 AES 加密，建議將 ezpay-invoice.txt 的加密函數整合進來
+ * 或直接呼叫已部署的 ezPay Invoice GAS Web App
+ */
+function callEzPayInvoiceAPI(invoiceData, hashKey, hashIV) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const ezpayInvoiceEndpoint = props.getProperty('EZPAY_INVOICE_ENDPOINT');
+
+    if (ezpayInvoiceEndpoint) {
+      // 方案一：呼叫已部署的 ezPay Invoice GAS
+      const payload = JSON.stringify({
+        action: 'issueInvoice',
+        ...invoiceData
+      });
+
+      const response = UrlFetchApp.fetch(ezpayInvoiceEndpoint + '?action=issueInvoice', {
+        method: 'POST',
+        contentType: 'application/json',
+        payload: payload,
+        muteHttpExceptions: true
+      });
+
+      return JSON.parse(response.getContentText());
+    } else {
+      // 方案二：直接呼叫 ezPay API（需整合加密函數）
+      Logger.log('EZPAY_INVOICE_ENDPOINT not set, please configure it');
+      return { success: false, error: 'EZPAY_INVOICE_ENDPOINT 未設定' };
+    }
+
+  } catch (error) {
+    Logger.log('callEzPayInvoiceAPI error: ' + error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+// =============================================
+// Webhook 事件處理函數
+// =============================================
+
+/**
+ * 處理付款失敗
+ * @param {Object} data - Webhook 資料
+ */
+function handlePaymentFailed(data) {
+  updateOrderPaymentStatus(data, '付款失敗', data.paymentMsg || '付款失敗');
+}
+
+/**
+ * 處理付款逾時
+ * @param {Object} data - Webhook 資料
+ */
+function handlePaymentExpired(data) {
+  updateOrderPaymentStatus(data, '已逾時', '付款逾時');
+}
+
+/**
+ * 處理付款取消（用戶在付款頁取消）
+ * @param {Object} data - Webhook 資料
+ */
+function handlePaymentCancelled(data) {
+  updateOrderPaymentStatus(data, '已取消', '用戶取消付款');
+}
+
+/**
+ * 處理付款處理中
+ * @param {Object} data - Webhook 資料
+ */
+function handlePaymentProcessing(data) {
+  updateOrderPaymentStatus(data, '處理中', '付款處理中');
+}
+
+/**
+ * 處理退款成功
+ * @param {Object} data - Webhook 資料
+ */
+function handleRefundSuccess(data) {
+  try {
+    const orderId = data.referenceOrderId || data.order?.referenceOrderId;
+
+    const updates = {};
+    updates[SHEET_COLS.PAYMENT_STATUS] = '已退款';
+    updates[SHEET_COLS.UPDATE_TIME] = new Date().toLocaleString('zh-TW');
+
+    updateSheetOrder(orderId, updates);
+
+  } catch (error) {
+    Logger.log('handleRefundSuccess error: ' + error.message);
+  }
+}
+
+/**
+ * 通用：更新訂單付款狀態
+ * @param {Object} data - Webhook 資料
+ * @param {string} status - 狀態文字
+ * @param {string} note - 備註
+ */
+function updateOrderPaymentStatus(data, status, note) {
+  try {
+    const orderId = data.referenceOrderId || data.order?.referenceOrderId;
+
+    const updates = {};
+    updates[SHEET_COLS.PAYMENT_STATUS] = status;
+    updates[SHEET_COLS.UPDATE_TIME] = new Date().toLocaleString('zh-TW');
+
+    if (data.tradeOrderId) {
+      updates[SHEET_COLS.TRADE_ORDER_ID] = data.tradeOrderId;
+    }
+
+    updateSheetOrder(orderId, updates);
+
+  } catch (error) {
+    Logger.log('updateOrderPaymentStatus error: ' + error.message);
+  }
+}
+
+// =============================================
+// doGet 處理 API 請求
+// =============================================
+
+function doGet(e) {
+  const action = e.parameter.action;
+
+  // 解碼 Base64 參數（如果有）
+  let data = {};
+  if (e.parameter.data) {
+    try {
+      const decoded = Utilities.newBlob(
+        Utilities.base64Decode(e.parameter.data)
+      ).getDataAsString();
+      data = JSON.parse(decoded);
+    } catch (err) {
+      Logger.log('Failed to decode data: ' + err.message);
+    }
+  }
+
+  // 也支援直接傳參數（方便測試）
+  const sandbox = String(e.parameter.sandbox ?? data.sandbox ?? 'false') === 'true';
+
+  // 建立結帳交易
+  if (action === 'createSession') {
+    const result = createCheckoutSession({
+      orderId: data.orderId,
+      amount: data.amount,
+      returnUrl: data.returnUrl,
+      paymentMethods: data.paymentMethods || ['CreditCard', 'LinePay', 'VirtualAccount'],
+      paymentOptions: data.paymentOptions,
+      customer: data.customer,
+      order: data.order,
+      sandbox: sandbox
+    });
+
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 查詢結帳交易（支援直接參數和 Base64 參數）
+  if (action === 'querySession') {
+    const sessionId = e.parameter.sessionId || data.sessionId;
+    const result = queryCheckoutSession(sessionId, sandbox);
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 查詢付款交易（使用 tradeOrderId）
+  if (action === 'queryPayment') {
+    const tradeOrderId = e.parameter.tradeOrderId || e.parameter.paymentId || data.tradeOrderId || data.paymentId;
+    const result = queryPayment(tradeOrderId, sandbox);
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 健康檢查
+  return ContentService.createTextOutput(JSON.stringify({
+    status: 'ok',
+    message: 'SHOPLINE Payments API is running',
+    usage: {
+      createSession: 'GET ?action=createSession&data=BASE64_JSON',
+      querySession: 'GET ?action=querySession&sessionId=se_xxx&sandbox=true',
+      queryPayment: 'GET ?action=queryPayment&tradeOrderId=100xxx&sandbox=true'
+    }
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+// =============================================
+// doPost 處理 Webhook
+// =============================================
+
+function doPost(e) {
+  try {
+    const config = getShoplineConfig(false); // Webhook 使用正式環境 signKey
+
+    // 取得 Header
+    const timestamp = e.parameter.timestamp || '';
+    const sign = e.parameter.sign || '';
+    const bodyString = e.postData.contents;
+
+    // =============================================
+    // 記錄 Webhook 到 Google Sheet（方便除錯）
+    // =============================================
+    logWebhookToSheet(timestamp, bodyString);
+
+    // 驗證簽章（正式環境必須驗證）
+    const hasSignature = !!(timestamp && sign);
+    if (config.signKey) {
+      if (!hasSignature) {
+        Logger.log('Webhook signature missing (timestamp/sign not provided)');
+        logWebhookToSheet(timestamp || 'MISSING_SIGNATURE', 'SIGNATURE_MISSING: ' + bodyString);
+        return ContentService.createTextOutput(JSON.stringify({
+          success: false,
+          error: 'Signature missing'
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+
+      if (!verifyWebhookSignature(timestamp, bodyString, sign, config.signKey)) {
+        Logger.log('Webhook signature verification failed');
+        logWebhookToSheet(timestamp, 'SIGNATURE_FAILED: ' + bodyString);
+        return ContentService.createTextOutput(JSON.stringify({
+          success: false,
+          error: 'Signature verification failed'
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
+    // 解析 Webhook 資料
+    const webhookData = JSON.parse(bodyString);
+    const eventType = webhookData.type;
+
+    Logger.log('Received webhook: ' + eventType);
+    Logger.log('Webhook data: ' + bodyString);
+
+    // 處理不同事件類型
+    switch (eventType) {
+      case 'trade.succeeded':
+        // 付款成功
+        handlePaymentSuccess(webhookData.data);
+        break;
+
+      case 'trade.failed':
+        // 付款失敗
+        Logger.log('Payment failed: ' + JSON.stringify(webhookData.data));
+        handlePaymentFailed(webhookData.data);
+        break;
+
+      case 'trade.expired':
+        // 付款逾時
+        Logger.log('Payment expired: ' + JSON.stringify(webhookData.data));
+        handlePaymentExpired(webhookData.data);
+        break;
+
+      case 'trade.cancelled':
+        // 用戶在付款頁取消付款
+        Logger.log('Payment cancelled: ' + JSON.stringify(webhookData.data));
+        handlePaymentCancelled(webhookData.data);
+        break;
+
+      case 'trade.processing':
+        // 付款處理中
+        Logger.log('Payment processing: ' + JSON.stringify(webhookData.data));
+        handlePaymentProcessing(webhookData.data);
+        break;
+
+      case 'trade.customer_action':
+        // 等待顧客付款確認（如 3D 驗證）
+        Logger.log('Awaiting customer action: ' + JSON.stringify(webhookData.data));
+        break;
+
+      case 'session.succeeded':
+        // 結帳交易成功
+        handlePaymentSuccess(webhookData.data);
+        break;
+
+      case 'session.expired':
+        // 結帳交易逾時
+        Logger.log('Session expired: ' + JSON.stringify(webhookData.data));
+        handlePaymentExpired(webhookData.data);
+        break;
+
+      case 'trade.refund.succeeded':
+        // 退款成功
+        Logger.log('Refund succeeded: ' + JSON.stringify(webhookData.data));
+        handleRefundSuccess(webhookData.data);
+        break;
+
+      case 'trade.refund.failed':
+        // 退款失敗
+        Logger.log('Refund failed: ' + JSON.stringify(webhookData.data));
+        break;
+
+      default:
+        Logger.log('Unhandled event type: ' + eventType);
+    }
+
+    // 回應 200 OK（告訴 SHOPLINE 已收到）
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      received: eventType
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (error) {
+    Logger.log('Webhook processing error: ' + error.message);
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: error.message
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// =============================================
+// 測試函數
+// =============================================
+
+/**
+ * 測試建立結帳交易（在 GAS 編輯器中執行）
+ */
+function testCreateSession() {
+  const result = createCheckoutSession({
+    orderId: 'TEST-' + new Date().getTime(),
+    amount: 100, // 100 元
+    returnUrl: 'https://example.com/return',
+    paymentMethods: ['CreditCard', 'LinePay', 'VirtualAccount'],
+    paymentOptions: {
+      creditCardInstallments: ['0', '3', '6', '12'], // 一次付清 + 3/6/12期
+      virtualAccountExpireTime: 1440 // ATM 24小時內付款
+    },
+    customer: {
+      name: '測試客戶',
+      email: 'test@example.com',
+      phone: '0912345678'
+    },
+    sandbox: true
+  });
+
+  Logger.log('Test result: ' + JSON.stringify(result, null, 2));
+}
