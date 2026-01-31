@@ -343,15 +343,24 @@
 
           try {
             // 準備發票商品明細
-            const itemsData = Object.entries(order.items).map(([id, qty]) => {
-              const product = initialProducts.find(p => p.id === parseInt(id));
-              return {
+            const itemsData = Object.entries(order.items).reduce((acc, [id, qty]) => {
+              const productId = parseInt(id);
+              const product = initialProducts.find(p => p.id === productId);
+              if (!product) {
+                console.warn("[Invoice] Product not found for order item:", {
+                  productId,
+                  quantity: qty,
+                });
+                return acc;
+              }
+              acc.push({
                 name: product.name,
                 quantity: qty,
                 unit: "次",
                 price: product.price,
-              };
-            });
+              });
+              return acc;
+            }, []);
 
             // 準備發票資料
             const invoiceData = {
@@ -1067,7 +1076,7 @@
                         )}
                       </div>
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-2 pl-13">
+                    <p className="text-[10px] text-slate-500 mt-2 pl-[52px]">
                       發票將自動上傳至財政部，您可透過手機載具或 ezPay 平台查詢
                     </p>
                   </div>
@@ -1529,10 +1538,12 @@
         requestAnimationFrame(animate);
       }
 
-      // 初始化
-      setCanvasSize();
-      window.addEventListener("resize", setCanvasSize);
-      animate();
+      // 初始化：若共用 WFLYBackground 已載入則避免重複動畫
+      if (!window.WFLYBackground) {
+        setCanvasSize();
+        window.addEventListener("resize", setCanvasSize);
+        animate();
+      }
     </script>
   </body>
 </html>

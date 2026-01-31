@@ -2280,10 +2280,12 @@
         requestAnimationFrame(animate);
       }
 
-      // 初始化
-      setCanvasSize();
-      window.addEventListener("resize", setCanvasSize);
-      animate();
+      // 初始化：若共用 WFLYBackground 已載入則避免重複動畫
+      if (!window.WFLYBackground) {
+        setCanvasSize();
+        window.addEventListener("resize", setCanvasSize);
+        animate();
+      }
     </script>
   </body>
 </html>
