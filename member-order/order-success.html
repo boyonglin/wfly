@@ -22,24 +22,37 @@
     <!-- 1. 引入 Tailwind CSS (樣式框架) -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- 2. 引入 Babel (用於瀏覽器端編譯 React JSX) -->
+    <!-- 2. Google Fonts for Calendar -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- 3. 引入 Babel (用於瀏覽器端編譯 React JSX) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- 3. 引入 html2canvas (用於截圖功能) -->
+    <!-- 4. 引入 html2canvas (用於截圖功能) -->
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
-    <!-- 4. 引入自訂樣式 -->
+    <!-- 5. 引入自訂樣式 -->
     <link rel="stylesheet" href="styles.css" />
 
-    <!-- 5. 引入設定檔 (config-api.js 必須在 config.js 之前載入) -->
+    <!-- 6. 引入設定檔 (config-api.js 必須在 config.js 之前載入) -->
     <script src="config-api.js"></script>
     <script src="config.js"></script>
 
-    <!-- 6. 引入 LINE Login SDK -->
+    <!-- 7. 引入 LINE Login SDK -->
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   </head>
-  <body class="bg-[#f5f5f7]">
+  <body class="gcg-bg">
     <div id="root"></div>
+
+    <script src="../shared/wfly-background.js"></script>
+    <script>
+      window.WFLYBackground && window.WFLYBackground.init();
+    </script>
 
     <script type="text/babel" data-type="module">
       // =============================================
@@ -72,7 +85,7 @@
       // =============================================
       // 從全域設定取得常數
       // =============================================
-      const { STORAGE_KEY, DRAFT_KEY, PAYMENT, LINE_PAY, LINE, API } = window.APP_CONFIG;
+      const { STORAGE_KEY, DRAFT_KEY, LINE_PAY, LINE, API } = window.APP_CONFIG;
 
       // Icon 映射表
       const ICON_MAP = {
@@ -119,7 +132,7 @@
 
         return (
           <span
-            className={`font-mono font-bold text-lg ${timeLeft <= 0 ? "text-gray-500" : "text-red-600"}`}
+            className={`font-mono font-bold text-lg ${timeLeft <= 0 ? "text-slate-500" : "text-red-400"}`}
           >
             {formatTime(timeLeft)}
           </span>
@@ -148,16 +161,23 @@
         const [linePayConfirmed, setLinePayConfirmed] = useState(false);
         const [linePayError, setLinePayError] = useState(null);
 
+        // ezPay 電子發票相關狀態
+        const [isIssuingInvoice, setIsIssuingInvoice] = useState(false);
+        const [invoiceResult, setInvoiceResult] = useState(null);
+        const [invoiceError, setInvoiceError] = useState(null);
+
         // =============================================
-        // 初始化 - 載入訂單資料 & 處理 LINE Pay 回傳
+        // 初始化 - 載入訂單資料 & 處理付款回傳
         // =============================================
         useEffect(() => {
           // 初始化 LIFF (LINE Login)
           initializeLiff();
 
-          // 檢查 URL 是否有 LINE Pay 回傳參數
+          // 檢查 URL 參數
           const urlParams = new URLSearchParams(window.location.search);
-          const transactionId = urlParams.get("transactionId");
+          const transactionId = urlParams.get("transactionId"); // LINE Pay 回傳
+          const shoplinePaymentStatus = urlParams.get("payment_status"); // SHOPLINE 回傳
+          const shoplineOrderId = urlParams.get("order_id"); // SHOPLINE 回傳
 
           try {
             const savedOrder = localStorage.getItem(STORAGE_KEY);
@@ -168,7 +188,7 @@
                 setOrderResult(parsedOrder);
                 setRestored(true);
 
-                // 如果有 LINE Pay transactionId，執行確認付款
+                // 處理 LINE Pay transactionId 回傳
                 // LINE Pay API 本身有防重複機制（return code 1152, 1198）
                 if (
                   transactionId &&
@@ -176,6 +196,22 @@
                   parsedOrder.paymentStatus !== "paid"
                 ) {
                   confirmLinePay(transactionId, parsedOrder);
+                }
+
+                // 處理 SHOPLINE Payments 回傳
+                // SHOPLINE 付款完成後會導回此頁，可能帶 payment_status=completed
+                else if (
+                  shoplinePaymentStatus === "completed" &&
+                  parsedOrder.paymentStatus !== "paid"
+                ) {
+                  // SHOPLINE 的付款確認是透過 Webhook 在後端處理
+                  // 這裡只更新前端顯示狀態，並嘗試開發票（如果 Webhook 尚未處理）
+                  handleShoplinePaymentReturn(parsedOrder);
+                }
+
+                // 如果已付款但尚未開發票，嘗試補開發票
+                else if (parsedOrder.paymentStatus === "paid" && !parsedOrder.invoiceNumber) {
+                  issueInvoiceAfterPayment(parsedOrder);
                 }
               } else {
                 // 訂單已過期，跳轉回表單頁
@@ -192,10 +228,41 @@
           }
 
           // 清除 URL 參數（避免重新整理時重複確認）
-          if (transactionId) {
+          if (transactionId || shoplinePaymentStatus) {
             window.history.replaceState({}, document.title, window.location.pathname);
           }
         }, []);
+
+        // =============================================
+        // SHOPLINE Payments 付款返回處理
+        // =============================================
+        const handleShoplinePaymentReturn = async order => {
+          // SHOPLINE 付款成功後導回，但實際確認是透過 Webhook
+          // 這裡嘗試從後端查詢最新的付款狀態
+          try {
+            const { SHOPLINE_PAYMENTS } = window.CONFIG_API || {};
+            if (!SHOPLINE_PAYMENTS?.ENDPOINT) {
+              console.log("SHOPLINE Payments not configured");
+              return;
+            }
+
+            // 查詢訂單付款狀態（如果後端有提供查詢 API）
+            // 或者直接更新本地狀態顯示「付款處理中」
+            const updatedOrder = {
+              ...order,
+              paymentStatus: "processing", // 暫時標記為處理中
+              shoplineReturnAt: Date.now(),
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
+            setOrderResult(updatedOrder);
+
+            // 顯示提示：付款正在確認中
+            // Webhook 會在背景更新 Google Sheet
+            // 用戶可稍後重新整理頁面查看最新狀態
+          } catch (error) {
+            console.error("SHOPLINE Payment Return Error:", error);
+          }
+        };
 
         // =============================================
         // LINE Pay 確認付款
@@ -239,6 +306,9 @@
               localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
               setOrderResult(updatedOrder);
               setLinePayConfirmed(true);
+
+              // 付款成功後自動開立發票
+              await issueInvoiceAfterPayment(updatedOrder);
             } else {
               throw new Error(result.error || "付款確認失敗");
             }
@@ -248,6 +318,105 @@
           } finally {
             setIsConfirmingLinePay(false);
           }
+        };
+
+        // =============================================
+        // ezPay 電子發票開立
+        // =============================================
+        const issueInvoiceAfterPayment = async order => {
+          // 檢查是否已設定發票 API
+          const { EZPAY_INVOICE } = window.CONFIG_API || {};
+          if (!EZPAY_INVOICE?.ENABLED || !EZPAY_INVOICE?.ENDPOINT) {
+            console.log("ezPay Invoice not configured, skipping invoice issue");
+            return;
+          }
+
+          // 檢查是否已開過發票
+          if (order.invoiceNumber) {
+            console.log("Invoice already issued:", order.invoiceNumber);
+            setInvoiceResult({ invoiceNumber: order.invoiceNumber });
+            return;
+          }
+
+          setIsIssuingInvoice(true);
+          setInvoiceError(null);
+
+          try {
+            // 準備發票商品明細
+            const itemsData = Object.entries(order.items).reduce((acc, [id, qty]) => {
+              const productId = parseInt(id);
+              const product = initialProducts.find(p => p.id === productId);
+              if (!product) {
+                console.warn("[Invoice] Product not found for order item:", {
+                  productId,
+                  quantity: qty,
+                });
+                return acc;
+              }
+              acc.push({
+                name: product.name,
+                quantity: qty,
+                unit: "次",
+                price: product.price,
+              });
+              return acc;
+            }, []);
+
+            // 準備發票資料
+            const invoiceData = {
+              orderId: order.id,
+              buyerName: order.customer.name,
+              buyerEmail: order.customer.email || "",
+              totalAmount: order.total,
+              items: itemsData,
+              comment: `預約顧問：${order.consultant.name}（${order.consultant.location}）`,
+            };
+
+            // 如果有統編，加入統編資訊（B2B）
+            if (order.customer.taxId) {
+              invoiceData.buyerUBN = order.customer.taxId;
+              invoiceData.buyerAddress = order.customer.address || "";
+            }
+
+            // 編碼資料
+            const encodedData = btoa(unescape(encodeURIComponent(JSON.stringify(invoiceData))));
+
+            // 呼叫發票 API
+            const response = await fetch(
+              `${EZPAY_INVOICE.ENDPOINT}?action=issueInvoice&data=${encodeURIComponent(encodedData)}`
+            );
+            const result = await response.json();
+
+            if (result.success) {
+              console.log("Invoice issued successfully:", result.data);
+              setInvoiceResult(result.data);
+
+              // 更新訂單資料，加入發票資訊
+              const updatedOrder = {
+                ...order,
+                invoiceNumber: result.data.invoiceNumber,
+                invoiceTransNo: result.data.invoiceTransNo,
+                invoiceRandomNum: result.data.randomNum,
+                invoiceIssuedAt: result.data.createTime,
+              };
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
+              setOrderResult(updatedOrder);
+            } else {
+              throw new Error(result.error || "發票開立失敗");
+            }
+          } catch (error) {
+            console.error("Issue Invoice Error:", error);
+            setInvoiceError(error.message);
+            // 發票開立失敗不影響付款成功狀態
+          } finally {
+            setIsIssuingInvoice(false);
+          }
+        };
+
+        // 手動開立發票（用於付款成功但發票失敗的情況）
+        const handleManualIssueInvoice = async () => {
+          if (!orderResult) return;
+          await issueInvoiceAfterPayment(orderResult);
         };
 
         // =============================================
@@ -426,7 +595,25 @@
 
           const addressInfo = order.customer.address ? `\n[地址] ${order.customer.address}` : "";
 
-          return `【吾飛藝術銀行 - 訂單確認】\n訂單編號：${order.id}\n------------------------\n[服務顧問]\n姓名：${order.consultant.name} (${order.consultant.id})\n據點：${order.consultant.location}\n------------------------\n[客戶] ${order.customer.name} / ${order.customer.phone}${addressInfo}\n[來源] ${order.customer.source || "無"}\n------------------------\n[訂購項目]\n${itemsList}\n------------------------\n總金額：NT$ ${order.total.toLocaleString()}\n\n* 請協助確認款項，謝謝！`;
+          // 付款狀態
+          let paymentInfo = "";
+          if (order.paymentStatus === "paid") {
+            paymentInfo = `\n------------------------\n[付款狀態] ✅ 已付款`;
+            if (order.paymentMethod === "linepay") {
+              paymentInfo += ` (LINE Pay)`;
+            }
+          }
+
+          // 發票資訊
+          let invoiceInfo = "";
+          if (order.invoiceNumber) {
+            invoiceInfo = `\n[發票號碼] ${order.invoiceNumber}`;
+            if (order.invoiceRandomNum) {
+              invoiceInfo += ` (隨機碼: ${order.invoiceRandomNum})`;
+            }
+          }
+
+          return `【吾飛藝術銀行 - 訂單確認】\n訂單編號：${order.id}\n------------------------\n[服務顧問]\n姓名：${order.consultant.name} (${order.consultant.id})\n據點：${order.consultant.location}\n------------------------\n[客戶] ${order.customer.name} / ${order.customer.phone}${addressInfo}\n[來源] ${order.customer.source || "無"}\n------------------------\n[訂購項目]\n${itemsList}\n------------------------\n總金額：NT$ ${order.total.toLocaleString()}${paymentInfo}${invoiceInfo}\n\n* 請協助確認款項，謝謝！`;
         };
 
         const copyToClipboard = async (text, silent = false) => {
@@ -557,10 +744,13 @@
         // =============================================
         if (!orderResult) {
           return (
-            <div className="min-h-screen bg-[#f5f5f7] flex items-center justify-center">
+            <div
+              className="min-h-screen flex items-center justify-center"
+              style={{ fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif" }}
+            >
               <div className="text-center">
-                <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="text-gray-500">載入訂單資料中...</p>
+                <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-slate-400">載入訂單資料中...</p>
               </div>
             </div>
           );
@@ -570,93 +760,98 @@
         // 渲染成功頁面
         // =============================================
         return (
-          <div className="min-h-screen bg-[#f5f5f7] pb-20">
-            <div className="w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto bg-white min-h-screen shadow-2xl overflow-hidden flex flex-col">
-              {/* 成功頁面 Header */}
-              <div className="bg-[#1d1d1f] text-white p-8 sm:p-10 md:p-12 text-center rounded-b-[2rem] shadow-lg relative z-10 safe-area-top">
-                <div className="w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] md:w-20 md:h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-5 shadow-lg shadow-green-500/30">
+          <div
+            className="min-h-screen pb-20"
+            style={{ fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif" }}
+          >
+            <div className="w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto min-h-screen flex flex-col">
+              {/* 成功頁面 Header - GCG Glass Style */}
+              <div className="gcg-glass text-white p-8 sm:p-10 md:p-12 text-center rounded-b-3xl shadow-xl relative z-10 safe-area-top border-b border-white/10">
+                <div className="w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] md:w-20 md:h-20 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-5 shadow-lg shadow-green-500/30 animate-pulse-glow">
                   <Check className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 text-white stroke-[3]" />
                 </div>
-                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2">訂單已送出</h2>
-                <p className="text-gray-400 text-xs sm:text-sm">
+                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent tracking-tight">
+                  訂單已送出
+                </h2>
+                <p className="text-slate-400 text-xs sm:text-sm">
                   請完成付款並傳送資料至官方 Line 確認
                 </p>
               </div>
 
-              <div className="px-4 sm:px-6 md:px-8 -mt-6 pt-2 relative z-20 flex-grow">
+              <div className="px-4 sm:px-6 md:px-8 -mt-6 pt-2 relative z-20 flex-grow max-w-xl lg:max-w-2xl mx-auto w-full">
                 {restored && (
-                  <div className="mb-4 sm:mb-6 bg-blue-50 border border-blue-200 text-blue-800 p-3 sm:p-4 md:p-5 rounded-xl sm:rounded-2xl flex items-center gap-2 text-sm shadow-sm">
+                  <div className="mb-4 sm:mb-6 gcg-glass border border-blue-500/30 text-blue-400 p-3 sm:p-4 md:p-5 rounded-xl sm:rounded-2xl flex items-center gap-2 text-sm shadow-md backdrop-blur-xl">
                     <AlertCircle className="w-4 h-4" /> 這是您尚未清除的歷史訂單
                   </div>
                 )}
 
-                {/* 訂單摘要卡片 */}
+                {/* 訂單摘要卡片 - GCG Glass Style */}
                 <div
                   id="receipt-card"
-                  className="bg-white rounded-xl sm:rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-4 sm:mb-6"
+                  className="gcg-glass rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden mb-4 sm:mb-6 border border-white/10 backdrop-blur-xl"
                 >
-                  <div className="bg-gray-50 border-b border-gray-100 p-3 sm:p-4 flex justify-between items-center">
-                    <span className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase">
+                  <div className="bg-white/5 border-b border-white/10 p-3 sm:p-4 flex justify-between items-center backdrop-blur-sm">
+                    <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
                       Order ID
                     </span>
-                    <span className="font-mono font-bold text-sm sm:text-base text-[#1d1d1f]">
+                    <span className="font-mono font-bold text-sm sm:text-base text-white">
                       {orderResult.id}
                     </span>
                   </div>
                   <div className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                     {/* 客戶資料區塊 */}
-                    <div className="text-sm border-b border-dashed border-gray-200 pb-3 sm:pb-4 space-y-2 sm:space-y-3">
+                    <div className="text-sm border-b border-dashed border-white/10 pb-3 sm:pb-4 space-y-2 sm:space-y-3">
                       <div className="grid grid-cols-2 gap-2 sm:gap-4">
                         <div>
-                          <p className="text-[10px] sm:text-xs text-gray-400">客戶姓名</p>
-                          <p className="font-medium text-sm sm:text-base text-[#1d1d1f]">
+                          <p className="text-[10px] sm:text-xs text-slate-500">客戶姓名</p>
+                          <p className="font-medium text-sm sm:text-base text-white">
                             {orderResult.customer.name}
                           </p>
                         </div>
                         <div>
-                          <p className="text-[10px] sm:text-xs text-gray-400">聯絡電話</p>
-                          <p className="font-medium text-sm sm:text-base text-[#1d1d1f]">
+                          <p className="text-[10px] sm:text-xs text-slate-500">聯絡電話</p>
+                          <p className="font-medium text-sm sm:text-base text-white">
                             {orderResult.customer.phone}
                           </p>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2 sm:gap-4">
                         <div>
-                          <p className="text-[10px] sm:text-xs text-gray-400">生日</p>
-                          <p className="font-medium text-sm sm:text-base text-[#1d1d1f]">
+                          <p className="text-[10px] sm:text-xs text-slate-500">生日</p>
+                          <p className="font-medium text-sm sm:text-base text-white">
                             {orderResult.customer.birthday || "-"}
                           </p>
                         </div>
                         <div>
-                          <p className="text-[10px] sm:text-xs text-gray-400">統編</p>
-                          <p className="font-medium text-sm sm:text-base text-[#1d1d1f]">
+                          <p className="text-[10px] sm:text-xs text-slate-500">統編</p>
+                          <p className="font-medium text-sm sm:text-base text-white">
                             {orderResult.customer.taxId || "-"}
                           </p>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2 sm:gap-4">
                         <div>
-                          <p className="text-[10px] sm:text-xs text-gray-400">公司</p>
-                          <p className="font-medium text-sm sm:text-base text-[#1d1d1f]">
+                          <p className="text-[10px] sm:text-xs text-slate-500">公司</p>
+                          <p className="font-medium text-sm sm:text-base text-white">
                             {orderResult.customer.company || "-"}
                           </p>
                         </div>
                         <div>
-                          <p className="text-[10px] sm:text-xs text-gray-400">資訊來源</p>
-                          <p className="font-medium text-sm sm:text-base text-[#1d1d1f]">
+                          <p className="text-[10px] sm:text-xs text-slate-500">資訊來源</p>
+                          <p className="font-medium text-sm sm:text-base text-white">
                             {orderResult.customer.source || "-"}
                           </p>
                         </div>
                       </div>
                       <div>
-                        <p className="text-[10px] sm:text-xs text-gray-400">信箱</p>
-                        <p className="font-medium text-sm sm:text-base text-[#1d1d1f] break-all">
+                        <p className="text-[10px] sm:text-xs text-slate-500">信箱</p>
+                        <p className="font-medium text-sm sm:text-base text-white break-all">
                           {orderResult.customer.email}
                         </p>
                       </div>
                       <div>
-                        <p className="text-[10px] sm:text-xs text-gray-400">地址</p>
-                        <p className="font-medium text-sm sm:text-base text-[#1d1d1f] break-words">
+                        <p className="text-[10px] sm:text-xs text-slate-500">地址</p>
+                        <p className="font-medium text-sm sm:text-base text-white break-words">
                           {orderResult.customer.address || "-"}
                         </p>
                       </div>
@@ -664,11 +859,11 @@
                     {/* 預約時間區塊 */}
                     {(orderResult.customer.appointmentDate ||
                       orderResult.customer.appointmentTime) && (
-                      <div className="text-sm border-b border-dashed border-gray-200 pb-3 sm:pb-4 space-y-2 sm:space-y-3">
+                      <div className="text-sm border-b border-dashed border-white/10 pb-3 sm:pb-4 space-y-2 sm:space-y-3">
                         <div className="grid grid-cols-2 gap-2 sm:gap-4">
                           <div>
-                            <p className="text-[10px] sm:text-xs text-gray-400">預約日期</p>
-                            <p className="font-medium text-sm sm:text-base text-[#1d1d1f]">
+                            <p className="text-[10px] sm:text-xs text-slate-500">預約日期</p>
+                            <p className="font-medium text-sm sm:text-base text-white">
                               {orderResult.customer.appointmentDate
                                 ? new Date(orderResult.customer.appointmentDate).toLocaleDateString(
                                     "zh-TW",
@@ -683,8 +878,8 @@
                             </p>
                           </div>
                           <div>
-                            <p className="text-[10px] sm:text-xs text-gray-400">預約時段</p>
-                            <p className="font-medium text-sm sm:text-base text-[#1d1d1f]">
+                            <p className="text-[10px] sm:text-xs text-slate-500">預約時段</p>
+                            <p className="font-medium text-sm sm:text-base text-white">
                               {orderResult.customer.appointmentPeriod && (
                                 <span>
                                   {orderResult.customer.appointmentPeriod === "morning" && "上午"}
@@ -709,17 +904,19 @@
 
                     {/* 訂購項目 */}
                     <div>
-                      <p className="text-[10px] sm:text-xs text-gray-400 mb-2">訂購項目</p>
+                      <p className="text-[10px] sm:text-xs text-slate-500 mb-2">訂購項目</p>
                       <ul className="space-y-1.5 sm:space-y-2">
                         {Object.entries(orderResult.items).map(([id, qty]) => {
                           const product = initialProducts.find(p => p.id === parseInt(id));
                           return (
                             <li key={id} className="flex justify-between text-xs sm:text-sm">
-                              <span className="text-[#1d1d1f]">
+                              <span className="text-white">
                                 {product.name}{" "}
-                                <span className="text-gray-500 text-[10px] sm:text-xs">x{qty}</span>
+                                <span className="text-slate-500 text-[10px] sm:text-xs">
+                                  x{qty}
+                                </span>
                               </span>
-                              <span className="font-medium text-[#1d1d1f]">
+                              <span className="font-medium text-white">
                                 NT$ {(product.price * qty).toLocaleString()}
                               </span>
                             </li>
@@ -728,47 +925,48 @@
                       </ul>
                     </div>
 
-                    <div className="pt-3 sm:pt-4 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 sm:gap-0">
+                    <div className="pt-3 sm:pt-4 border-t border-white/10 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 sm:gap-0">
                       <div>
-                        <p className="text-[10px] sm:text-xs text-gray-400">服務顧問</p>
-                        <p className="text-xs sm:text-sm font-medium">
+                        <p className="text-[10px] sm:text-xs text-slate-500">服務顧問</p>
+                        <p className="text-xs sm:text-sm font-medium text-white">
                           {orderResult.consultant.name}{" "}
-                          <span className="text-[10px] sm:text-xs text-gray-500">
+                          <span className="text-[10px] sm:text-xs text-slate-500">
                             ({orderResult.consultant.id})
                           </span>
                         </p>
-                        <p className="text-[10px] sm:text-xs text-gray-500">
+                        <p className="text-[10px] sm:text-xs text-slate-500">
                           {orderResult.consultant.location}
                         </p>
                       </div>
                       <div className="text-left sm:text-right w-full sm:w-auto">
-                        <p className="text-[10px] sm:text-xs text-gray-400">總金額 (含稅)</p>
-                        <p className="text-xl sm:text-2xl md:text-3xl font-bold text-[#1d1d1f]">
-                          NT$ {orderResult.total.toLocaleString()}
+                        <p className="text-[10px] sm:text-xs text-slate-500">總金額 (含稅)</p>
+                        <p className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
+                          <span className="text-slate-500 text-sm mr-1">NT$</span>
+                          {orderResult.total.toLocaleString()}
                         </p>
                       </div>
                     </div>
                   </div>
                   <div
-                    className="bg-gray-50 p-2 sm:p-3 flex border-t border-gray-100"
+                    className="bg-white/5 p-2 sm:p-3 flex border-t border-white/10 backdrop-blur-sm"
                     data-html2canvas-ignore
                   >
                     <button
                       onClick={downloadReceiptImage}
-                      className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-[#1d1d1f] text-[10px] sm:text-xs font-bold border-r border-gray-200 py-2 active:bg-gray-100 transition-colors"
+                      className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-slate-300 text-[10px] sm:text-xs font-bold border-r border-white/10 py-2 active:bg-white/5 transition-colors hover:text-white"
                     >
                       <ImageIcon className="w-3 h-3 sm:w-4 sm:h-4" />{" "}
                       <span id="download-btn-text">下載圖片</span>
                     </button>
                     <button
                       onClick={() => copyToClipboard(generateOrderText(orderResult), false)}
-                      className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-[#1d1d1f] text-[10px] sm:text-xs font-bold border-r border-gray-200 py-2 active:bg-gray-100 transition-colors"
+                      className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-slate-300 text-[10px] sm:text-xs font-bold border-r border-white/10 py-2 active:bg-white/5 transition-colors hover:text-white"
                     >
                       <Copy className="w-3 h-3 sm:w-4 sm:h-4" /> 複製文字
                     </button>
                     <button
                       onClick={handleShare}
-                      className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-[#1d1d1f] text-[10px] sm:text-xs font-bold py-2 active:bg-gray-100 transition-colors"
+                      className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-slate-300 text-[10px] sm:text-xs font-bold py-2 active:bg-white/5 transition-colors hover:text-white"
                     >
                       <Share2 className="w-3 h-3 sm:w-4 sm:h-4" /> 分享
                     </button>
@@ -777,25 +975,25 @@
 
                 {/* LINE Pay 確認中提示 */}
                 {isConfirmingLinePay && (
-                  <div className="bg-[#06C755]/10 border border-[#06C755]/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6 text-center">
+                  <div className="gcg-glass border border-[#06C755]/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6 text-center backdrop-blur-xl">
                     <div className="w-8 h-8 border-[3px] border-[#06C755] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
                     <p className="text-sm font-bold text-[#06C755]">正在確認 LINE Pay 付款...</p>
-                    <p className="text-xs text-gray-500 mt-1">請稍候</p>
+                    <p className="text-xs text-slate-500 mt-1">請稍候</p>
                   </div>
                 )}
 
                 {/* LINE Pay 付款成功 */}
                 {orderResult?.paymentStatus === "paid" &&
                   orderResult?.paymentMethod === "linepay" && (
-                    <div className="bg-[#06C755]/10 border border-[#06C755] rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-sm relative overflow-hidden">
-                      <div className="absolute top-0 right-0 bg-[#06C755] text-white text-[8px] sm:text-[10px] font-bold px-2 py-1 rounded-bl-lg">
+                    <div className="gcg-glass border border-[#06C755] rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md relative overflow-hidden backdrop-blur-xl">
+                      <div className="absolute top-0 right-0 bg-gradient-to-r from-[#06C755] to-[#05b04d] text-white text-[8px] sm:text-[10px] font-bold px-3 py-1.5 rounded-bl-lg uppercase tracking-wider">
                         已付款
                       </div>
                       <div className="flex items-center gap-3">
                         <Wallet className="w-6 h-6 text-[#06C755] flex-shrink-0" />
                         <div className="flex-1">
-                          <p className="text-sm font-bold text-[#1d1d1f]">LINE Pay 付款完成</p>
-                          <p className="text-xs text-gray-500 mt-0.5">
+                          <p className="text-sm font-bold text-white">LINE Pay 付款完成</p>
+                          <p className="text-xs text-slate-500 mt-0.5">
                             {orderResult.linePayConfirmedAt &&
                               new Date(orderResult.linePayConfirmedAt).toLocaleString("zh-TW")}
                           </p>
@@ -804,179 +1002,271 @@
                     </div>
                   )}
 
-                {/* LINE Pay 付款失敗 */}
-                {linePayError && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-sm">
-                    <h3 className="font-bold text-red-600 mb-2 flex items-center gap-2 text-xs sm:text-sm">
-                      <AlertCircle className="w-4 h-4" /> LINE Pay 付款失敗
-                    </h3>
-                    <p className="text-xs text-red-600 mb-3">{linePayError}</p>
-                    <p className="text-xs text-gray-500">請改用銀行轉帳或重新訂購</p>
+                {/* SHOPLINE Payments 付款成功 */}
+                {orderResult?.paymentStatus === "paid" &&
+                  orderResult?.paymentMethod === "shopline" && (
+                    <div className="gcg-glass border border-blue-500 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md relative overflow-hidden backdrop-blur-xl">
+                      <div className="absolute top-0 right-0 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-[8px] sm:text-[10px] font-bold px-3 py-1.5 rounded-bl-lg uppercase tracking-wider">
+                        已付款
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <CreditCard className="w-6 h-6 text-blue-400 flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-sm font-bold text-white">SHOPLINE 付款完成</p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {orderResult.shoplinePaidAt &&
+                              new Date(orderResult.shoplinePaidAt).toLocaleString("zh-TW")}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                {/* SHOPLINE Payments 付款處理中 */}
+                {orderResult?.paymentStatus === "processing" && (
+                  <div className="gcg-glass border border-yellow-500/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md relative overflow-hidden backdrop-blur-xl">
+                    <div className="absolute top-0 right-0 bg-gradient-to-r from-yellow-500 to-amber-500 text-white text-[8px] sm:text-[10px] font-bold px-3 py-1.5 rounded-bl-lg uppercase tracking-wider">
+                      處理中
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 border-[3px] border-yellow-500 border-t-transparent rounded-full animate-spin flex-shrink-0"></div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-white">付款確認中</p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          系統正在處理您的付款，請稍候或重新整理頁面查看最新狀態
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                {/* 銀行轉帳付款資訊 - LINE Pay 確認中或已付款時隱藏 */}
-                {!isConfirmingLinePay &&
-                  !(
-                    orderResult?.paymentStatus === "paid" &&
-                    orderResult?.paymentMethod === "linepay"
-                  ) && (
-                    <div className="bg-white rounded-xl sm:rounded-2xl border border-red-100 p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-sm relative">
-                      <div className="absolute top-0 right-0 bg-red-50 text-red-600 text-[8px] sm:text-[10px] font-bold px-2 py-1 rounded-bl-lg border-l border-b border-red-100">
-                        {orderResult?.paymentMethod === "linepay" ? "LINE Pay 待付款" : "待付款"}
+                {/* 電子發票開立中 */}
+                {isIssuingInvoice && (
+                  <div className="gcg-glass border border-purple-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6 text-center backdrop-blur-xl">
+                    <div className="w-8 h-8 border-[3px] border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                    <p className="text-sm font-bold text-purple-400">正在開立電子發票...</p>
+                    <p className="text-xs text-slate-500 mt-1">請稍候</p>
+                  </div>
+                )}
+
+                {/* 電子發票開立成功 */}
+                {orderResult?.invoiceNumber && (
+                  <div className="gcg-glass border border-purple-500 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md relative overflow-hidden backdrop-blur-xl">
+                    <div className="absolute top-0 right-0 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-[8px] sm:text-[10px] font-bold px-3 py-1.5 rounded-bl-lg uppercase tracking-wider">
+                      已開立
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <CreditCard className="w-5 h-5 text-purple-400" />
                       </div>
-                      <h3 className="font-bold text-[#1d1d1f] mb-2 sm:mb-3 flex items-center gap-2 text-xs sm:text-sm">
-                        <CreditCard className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
-                        {orderResult?.paymentMethod === "linepay"
-                          ? "備用付款方式：銀行轉帳"
-                          : "付款資訊"}
-                      </h3>
-                      <div className="bg-red-50 rounded p-2 mb-2 sm:mb-3 flex items-center justify-between text-[10px] sm:text-xs text-red-700">
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 匯款剩餘時間
-                        </div>
-                        <CountdownTimer deadline={orderResult.deadline} />
-                      </div>
-                      <div className="space-y-1 text-[10px] sm:text-xs text-gray-600">
-                        <div className="flex justify-between">
-                          <span>銀行</span>
-                          <span className="font-mono font-bold text-black">
-                            {PAYMENT.BANK_CODE} ({PAYMENT.BANK_NAME})
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>帳號</span>
-                          <span className="font-mono font-bold text-black">
-                            {PAYMENT.ACCOUNT_NUMBER}
-                          </span>
-                        </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-white">電子發票已開立</p>
+                        <p className="text-xs text-purple-400 font-mono font-bold mt-1">
+                          發票號碼：{orderResult.invoiceNumber}
+                        </p>
+                        {orderResult.invoiceRandomNum && (
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            隨機碼：{orderResult.invoiceRandomNum}
+                          </p>
+                        )}
+                        {orderResult.invoiceIssuedAt && (
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            開立時間：{orderResult.invoiceIssuedAt}
+                          </p>
+                        )}
                       </div>
                     </div>
-                  )}
+                    <p className="text-[10px] text-slate-500 mt-2 pl-[52px]">
+                      發票將自動上傳至財政部，您可透過手機載具或 ezPay 平台查詢
+                    </p>
+                  </div>
+                )}
 
-                {/* 操作按鈕 */}
-                <div className="space-y-2 sm:space-y-3 pb-6 sm:pb-8 safe-area-bottom">
-                  {/* LINE 登入狀態顯示 */}
-                  {isLineLoggedIn && lineProfile && (
-                    <div className="bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-3 mb-2">
-                      {lineProfile.pictureUrl && (
-                        <img
-                          src={lineProfile.pictureUrl}
-                          alt="LINE Profile"
-                          className="w-10 h-10 rounded-full"
-                        />
-                      )}
+                {/* 電子發票開立失敗 */}
+                {invoiceError && !orderResult?.invoiceNumber && (
+                  <div className="gcg-glass border border-orange-500/30 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md backdrop-blur-xl">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
                       <div className="flex-1">
-                        <p className="text-xs text-green-600 font-bold">LINE 已連結</p>
-                        <p className="text-sm text-gray-700">{lineProfile.displayName}</p>
+                        <p className="text-sm font-bold text-orange-400">發票開立失敗</p>
+                        <p className="text-xs text-slate-400 mt-1">{invoiceError}</p>
+                        <button
+                          onClick={handleManualIssueInvoice}
+                          className="mt-2 px-3 py-1.5 bg-orange-500 text-white text-xs font-bold rounded-lg hover:bg-orange-600 transition-colors"
+                        >
+                          重新開立發票
+                        </button>
                       </div>
-                      <Check className="w-5 h-5 text-green-500" />
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {/* 已發送過訂單的提示 */}
-                  {orderResult?.lineSentAt && (
-                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 flex items-center gap-2 text-sm text-purple-700 mb-2">
-                      <Check className="w-4 h-4" />
-                      <span>
-                        訂單已於 {new Date(orderResult.lineSentAt).toLocaleString("zh-TW")} 發送至
-                        LINE
-                      </span>
+                {/* LINE Pay 付款失敗 */}
+                {linePayError && (
+                  <div className="gcg-glass border border-red-500/30 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md backdrop-blur-xl">
+                    <h3 className="font-bold text-red-400 mb-2 flex items-center gap-2 text-xs sm:text-sm">
+                      <AlertCircle className="w-4 h-4" /> 付款失敗
+                    </h3>
+                    <p className="text-xs text-red-400 mb-3">{linePayError}</p>
+                    <p className="text-xs text-slate-500">請重新訂購或聯繫客服</p>
+                  </div>
+                )}
+
+                {/* 操作區塊 - 重新設計的清晰架構 */}
+                <div className="space-y-4 sm:space-y-5 pb-6 sm:pb-8 safe-area-bottom">
+                  {/* === 主要操作區：發送到 LINE === */}
+                  <div className="gcg-glass rounded-2xl p-4 sm:p-5 border border-white/10 backdrop-blur-xl">
+                    {/* 區塊標題 */}
+                    <div className="flex items-center gap-2 mb-3 sm:mb-4">
+                      <div className="w-1.5 h-8 rounded-full bg-gradient-to-b from-blue-500 to-blue-600"></div>
+                      <div className="flex-1">
+                        <h3 className="text-sm sm:text-base font-bold text-white">
+                          傳送訂單到 LINE
+                        </h3>
+                        <p className="text-[10px] sm:text-xs text-slate-400">
+                          完成付款後請傳送至官方帳號確認
+                        </p>
+                      </div>
                     </div>
-                  )}
 
-                  <button
-                    onClick={isLineLoggedIn ? sendOrderToLine : handleLineLogin}
-                    disabled={isSendingToLine}
-                    className={`w-full py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform ${
-                      isSendingToLine
-                        ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                        : "bg-[#06C755] hover:bg-[#05b54d] text-white shadow-green-500/20"
-                    }`}
-                  >
-                    {isSendingToLine ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        發送中...
-                      </>
-                    ) : isLineLoggedIn ? (
-                      <>
-                        <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
-                        {orderResult?.lineSentAt ? "重新發送訂單到 LINE" : "發送訂單到 LINE"}
-                      </>
-                    ) : (
-                      <>
-                        <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />用 LINE
-                        登入並接收訂單
-                      </>
+                    {/* LINE 登入狀態 */}
+                    {isLineLoggedIn && lineProfile && (
+                      <div className="mb-3 bg-gradient-to-r from-[#06C755]/10 to-[#06C755]/5 rounded-xl p-3 flex items-center gap-3 border border-[#06C755]/20">
+                        {lineProfile.pictureUrl && (
+                          <img
+                            src={lineProfile.pictureUrl}
+                            alt="LINE Profile"
+                            className="w-10 h-10 rounded-full ring-2 ring-[#06C755]/40"
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <Check className="w-3.5 h-3.5 text-[#06C755] flex-shrink-0" />
+                            <p className="text-[10px] sm:text-xs text-[#06C755] font-bold">
+                              已連結 LINE 帳號
+                            </p>
+                          </div>
+                          <p className="text-xs sm:text-sm text-white font-medium truncate">
+                            {lineProfile.displayName}
+                          </p>
+                        </div>
+                      </div>
                     )}
-                  </button>
 
-                  {/* 備用方式：傳統 QR Code */}
-                  {!isLineLoggedIn && (
-                    <button
-                      onClick={handleShowLineQR}
-                      className="w-full py-3 sm:py-4 rounded-xl bg-white border-2 border-[#06C755] text-[#06C755] text-sm sm:text-base font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
-                    >
-                      <QrCode className="w-4 h-4 sm:w-5 sm:h-5" /> 改用 QR Code 手動傳送
-                    </button>
-                  )}
+                    {/* 已發送提示 */}
+                    {orderResult?.lineSentAt && (
+                      <div className="mb-3 bg-gradient-to-r from-purple-500/10 to-purple-500/5 rounded-xl p-3 flex items-start gap-2 border border-purple-500/20">
+                        <CheckCircle className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs sm:text-sm text-purple-400 font-medium">
+                            訂單已發送
+                          </p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            {new Date(orderResult.lineSentAt).toLocaleString("zh-TW")}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
-                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                    {/* 主要按鈕組 */}
+                    <div className="space-y-3">
+                      <button
+                        onClick={isLineLoggedIn ? sendOrderToLine : handleLineLogin}
+                        disabled={isSendingToLine}
+                        className={`w-full py-3.5 sm:py-4 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all duration-200 ${
+                          isSendingToLine
+                            ? "bg-slate-700 text-slate-400 cursor-not-allowed"
+                            : "gcg-btn-primary"
+                        }`}
+                      >
+                        {isSendingToLine ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            發送中...
+                          </>
+                        ) : (
+                          <>
+                            <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
+                            {isLineLoggedIn
+                              ? orderResult?.lineSentAt
+                                ? "重新發送訂單"
+                                : "發送訂單到 LINE"
+                              : "用 LINE 登入並接收訂單"}
+                          </>
+                        )}
+                      </button>
+
+                      {/* QR Code 備用選項 - 只在未登入時顯示 */}
+                      {!isLineLoggedIn && (
+                        <button
+                          onClick={handleShowLineQR}
+                          className="w-full py-3 sm:py-3.5 rounded-xl bg-white/5 border border-white/20 text-slate-300 text-xs sm:text-sm font-medium flex items-center justify-center gap-2 hover:bg-white/10 hover:border-white/30 active:scale-[0.98] transition-all duration-200"
+                        >
+                          <QrCode className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                          或使用 QR Code 手動傳送
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* === 次要操作區：編輯與新增 === */}
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <button
                       onClick={handleBackToEdit}
-                      className="py-2.5 sm:py-3 rounded-xl bg-white text-gray-700 text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 active:bg-gray-50 transition-colors"
+                      className="flex-1 py-3 sm:py-3.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-xs sm:text-sm font-medium flex items-center justify-center gap-1.5 hover:bg-white/10 hover:border-white/20 hover:text-white active:scale-[0.98] transition-all duration-200"
                     >
-                      <ArrowLeft className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 返回修改
+                      <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      返回修改
                     </button>
                     <button
                       onClick={handleNewOrder}
-                      className="py-2.5 sm:py-3 rounded-xl bg-white text-gray-600 text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 active:bg-gray-50 transition-colors"
+                      className="flex-1 py-3 sm:py-3.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-xs sm:text-sm font-medium flex items-center justify-center gap-1.5 hover:bg-white/10 hover:border-white/20 hover:text-white active:scale-[0.98] transition-all duration-200"
                     >
-                      <RefreshCw className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> 建立新單
+                      <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      建立新單
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Line QR Code Modal */}
+              {/* Line QR Code Modal - GCG Glass Style */}
               {showLineQR && (
-                <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in">
-                  <div className="bg-white w-full max-w-[calc(100%-1.5rem)] sm:max-w-sm md:max-w-md rounded-2xl shadow-2xl p-4 sm:p-6 text-center space-y-4 sm:space-y-6 relative animate-scale-in">
+                <div className="fixed inset-0 z-[70] gcg-modal-overlay flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+                  <div className="gcg-modal w-full max-w-[calc(100%-1.5rem)] sm:max-w-sm md:max-w-md rounded-2xl shadow-2xl p-4 sm:p-6 text-center space-y-4 sm:space-y-6 relative animate-scale-in backdrop-blur-xl">
                     <button
                       onClick={() => setShowLineQR(false)}
-                      className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                      className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
                     >
                       <X className="w-6 h-6" />
                     </button>
 
                     <div>
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2 sm:mb-3">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-[#06C755]/20 rounded-full flex items-center justify-center mx-auto mb-2 sm:mb-3">
                         <QrCode className="w-5 h-5 sm:w-6 sm:h-6 text-[#06C755]" />
                       </div>
-                      <h3 className="text-lg sm:text-xl font-bold text-[#1d1d1f]">加入官方帳號</h3>
-                      <p className="text-xs sm:text-sm text-gray-500 mt-1 sm:mt-2">
+                      <h3 className="text-lg sm:text-xl font-bold text-white">加入官方帳號</h3>
+                      <p className="text-xs sm:text-sm text-slate-400 mt-1 sm:mt-2">
                         訂單資料已自動複製！
                         <br />
                         請掃描或點擊下方按鈕加入好友，
                         <br />
-                        並在聊天室<span className="font-bold text-green-600">「貼上」</span>
+                        並在聊天室<span className="font-bold text-[#06C755]">「貼上」</span>
                         即可傳送。
                       </p>
                     </div>
 
-                    <div className="bg-gray-50 p-3 sm:p-4 rounded-xl border border-gray-200 inline-block">
+                    <div className="bg-white p-3 sm:p-4 rounded-xl inline-block">
                       <img
                         src={LINE.QR_CODE_URL}
                         alt="Line QR Code"
-                        className="w-32 h-32 sm:w-40 sm:h-40 mix-blend-multiply"
+                        className="w-32 h-32 sm:w-40 sm:h-40"
                       />
                     </div>
 
                     <a
                       href={LINE.ADD_FRIEND_URL}
                       target="_blank"
-                      className="w-full py-2.5 sm:py-3 rounded-xl bg-[#06C755] hover:bg-[#05b54d] text-white text-sm sm:text-base font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-500/20 active:scale-95 transition-transform"
+                      className="w-full py-2.5 sm:py-3 rounded-xl gcg-btn-primary text-sm sm:text-base font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-500/30 active:scale-95 transition-all duration-200"
                     >
                       開啟 LINE App <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 rotate-180" />
                     </a>
@@ -984,38 +1274,38 @@
                 </div>
               )}
 
-              {/* 圖片預覽 Modal */}
+              {/* 圖片預覽 Modal - GCG Glass Style */}
               {showImagePreview && (
                 <div
-                  className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-fade-in"
+                  className="fixed inset-0 z-[80] gcg-modal-overlay flex items-center justify-center p-2 sm:p-4 animate-fade-in"
                   onClick={() => setShowImagePreview(false)}
                 >
                   <div
                     className="relative max-w-[calc(100%-1rem)] sm:max-w-sm md:max-w-md w-full max-h-[90vh] overflow-auto"
                     onClick={e => e.stopPropagation()}
                   >
-                    <div className="bg-white rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl p-1.5 sm:p-2">
-                      <div className="flex justify-between items-center p-2 mb-2 border-b border-gray-100">
-                        <h3 className="font-bold text-sm text-gray-600 flex items-center gap-2">
+                    <div className="gcg-glass rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl p-1.5 sm:p-2 backdrop-blur-xl border border-white/10">
+                      <div className="flex justify-between items-center p-2 mb-2 border-b border-white/10">
+                        <h3 className="font-bold text-sm text-white flex items-center gap-2">
                           <ImageIcon className="w-4 h-4" /> 長按圖片即可儲存
                         </h3>
                         <button
                           onClick={() => setShowImagePreview(false)}
-                          className="p-1 rounded-full hover:bg-gray-100"
+                          className="p-1 rounded-full hover:bg-white/10 transition-colors"
                         >
-                          <X className="w-5 h-5 text-gray-400" />
+                          <X className="w-5 h-5 text-slate-400" />
                         </button>
                       </div>
-                      <div className="bg-gray-50 rounded-xl overflow-hidden border border-gray-200">
+                      <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-inner">
                         <img src={previewImageUrl} alt="Order Receipt" className="w-full h-auto" />
                       </div>
-                      <p className="text-center text-xs text-gray-400 mt-3 mb-1">
+                      <p className="text-center text-xs text-slate-400 mt-3 mb-1">
                         請長按上方圖片並選擇「加入照片」或「儲存影像」
                       </p>
                     </div>
                     <button
                       onClick={() => setShowImagePreview(false)}
-                      className="mt-4 w-full py-3 rounded-xl bg-white/20 text-white font-bold backdrop-blur-md border border-white/30 hover:bg-white/30 transition-colors"
+                      className="mt-4 w-full py-3 rounded-xl gcg-glass text-white font-bold backdrop-blur-xl border border-white/20 hover:bg-white/10 transition-all duration-200 active:scale-95"
                     >
                       關閉預覽
                     </button>
@@ -1023,58 +1313,58 @@
                 </div>
               )}
 
-              {/* LINE 發送結果 Modal */}
+              {/* LINE 發送結果 Modal - GCG Glass Style */}
               {showLineSentModal && (
-                <div className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in">
-                  <div className="bg-white w-full max-w-[calc(100%-1.5rem)] sm:max-w-sm md:max-w-md rounded-2xl shadow-2xl p-6 sm:p-8 text-center space-y-4 sm:space-y-6 animate-scale-in">
+                <div className="fixed inset-0 z-[90] gcg-modal-overlay flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+                  <div className="gcg-modal w-full max-w-[calc(100%-1.5rem)] sm:max-w-sm md:max-w-md rounded-2xl shadow-2xl p-6 sm:p-8 text-center space-y-4 sm:space-y-6 animate-scale-in backdrop-blur-xl">
                     {lineSendResult === "success" ? (
                       <>
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-                          <Check className="w-8 h-8 sm:w-10 sm:h-10 text-green-500 stroke-[3]" />
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-green-400/20 to-green-600/20 rounded-full flex items-center justify-center mx-auto">
+                          <Check className="w-8 h-8 sm:w-10 sm:h-10 text-green-400 stroke-[3]" />
                         </div>
                         <div>
-                          <h3 className="text-xl sm:text-2xl font-bold text-[#1d1d1f] mb-2">
+                          <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
                             訂單已發送！
                           </h3>
-                          <p className="text-sm text-gray-500">
+                          <p className="text-sm text-slate-400">
                             訂單確認卡片已發送到您的 LINE
                             <br />
                             請開啟 LINE App 查看
                           </p>
                         </div>
-                        <div className="bg-gray-50 rounded-xl p-4 text-left">
-                          <p className="text-xs text-gray-400 mb-1">發送對象</p>
+                        <div className="gcg-glass rounded-xl p-4 text-left border border-white/10 backdrop-blur-sm">
+                          <p className="text-xs text-slate-500 mb-1">發送對象</p>
                           <div className="flex items-center gap-3">
                             {lineProfile?.pictureUrl && (
                               <img
                                 src={lineProfile.pictureUrl}
                                 alt=""
-                                className="w-10 h-10 rounded-full"
+                                className="w-10 h-10 rounded-full ring-2 ring-white/10"
                               />
                             )}
                             <div>
-                              <p className="font-bold text-[#1d1d1f]">{lineProfile?.displayName}</p>
-                              <p className="text-xs text-gray-500">LINE 用戶</p>
+                              <p className="font-bold text-white">{lineProfile?.displayName}</p>
+                              <p className="text-xs text-slate-500">LINE 用戶</p>
                             </div>
                           </div>
                         </div>
                         <button
                           onClick={() => setShowLineSentModal(false)}
-                          className="w-full py-3 rounded-xl bg-[#1d1d1f] text-white font-bold active:scale-95 transition-transform"
+                          className="w-full py-3 rounded-xl gcg-btn-primary font-bold active:scale-95 transition-all duration-200"
                         >
                           好的
                         </button>
                       </>
                     ) : (
                       <>
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto">
-                          <AlertCircle className="w-8 h-8 sm:w-10 sm:h-10 text-red-500" />
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-red-500/20 rounded-full flex items-center justify-center mx-auto">
+                          <AlertCircle className="w-8 h-8 sm:w-10 sm:h-10 text-red-400" />
                         </div>
                         <div>
-                          <h3 className="text-xl sm:text-2xl font-bold text-[#1d1d1f] mb-2">
+                          <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
                             發送失敗
                           </h3>
-                          <p className="text-sm text-gray-500">
+                          <p className="text-sm text-slate-400">
                             無法透過 LINE 發送訂單
                             <br />
                             請改用 QR Code 方式手動傳送
@@ -1086,13 +1376,13 @@
                               setShowLineSentModal(false);
                               handleShowLineQR();
                             }}
-                            className="w-full py-3 rounded-xl bg-[#06C755] text-white font-bold active:scale-95 transition-transform flex items-center justify-center gap-2"
+                            className="w-full py-3 rounded-xl gcg-btn-primary flex items-center justify-center gap-2 active:scale-95 transition-all duration-200"
                           >
                             <QrCode className="w-4 h-4" /> 使用 QR Code 傳送
                           </button>
                           <button
                             onClick={() => setShowLineSentModal(false)}
-                            className="w-full py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold active:scale-95 transition-transform"
+                            className="w-full py-2.5 rounded-xl gcg-glass border border-white/10 text-slate-300 font-bold active:scale-95 transition-all duration-200 hover:border-white/20 backdrop-blur-xl"
                           >
                             關閉
                           </button>
@@ -1112,6 +1402,148 @@
       // =============================================
       const root = createRoot(document.getElementById("root"));
       root.render(<OrderSuccessPage />);
+    </script>
+
+    <script>
+      // =============================================
+      // 波浪動畫背景
+      // =============================================
+      const canvas = document.getElementById("gradient-canvas");
+      const ctx = canvas.getContext("2d");
+
+      // 固定的 seed 用於靜態噪點
+      const NOISE_SEED = 12345;
+      let time = 0;
+      let noiseCanvas = null;
+
+      // 波浪配置 - 每層都有不同的特性
+      const waveConfigs = [
+        { amplitude: 80, frequency: 0.0015, speed: 0.8, direction: 1, yPos: 0.15, opacity: 0.18 },
+        { amplitude: 120, frequency: 0.001, speed: -0.5, direction: -1, yPos: 0.35, opacity: 0.15 },
+        { amplitude: 100, frequency: 0.0018, speed: 1.2, direction: 1, yPos: 0.5, opacity: 0.12 },
+        { amplitude: 90, frequency: 0.0012, speed: -0.7, direction: -1, yPos: 0.68, opacity: 0.1 },
+        { amplitude: 110, frequency: 0.002, speed: 0.9, direction: 1, yPos: 0.82, opacity: 0.08 },
+        { amplitude: 75, frequency: 0.0022, speed: -1.0, direction: -1, yPos: 0.92, opacity: 0.06 },
+      ];
+
+      // 創建靜態噪點畫布
+      function createNoiseCanvas(width, height, seed) {
+        const offscreen = document.createElement("canvas");
+        offscreen.width = width;
+        offscreen.height = height;
+        const offCtx = offscreen.getContext("2d");
+
+        const imageData = offCtx.createImageData(width, height);
+        const data = imageData.data;
+
+        // Seeded random number generator
+        let seedValue = seed * 10000;
+        const random = () => {
+          seedValue = (seedValue * 9301 + 49297) % 233280;
+          return seedValue / 233280;
+        };
+
+        // 生成噪點
+        const noiseIntensity = 0.3;
+        for (let i = 0; i < data.length; i += 4) {
+          const noise = (random() - 0.5) * 255 * noiseIntensity;
+          data[i] = 128 + noise; // R
+          data[i + 1] = 128 + noise; // G
+          data[i + 2] = 128 + noise; // B
+          data[i + 3] = 255; // A
+        }
+
+        offCtx.putImageData(imageData, 0, 0);
+        return offscreen;
+      }
+
+      // 設置畫布大小
+      function setCanvasSize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        // 重新創建噪點畫布
+        noiseCanvas = createNoiseCanvas(canvas.width, canvas.height, NOISE_SEED);
+      }
+
+      // 繪製波浪背景（動畫）
+      function drawWaveBackground(ctx, width, height, time) {
+        // 基礎漸層
+        const gradient = ctx.createLinearGradient(0, 0, 0, height);
+        gradient.addColorStop(0, "#0a1628");
+        gradient.addColorStop(0.4, "#1e3a5f");
+        gradient.addColorStop(0.7, "#0f2744");
+        gradient.addColorStop(1, "#081220");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, width, height);
+
+        // 繪製多層流動的波浪
+        waveConfigs.forEach((config, i) => {
+          const yOffset = height * config.yPos;
+          const { amplitude, frequency, speed, direction } = config;
+
+          ctx.beginPath();
+          ctx.moveTo(0, yOffset);
+
+          // 使用更細的步進以獲得更平滑的波浪
+          for (let x = 0; x <= width; x += 1) {
+            // 添加多個正弦波疊加，產生更自然的波形
+            const wave1 = Math.sin(x * frequency + time * speed + i * 0.5) * amplitude;
+            const wave2 = Math.sin(x * frequency * 1.3 - time * speed * 0.7 + i) * amplitude * 0.3;
+            const y = yOffset + (wave1 + wave2) * direction;
+            ctx.lineTo(x, y);
+          }
+
+          ctx.lineTo(width, height);
+          ctx.lineTo(0, height);
+          ctx.closePath();
+
+          // 為每層波浪使用不同的顏色漸層
+          const waveGradient = ctx.createLinearGradient(
+            0,
+            yOffset - amplitude,
+            0,
+            yOffset + amplitude
+          );
+          const color1 = i % 2 === 0 ? "rgba(30, 58, 138," : "rgba(37, 99, 235,";
+          const color2 = i % 2 === 0 ? "rgba(59, 130, 246," : "rgba(96, 165, 250,";
+          waveGradient.addColorStop(0, `${color1} ${config.opacity})`);
+          waveGradient.addColorStop(1, `${color2} ${config.opacity * 0.5})`);
+          ctx.fillStyle = waveGradient;
+          ctx.fill();
+        });
+      }
+
+      // 繪製背景
+      function drawBackground() {
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // 繪製波浪動畫
+        drawWaveBackground(ctx, width, height, time);
+
+        // 疊加靜態噪點（使用 overlay 混合模式）
+        if (noiseCanvas) {
+          ctx.globalCompositeOperation = "overlay";
+          ctx.globalAlpha = 0.35;
+          ctx.drawImage(noiseCanvas, 0, 0);
+          ctx.globalCompositeOperation = "source-over";
+          ctx.globalAlpha = 1.0;
+        }
+      }
+
+      // 動畫循環
+      function animate() {
+        time += 0.008;
+        drawBackground();
+        requestAnimationFrame(animate);
+      }
+
+      // 初始化：若共用 WFLYBackground 已載入則避免重複動畫
+      if (!window.WFLYBackground) {
+        setCanvasSize();
+        window.addEventListener("resize", setCanvasSize);
+        animate();
+      }
     </script>
   </body>
 </html>
