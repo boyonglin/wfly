@@ -37,6 +37,9 @@
     <!-- 5. 引入設定檔 (config-api.js 必須在 config.js 之前載入) -->
     <script src="config-api.js"></script>
     <script src="config.js"></script>
+
+    <!-- 6. 引入共用工具函式 -->
+    <script src="utils.js"></script>
   </head>
   <body class="gcg-bg">
     <div id="root"></div>
@@ -77,6 +80,7 @@
         Wallet,
         Building2,
         Calendar,
+        AlertCircle,
       } from "https://esm.sh/lucide-react@0.263.1";
 
       // =============================================
@@ -152,6 +156,9 @@
         // 編輯模式 - 保留原訂單編號
         const [editingOrderId, setEditingOrderId] = useState(null);
 
+        // 付款取消提示
+        const [paymentCancelledNotice, setPaymentCancelledNotice] = useState(false);
+
         // 付款方式選擇
         // 優先順序：SHOPLINE Payments > LINE Pay
         const getDefaultPaymentMethod = () => {
@@ -167,7 +174,7 @@
 
         // SHOPLINE Payments 子選項
         const [shoplinePaymentType, setShoplinePaymentType] = useState("creditcard");
-        const [installmentCount, setInstallmentCount] = useState("0"); // 0 = 一次付清
+        const [installmentCount, setInstallmentCount] = useState("3"); // 預設 3 期
 
         // 自定義下拉選單狀態
         const [showPeriodDropdown, setShowPeriodDropdown] = useState(false);
@@ -242,7 +249,7 @@
             const m = month.getMonth();
             const timeMin = new Date(year, m, 1).toISOString();
             const timeMax = new Date(year, m + 1, 0, 23, 59, 59).toISOString();
-            const payload = btoa(JSON.stringify({ timeMin, timeMax }));
+            const payload = window.WFLYUtils.encodeToBase64({ timeMin, timeMax });
             const url = `${endpoint}?action=getCalendarEvents&data=${encodeURIComponent(payload)}`;
 
             const res = await fetch(url);
@@ -327,14 +334,36 @@
             location: params.get("loc"),
           };
 
-          // 檢查是否有已完成的訂單，若有則跳轉到成功頁
+          // 檢查是否從付款取消返回
+          const isPaymentCancelled = params.get("paymentCancelled") === "true";
+          if (isPaymentCancelled) {
+            setPaymentCancelledNotice(true);
+            // 清除 URL 參數
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+
+          // 檢查是否有已完成的訂單
           try {
             const savedOrder = localStorage.getItem(STORAGE_KEY);
             if (savedOrder) {
               const parsedOrder = JSON.parse(savedOrder);
               if (parsedOrder.deadline && parsedOrder.deadline > Date.now()) {
-                window.location.href = "order-success.html";
-                return;
+                // 只有當訂單已付款或處理中時才跳轉到成功頁
+                // pending 狀態留在表單頁或先不處理（讓 order-success 顯示付款按鈕）
+                if (
+                  parsedOrder.paymentStatus === "paid" ||
+                  parsedOrder.paymentStatus === "processing"
+                ) {
+                  window.location.href = "order-success.html?new=1";
+                  return;
+                }
+                // pending 狀態：有 sessionUrl 表示訂單已建立，跳轉到 order-success 顯示付款按鈕
+                if (parsedOrder.sessionUrl) {
+                  window.location.href = "order-success.html?new=1";
+                  return;
+                }
+                // 沒有 sessionUrl 的 pending 訂單（理論上不該出現），清除讓用戶重新填寫
+                localStorage.removeItem(STORAGE_KEY);
               } else {
                 localStorage.removeItem(STORAGE_KEY);
               }
@@ -546,6 +575,7 @@
           if (canvas && modalHasSignature) {
             setSignatureData(canvas.toDataURL());
             setShowSignatureModal(false);
+            setErrors(prev => ({ ...prev, signature_area: false }));
           } else {
             alert("請先進行簽名");
           }
@@ -646,6 +676,7 @@
             // 【付款資訊區】M~R（部分由 Webhook 回填）
             // ═══════════════════════════════════════════════════════════════
             paymentMethod: finalOrder.paymentMethod || "", // M. 付款方式
+            installmentCount: finalOrder.installmentCount || "", // M2. 分期期數（0 或空 = 一次付清）
             paymentStatus: "待付款", // N. 付款狀態（預設，由 Webhook 更新）
             paidAt: "", // O. 入帳時間（由 Webhook 回填）
             invoiceNumber: "", // P. 發票號碼（由發票系統回填）
@@ -734,6 +765,7 @@
           if (!customerInfo.appointmentDate) newErrors.customer_appointmentDate = true;
           if (!customerInfo.appointmentPeriod) newErrors.customer_appointmentPeriod = true;
           if (!customerInfo.appointmentTime) newErrors.customer_appointmentTime = true;
+          if (!signatureData) newErrors.signature_area = true;
 
           if (customerInfo.birthday && customerInfo.birthday.length !== 8) {
             newErrors.customer_birthday = true;
@@ -753,10 +785,6 @@
 
           if (calculateTotal() === 0) {
             alert("請至少選擇一項服務！");
-            return;
-          }
-          if (!signatureData) {
-            alert("請完成客戶簽名！");
             return;
           }
 
@@ -838,12 +866,10 @@
                   break;
                 case "installment":
                   allowPaymentMethods = ["CreditCard"];
-                  paymentOptions.creditCardInstallments = SHOPLINE_PAYMENTS.INSTALLMENT_OPTIONS || [
-                    "0",
-                    "3",
-                    "6",
-                    "12",
-                  ];
+                  // 傳入使用者選擇的分期期數
+                  paymentOptions.creditCardInstallments = installmentCount
+                    ? [installmentCount]
+                    : SHOPLINE_PAYMENTS.INSTALLMENT_OPTIONS || ["3", "6", "12"];
                   break;
                 default:
                   // 預設開啟所有付款方式
@@ -851,7 +877,7 @@
               }
 
               // 建立 SHOPLINE Payments 請求資料
-              const payloadData = JSON.stringify({
+              const payloadData = {
                 orderId: orderId,
                 amount: calculateTotal(),
                 returnUrl: SHOPLINE_PAYMENTS.getReturnUrl(),
@@ -866,16 +892,10 @@
                 },
                 order: { products },
                 sandbox: SHOPLINE_PAYMENTS.SANDBOX,
-              });
+              };
 
               // Base64 編碼（支援 UTF-8）
-              const encoder = new TextEncoder();
-              const payloadBytes = encoder.encode(payloadData);
-              let binaryString = "";
-              for (let i = 0; i < payloadBytes.length; i++) {
-                binaryString += String.fromCharCode(payloadBytes[i]);
-              }
-              const payload = btoa(binaryString);
+              const payload = window.WFLYUtils.encodeToBase64(payloadData);
 
               const response = await fetch(
                 `${SHOPLINE_PAYMENTS.ENDPOINT}?action=createSession&data=${encodeURIComponent(payload)}`
@@ -883,8 +903,9 @@
               const result = await response.json();
 
               if (result.success && result.sessionUrl) {
-                // 儲存訂單資訊（含 SHOPLINE sessionId）
+                // 儲存訂單資訊（含 SHOPLINE sessionId 和 sessionUrl）
                 finalOrder.shoplineSessionId = result.sessionId;
+                finalOrder.sessionUrl = result.sessionUrl; // 保存付款頁 URL
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(finalOrder));
                 localStorage.removeItem(DRAFT_KEY);
 
@@ -918,23 +939,16 @@
                 .join(", ");
 
               // 呼叫 GAS 建立 LINE Pay 付款請求
-              // 使用 encodeURIComponent + unescape 處理中文字元
-              const payloadData = JSON.stringify({
+              // Base64 編碼（支援 UTF-8）
+              const payloadData = {
                 orderId: orderId,
                 amount: calculateTotal(),
                 productName: productNames || "吾飛藝術銀行服務",
                 confirmUrl: LINE_PAY.getConfirmUrl(),
                 cancelUrl: LINE_PAY.getCancelUrl(),
-                sandbox: LINE_PAY.SANDBOX, // 傳遞 sandbox 設定給 GAS
-              });
-              // btoa 無法直接處理 UTF-8，使用 TextEncoder 轉換
-              const encoder = new TextEncoder();
-              const payloadBytes = encoder.encode(payloadData);
-              let binaryString = "";
-              for (let i = 0; i < payloadBytes.length; i++) {
-                binaryString += String.fromCharCode(payloadBytes[i]);
-              }
-              const payload = btoa(binaryString);
+                sandbox: LINE_PAY.SANDBOX,
+              };
+              const payload = window.WFLYUtils.encodeToBase64(payloadData);
 
               const response = await fetch(
                 `${LINE_PAY.ENDPOINT}?action=linePayRequest&data=${encodeURIComponent(payload)}`
@@ -983,7 +997,7 @@
             <div
               className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 safe-area-top ${scrolled ? "gcg-glass" : ""}`}
             >
-              <div className="max-w-3xl lg:max-w-4xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+              <div className="max-w-3xl lg:max-w-4xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between min-h-[48px] sm:min-h-[56px]">
                 <div className="flex items-center gap-2 sm:gap-3">
                   <img
                     src="../logo.svg"
@@ -1018,6 +1032,25 @@
             </div>
 
             <div className="max-w-xl lg:max-w-2xl mx-auto px-4 sm:px-6 space-y-8 sm:space-y-10">
+              {/* 付款取消提示 */}
+              {paymentCancelledNotice && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-amber-200 text-sm font-medium">付款已取消</p>
+                    <p className="text-amber-300/70 text-xs mt-1">
+                      您的訂單資料已保留，您可以修改資訊後重新提交，或選擇其他付款方式。
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setPaymentCancelledNotice(false)}
+                    className="text-amber-400/60 hover:text-amber-400 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
               {/* 顧問資料區塊 */}
               <section className="space-y-4 sm:space-y-5">
                 <h3 className="text-base sm:text-lg font-bold text-white pb-3 border-b border-white/10 flex items-center gap-2">
@@ -1053,7 +1086,7 @@
                       placeholder="C001"
                     />
                   </div>
-                  <div className="sm:col-span-2 space-y-2">
+                  <div className="sm:col-span-2 space-y-2" id="consultant_location">
                     <label className="text-[10px] sm:text-xs text-slate-500 uppercase tracking-wider">
                       服務據點 <span className="text-red-400">*</span>
                     </label>
@@ -1318,7 +1351,7 @@
                                       e.stopPropagation();
                                       updateQuantity(product.id, 1);
                                     }}
-                                    className="w-9 h-9 sm:w-10 sm:h-10 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg shadow-blue-500/30 active:scale-95 transition-transform hover:bg-blue-500"
+                                    className="w-9 h-9 sm:w-10 sm:h-10 bg-blue-600 text-white rounded-full flex items-center justify-center active:scale-95 transition-transform hover:bg-blue-500"
                                   >
                                     <Plus className="w-4 h-4" />
                                   </button>
@@ -1476,7 +1509,7 @@
                     )}
 
                     {/* 已選擇日期顯示 */}
-                    <div className="space-y-2">
+                    <div className="space-y-2" id="customer_appointmentDate">
                       <label className="text-[10px] sm:text-xs text-slate-500 font-medium uppercase tracking-wider">
                         預約日期 <span className="text-red-400">*</span>
                       </label>
@@ -1515,7 +1548,7 @@
 
                     <div className="grid grid-cols-2 gap-3 sm:gap-4">
                       {/* 時段選擇 - 自定義下拉選單 */}
-                      <div className="space-y-2">
+                      <div className="space-y-2" id="customer_appointmentPeriod">
                         <label className="text-[10px] sm:text-xs text-slate-500 font-medium uppercase tracking-wider">
                           時段 <span className="text-red-400">*</span>
                         </label>
@@ -1593,7 +1626,7 @@
                       </div>
 
                       {/* 時間選擇 - 自定義下拉選單 */}
-                      <div className="space-y-2">
+                      <div className="space-y-2" id="customer_appointmentTime">
                         <label className="text-[10px] sm:text-xs text-slate-500 font-medium uppercase tracking-wider">
                           時間 <span className="text-red-400">*</span>
                         </label>
@@ -1702,12 +1735,14 @@
               </section>
 
               {/* 簽名板區塊 */}
-              <section>
+              <section id="signature_area">
                 <h3 className="text-base sm:text-lg font-bold text-white pb-3 border-b border-white/10 mb-4 sm:mb-5 flex items-center gap-2">
                   <span className="w-1 h-5 bg-blue-500 rounded-full"></span>
                   客戶簽名
                 </h3>
-                <div className="gcg-card rounded-xl sm:rounded-2xl border-2 border-dashed border-white/20 p-5 sm:p-6 flex flex-col items-center justify-center min-h-[140px] sm:min-h-[160px] relative overflow-hidden">
+                <div
+                  className={`gcg-card rounded-xl sm:rounded-2xl border-2 border-dashed p-5 sm:p-6 flex flex-col items-center justify-center min-h-[140px] sm:min-h-[160px] relative overflow-hidden ${errors.signature_area ? "border-red-500" : "border-white/20"}`}
+                >
                   {signatureData ? (
                     <div className="flex flex-col items-center w-full">
                       <img
@@ -1819,9 +1854,6 @@
                               : "border-white/10 hover:border-white/20"
                           }`}
                         >
-                          <div className="absolute top-0 right-0 bg-gradient-to-r from-[#06C755] to-[#05b04d] text-white text-[8px] sm:text-[10px] font-bold px-3 sm:px-4 py-1 sm:py-1.5 rounded-bl-xl z-10 uppercase tracking-wider">
-                            推薦
-                          </div>
                           <input
                             type="radio"
                             name="paymentMethod"
@@ -1926,6 +1958,13 @@
                               onChange={() => {
                                 setPaymentMethod("shopline");
                                 setShoplinePaymentType("installment");
+                                // 選擇分期付款時自動滾動到底部以顯示期數選項
+                                setTimeout(() => {
+                                  window.scrollTo({
+                                    top: document.body.scrollHeight,
+                                    behavior: "smooth",
+                                  });
+                                }, 100);
                               }}
                               className="sr-only"
                             />
@@ -1961,31 +2000,29 @@
                               <div className="p-4 sm:p-5 border-t border-white/10">
                                 <p className="text-xs text-slate-300 mb-3">選擇分期期數：</p>
                                 <div className="flex flex-wrap gap-2">
-                                  {(
-                                    SHOPLINE_PAYMENTS.INSTALLMENT_OPTIONS || ["0", "3", "6", "12"]
-                                  ).map(count => (
-                                    <button
-                                      key={count}
-                                      type="button"
-                                      onClick={() => setInstallmentCount(count)}
-                                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                                        installmentCount === count
-                                          ? "bg-orange-500 text-white"
-                                          : "gcg-glass-calendar text-slate-300 hover:border-orange-500/50"
-                                      }`}
-                                    >
-                                      {count === "0" ? "一次付清" : `${count} 期`}
-                                    </button>
-                                  ))}
+                                  {(SHOPLINE_PAYMENTS.INSTALLMENT_OPTIONS || ["3", "6", "12"])
+                                    .filter(count => count !== "0")
+                                    .map(count => (
+                                      <button
+                                        key={count}
+                                        type="button"
+                                        onClick={() => setInstallmentCount(count)}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                          installmentCount === count
+                                            ? "bg-orange-500 text-white"
+                                            : "gcg-glass-calendar text-slate-300 hover:border-orange-500/50"
+                                        }`}
+                                      >
+                                        {`${count} 期`}
+                                      </button>
+                                    ))}
                                 </div>
-                                {installmentCount !== "0" && (
-                                  <p className="mt-3 text-[10px] text-slate-500">
-                                    每期約 NT${" "}
-                                    {Math.ceil(
-                                      calculateTotal() / parseInt(installmentCount)
-                                    ).toLocaleString()}
-                                  </p>
-                                )}
+                                <p className="mt-3 text-[10px] text-slate-500">
+                                  每期約 NT${" "}
+                                  {Math.ceil(
+                                    calculateTotal() / parseInt(installmentCount || "3")
+                                  ).toLocaleString()}
+                                </p>
                               </div>
                             )}
                         </div>
@@ -2009,9 +2046,6 @@
                           : "border-white/10 hover:border-white/20"
                       }`}
                     >
-                      <div className="absolute top-0 right-0 bg-gradient-to-r from-[#06C755] to-[#05b04d] text-white text-[8px] sm:text-[10px] font-bold px-3 sm:px-4 py-1 sm:py-1.5 rounded-bl-xl z-10 uppercase tracking-wider">
-                        推薦
-                      </div>
                       <input
                         type="radio"
                         name="paymentMethod"
@@ -2076,7 +2110,7 @@
                   className={`px-6 sm:px-8 md:px-10 py-3 sm:py-3.5 rounded-xl font-bold text-sm sm:text-base flex items-center gap-2 active:scale-95 transition-all ${isSubmitting ? "bg-slate-700 text-slate-400" : "gcg-btn-primary"}`}
                 >
                   {isSubmitting ? (
-                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                    <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>
                   ) : (
                     <>
                       <Send className="w-4 h-4 sm:w-5 sm:h-5" /> 送出訂購單

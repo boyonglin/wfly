@@ -4,8 +4,127 @@
 // 【安全性設定】
 // 1. 到「設定」(齒輪圖示) > 「腳本屬性」
 // 2. 新增屬性：GOOGLE_SHEET_ID = 你的試算表 ID
+//
+// ═══════════════════════════════════════════════════════════════════════
+// A. 填單時間 | B. 訂單編號 | C. 訂購品項 | D. 總金額
+// E. 顧客姓名 | F. 聯絡電話 | G. 電子郵箱 | H. 生日 | I. 地址 | J. 收入類型 | K. 公司名稱 | L. 統一編號
+// M. 付款方式 | N. 付款狀態 | O. 入帳時間 | P. 發票號碼 | Q. 發票日期 | R. 發票總額
+// S. 預約日期 | T. 預約時段 | U. 預約時間 | V. 服務據點 | W. 業務來源 | X. 顧問指派 | Y. 顧問編號
+// Z. 帳務檢核 | AA. 開戶與訂購單檢核 | AB. 點交單檢核 | AC. 點交日期 | AD. 陪跑檢核 | AE. 陪跑指派
+// AF. 資訊來源 | AG. 客戶簽名 | AH. 備註說明
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * 建立標題列（首次使用時執行一次）
+ * 第一行：分類群組標題（合併儲存格）
+ * 第二行：實際欄位名稱
+ */
+function createHeaderRow() {
+  const props = PropertiesService.getScriptProperties();
+  const sheetId = props.getProperty('GOOGLE_SHEET_ID');
+  if (!sheetId) {
+    Logger.log('Error: Missing GOOGLE_SHEET_ID');
+    return;
+  }
+
+  const ss = SpreadsheetApp.openById(sheetId);
+  const sheet = ss.getSheets()[0];
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 第一行：分類群組標題
+  // ═══════════════════════════════════════════════════════════════════════
+  const groupHeaders = [
+    '基本資訊', '', '', '',           // A~D (4欄)
+    '客戶資料', '', '', '', '', '', '', '',  // E~L (8欄)
+    '付款資訊', '', '', '', '', '',   // M~R (6欄)
+    '服務安排', '', '', '', '', '', '',     // S~Y (7欄)
+    '稽核管理', '', '', '', '', '',   // Z~AE (6欄)
+    '其他資訊', '', ''                // AF~AH (3欄)
+  ];
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 第二行：實際欄位名稱
+  // ═══════════════════════════════════════════════════════════════════════
+  const headers = [
+    // 【基本資訊區】A~D
+    '填單時間', '訂單編號', '訂購品項', '總金額',
+    // 【客戶資料區】E~L
+    '顧客姓名', '聯絡電話', '電子郵箱', '生日', '地址', '收入類型', '公司名稱', '統一編號',
+    // 【付款資訊區】M~R
+    '付款方式', '付款狀態', '入帳時間', '發票號碼', '發票日期', '發票總額',
+    // 【服務安排區】S~Y
+    '預約日期', '預約時段', '預約時間', '服務據點', '業務來源', '顧問指派', '顧問編號',
+    // 【稽核管理區】Z~AE
+    '帳務檢核', '開戶與訂購單檢核', '點交單檢核', '點交日期', '陪跑檢核', '陪跑指派',
+    // 【其他資訊區】AF~AH
+    '資訊來源', '客戶簽名', '備註說明'
+  ];
+
+  // 寫入第一行（分類群組）
+  sheet.getRange(1, 1, 1, groupHeaders.length).setValues([groupHeaders]);
+
+  // 寫入第二行（欄位名稱）
+  sheet.getRange(2, 1, 1, headers.length).setValues([headers]);
+
+  // 合併第一行的分類群組儲存格
+  // 基本資訊 A1:D1
+  sheet.getRange(1, 1, 1, 4).merge();
+  // 客戶資料 E1:L1
+  sheet.getRange(1, 5, 1, 8).merge();
+  // 付款資訊 M1:R1
+  sheet.getRange(1, 13, 1, 6).merge();
+  // 服務安排 S1:Y1
+  sheet.getRange(1, 19, 1, 7).merge();
+  // 稽核管理 Z1:AE1
+  sheet.getRange(1, 26, 1, 6).merge();
+  // 其他資訊 AF1:AH1
+  sheet.getRange(1, 32, 1, 3).merge();
+
+  // 設定第一行格式
+  const row1 = sheet.getRange(1, 1, 1, headers.length);
+  row1.setFontWeight('bold');
+  row1.setHorizontalAlignment('center');
+  row1.setVerticalAlignment('middle');
+
+  // 設定第二行格式
+  const row2 = sheet.getRange(2, 1, 1, headers.length);
+  row2.setFontWeight('bold');
+  row2.setHorizontalAlignment('center');
+
+  // 凍結前兩行
+  sheet.setFrozenRows(2);
+
+  Logger.log('Header rows created successfully with ' + headers.length + ' columns');
+}
 
 function doGet(e) {
+  // 處理 updatePaymentStatus 請求
+  if (e && e.parameter && e.parameter.action === 'updatePaymentStatus' && e.parameter.data) {
+    try {
+      // 解碼 Base64 參數
+      const decoded = Utilities.newBlob(
+        Utilities.base64Decode(e.parameter.data)
+      ).getDataAsString();
+      const data = JSON.parse(decoded);
+
+      const result = updatePaymentStatus(data.orderId, {
+        status: data.paymentStatus || '已付款',
+        paidAt: data.paidAt || new Date().toLocaleString('zh-TW'),
+        paymentMethod: data.paymentMethod || '',
+        tradeOrderId: data.tradeOrderId || '',
+        installmentCount: data.installmentCount || '' // 分期期數
+      });
+
+      return ContentService.createTextOutput(
+        JSON.stringify(result)
+      ).setMimeType(ContentService.MimeType.JSON);
+    } catch (err) {
+      return ContentService.createTextOutput(
+        JSON.stringify({ success: false, error: err.message })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
   return ContentService.createTextOutput(
     JSON.stringify({ status: 'ok', message: 'Apps Script is running' })
   ).setMimeType(ContentService.MimeType.JSON);
@@ -37,35 +156,66 @@ function doPost(e) {
     // =============================================
     // 處理新增/更新訂單請求
     // =============================================
-    const itemsText = data.itemsSummary || JSON.stringify(data.items);
 
-    // 付款方式處理：bank → 銀行轉帳, linepay → LINE Pay
-    const paymentMethodText = data.paymentMethod === 'bank' ? '銀行轉帳' :
-                              data.paymentMethod === 'linepay' ? 'LINE Pay' : '';
+    // 付款方式處理：shopline → SHOPLINE Payments, linepay → LINE Pay
+    // 如果有分期期數，附加在付款方式後面
+    let paymentMethodText = data.paymentMethod === 'shopline' ? 'SHOPLINE Payments' :
+                            data.paymentMethod === 'linepay' ? 'LINE Pay' : data.paymentMethod || '';
 
-    // 準備要寫入的資料列
+    // 分期付款資訊：如果 installmentCount > 0，附加分期期數
+    if (data.installmentCount && data.installmentCount !== '0' && data.installmentCount !== 0) {
+      paymentMethodText += ' (' + data.installmentCount + '期)';
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 準備要寫入的資料列（按照優化後的欄位順序）
+    // ═══════════════════════════════════════════════════════════════════════
     const rowData = [
-      new Date(),
-      data.orderId,
-      data.consultantName,
-      data.consultantId,
-      data.consultantLocation,
-      data.customerName,
-      data.customerPhone,
-      data.customerEmail,
-      data.customerBirthday,
-      data.customerAddress,
-      data.customerCompany,
-      data.customerTaxId,
-      data.customerSource,
-      data.customerNotes,
-      data.customerAppointmentDate,
-      data.customerAppointmentPeriod,
-      data.customerAppointmentTime,
-      itemsText,
-      data.total,
-      data.signature,
-      paymentMethodText
+      // 【基本資訊區】A~D
+      new Date(),                                    // A. 填單時間
+      data.orderId || '',                            // B. 訂單編號
+      data.itemsSummary || '',                       // C. 訂購品項
+      data.total || 0,                               // D. 總金額
+
+      // 【客戶資料區】E~L
+      data.customerName || '',                       // E. 顧客姓名
+      data.customerPhone || '',                      // F. 聯絡電話
+      data.customerEmail || '',                      // G. 電子郵箱
+      data.customerBirthday || '',                   // H. 生日
+      data.customerAddress || '',                    // I. 地址
+      data.revenueType || '',                        // J. 收入類型（B2B/B2C）
+      data.customerCompany || '',                    // K. 公司名稱
+      data.customerTaxId || '',                      // L. 統一編號
+
+      // 【付款資訊區】M~R（部分由 Webhook 回填）
+      paymentMethodText,                             // M. 付款方式
+      data.paymentStatus || '待付款',                // N. 付款狀態
+      data.paidAt || '',                             // O. 入帳時間
+      data.invoiceNumber || '',                      // P. 發票號碼
+      data.invoiceDate || '',                        // Q. 發票日期
+      data.invoiceAmount || '',                      // R. 發票總額
+
+      // 【服務安排區】S~Y
+      data.appointmentDate || '',                    // S. 預約日期
+      data.appointmentPeriod || '',                  // T. 預約時段
+      data.appointmentTime || '',                    // U. 預約時間
+      data.serviceLocation || '',                    // V. 服務據點
+      data.businessSource || '',                     // W. 業務來源（人工填寫）
+      data.consultantAssigned || '',                 // X. 顧問指派
+      data.consultantId || '',                       // Y. 顧問編號
+
+      // 【稽核管理區】Z~AE（人工填寫）
+      data.accountCheck || '',                       // Z. 帳務檢核
+      data.orderCheck || '',                         // AA. 開戶與訂購單檢核
+      data.deliveryCheck || '',                      // AB. 點交單檢核
+      data.deliveryDate || '',                       // AC. 點交日期
+      data.accompanyCheck || '',                     // AD. 陪跑檢核
+      data.accompanyAssigned || '',                  // AE. 陪跑指派
+
+      // 【其他資訊區】AF~AH
+      data.infoSource || '',                         // AF. 資訊來源
+      data.signature || '',                          // AG. 客戶簽名
+      data.notes || ''                               // AH. 備註說明
     ];
 
     // 如果是更新模式，找到原訂單並覆寫
@@ -73,20 +223,49 @@ function doPost(e) {
       const lastRow = sheet.getLastRow();
       let foundRow = -1;
 
-      // 從第2列開始搜尋 (第1列是標題)
-      if (lastRow > 1) {
-        const orderIdColumn = sheet.getRange(2, 2, lastRow - 1, 1).getValues(); // B欄是 orderId
+      // 從第3列開始搜尋（第1~2列是標題），B欄是 orderId
+      if (lastRow > 2) {
+        const orderIdColumn = sheet.getRange(3, 2, lastRow - 2, 1).getValues();
         for (let i = 0; i < orderIdColumn.length; i++) {
           if (orderIdColumn[i][0] === data.orderId) {
-            foundRow = i + 2; // +2 因為陣列從0開始，且跳過標題列
+            foundRow = i + 3; // +3 因為陣列從0開始，且跳過2行標題
             break;
           }
         }
       }
 
       if (foundRow > 0) {
-        // 找到原訂單，覆寫該行
-        sheet.getRange(foundRow, 1, 1, rowData.length).setValues([rowData]);
+        // 找到原訂單，只更新前端可修改的欄位（保留人工填寫的稽核欄位）
+        // A~D, E~L, M(付款方式), S~Y 的部分欄位, AF~AH
+        const updateRange = [
+          // A~D
+          new Date(), data.orderId, data.itemsSummary || '', data.total || 0,
+          // E~L
+          data.customerName || '', data.customerPhone || '', data.customerEmail || '',
+          data.customerBirthday || '', data.customerAddress || '', data.revenueType || '',
+          data.customerCompany || '', data.customerTaxId || '',
+          // M. 付款方式（可更新）
+          paymentMethodText
+        ];
+
+        // 更新 A~M 欄（基本資訊、客戶資料、付款方式）
+        sheet.getRange(foundRow, 1, 1, updateRange.length).setValues([updateRange]);
+
+        // 更新服務安排欄位 S~Y（但不覆蓋業務來源 W）
+        const serviceRange = [
+          data.appointmentDate || '',
+          data.appointmentPeriod || '',
+          data.appointmentTime || '',
+          data.serviceLocation || ''
+        ];
+        sheet.getRange(foundRow, 19, 1, serviceRange.length).setValues([serviceRange]); // S~V
+
+        // 更新顧問相關 X~Y
+        sheet.getRange(foundRow, 24, 1, 2).setValues([[data.consultantAssigned || '', data.consultantId || '']]);
+
+        // 更新其他資訊 AF~AH
+        sheet.getRange(foundRow, 32, 1, 3).setValues([[data.infoSource || '', data.signature || '', data.notes || '']]);
+
         Logger.log('Updated existing order at row: ' + foundRow);
         return ContentService.createTextOutput(
           JSON.stringify({ status: 'ok', action: 'updated', row: foundRow })
@@ -107,4 +286,80 @@ function doPost(e) {
       JSON.stringify({ status: 'error', message: err.message })
     ).setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+/**
+ * 由 Webhook 呼叫：更新付款狀態
+ * @param {string} orderId - 訂單編號
+ * @param {object} paymentData - 付款資訊 { status, paidAt, paymentMethod, installmentCount }
+ */
+function updatePaymentStatus(orderId, paymentData) {
+  const props = PropertiesService.getScriptProperties();
+  const sheetId = props.getProperty('GOOGLE_SHEET_ID');
+  if (!sheetId) return { success: false, error: 'Missing GOOGLE_SHEET_ID' };
+
+  const ss = SpreadsheetApp.openById(sheetId);
+  const sheet = ss.getSheets()[0];
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow <= 2) return { success: false, error: 'No orders found' };
+
+  // 搜尋 B 欄（訂單編號），從第3列開始（跳過2行標題）
+  const orderIdColumn = sheet.getRange(3, 2, lastRow - 2, 1).getValues();
+  for (let i = 0; i < orderIdColumn.length; i++) {
+    if (orderIdColumn[i][0] === orderId) {
+      const row = i + 3;
+
+      // 如果有分期資訊，更新 M. 付款方式（附加分期期數）
+      if (paymentData.installmentCount && paymentData.installmentCount !== '0' && paymentData.installmentCount !== 0) {
+        const currentMethod = sheet.getRange(row, 13).getValue();
+        // 只有當還沒有分期資訊時才更新
+        if (currentMethod && !currentMethod.includes('期)')) {
+          const newMethod = currentMethod + ' (' + paymentData.installmentCount + '期)';
+          sheet.getRange(row, 13).setValue(newMethod);
+        }
+      }
+
+      // 更新 N. 付款狀態, O. 入帳時間
+      sheet.getRange(row, 14).setValue(paymentData.status || '已付款');
+      sheet.getRange(row, 15).setValue(paymentData.paidAt || new Date());
+      return { success: true, row: row };
+    }
+  }
+
+  return { success: false, error: 'Order not found: ' + orderId };
+}
+
+/**
+ * 由發票系統呼叫：更新發票資訊
+ * @param {string} orderId - 訂單編號
+ * @param {object} invoiceData - 發票資訊 { number, date, amount }
+ */
+function updateInvoiceInfo(orderId, invoiceData) {
+  const props = PropertiesService.getScriptProperties();
+  const sheetId = props.getProperty('GOOGLE_SHEET_ID');
+  if (!sheetId) return { success: false, error: 'Missing GOOGLE_SHEET_ID' };
+
+  const ss = SpreadsheetApp.openById(sheetId);
+  const sheet = ss.getSheets()[0];
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow <= 2) return { success: false, error: 'No orders found' };
+
+  // 搜尋 B 欄（訂單編號），從第3列開始（跳過2行標題）
+  const orderIdColumn = sheet.getRange(3, 2, lastRow - 2, 1).getValues();
+  for (let i = 0; i < orderIdColumn.length; i++) {
+    if (orderIdColumn[i][0] === orderId) {
+      const row = i + 3;
+      // 更新 P. 發票號碼, Q. 發票日期, R. 發票總額
+      sheet.getRange(row, 16, 1, 3).setValues([[
+        invoiceData.number || '',
+        invoiceData.date || new Date(),
+        invoiceData.amount || ''
+      ]]);
+      return { success: true, row: row };
+    }
+  }
+
+  return { success: false, error: 'Order not found: ' + orderId };
 }
