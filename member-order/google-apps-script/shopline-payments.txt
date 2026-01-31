@@ -748,7 +748,7 @@ function doGet(e) {
   }
 
   // 也支援直接傳參數（方便測試）
-  const sandbox = e.parameter.sandbox === 'true' || e.parameter.sandbox === true || data.sandbox !== false;
+  const sandbox = String(e.parameter.sandbox ?? data.sandbox ?? 'false') === 'true';
 
   // 建立結帳交易
   if (action === 'createSession') {
@@ -815,17 +815,24 @@ function doPost(e) {
 
     // 驗證簽章（正式環境必須驗證）
     const hasSignature = !!(timestamp && sign);
-    if (config.signKey && hasSignature && !verifyWebhookSignature(timestamp, bodyString, sign, config.signKey)) {
-      Logger.log('Webhook signature verification failed');
-      logWebhookToSheet(timestamp, 'SIGNATURE_FAILED: ' + bodyString);
-      return ContentService.createTextOutput(JSON.stringify({
-        success: false,
-        error: 'Signature verification failed'
-      })).setMimeType(ContentService.MimeType.JSON);
-    }
+    if (config.signKey) {
+      if (!hasSignature) {
+        Logger.log('Webhook signature missing (timestamp/sign not provided)');
+        logWebhookToSheet(timestamp || 'MISSING_SIGNATURE', 'SIGNATURE_MISSING: ' + bodyString);
+        return ContentService.createTextOutput(JSON.stringify({
+          success: false,
+          error: 'Signature missing'
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
 
-    if (config.signKey && !hasSignature) {
-      Logger.log('Webhook signature missing (timestamp/sign not provided)');
+      if (!verifyWebhookSignature(timestamp, bodyString, sign, config.signKey)) {
+        Logger.log('Webhook signature verification failed');
+        logWebhookToSheet(timestamp, 'SIGNATURE_FAILED: ' + bodyString);
+        return ContentService.createTextOutput(JSON.stringify({
+          success: false,
+          error: 'Signature verification failed'
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
     }
 
     // 解析 Webhook 資料

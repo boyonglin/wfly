@@ -77,7 +77,6 @@ const CONFIG_API = {
     // GAS 腳本屬性需設定（憑證請勿寫在程式碼中）：
     //   - SHOPLINE_MERCHANT_ID: 特店 ID
     //   - SHOPLINE_API_KEY: API 金鑰（sk_ 開頭）
-    //   - SHOPLINE_CLIENT_KEY: 客戶端金鑰（pk_ 開頭）
     //   - SHOPLINE_SIGN_KEY: 簽章金鑰（設定 Webhook 後取得）
 
     // 支援的付款方式

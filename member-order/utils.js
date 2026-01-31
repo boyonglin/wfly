@@ -35,7 +35,8 @@ window.WFLYUtils = (function () {
       return btoa(binaryString);
     } catch (error) {
       console.error("encodeToBase64 error:", error);
-      throw new Error("Base64 編碼失敗: " + error.message);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error("Base64 編碼失敗: " + errorMsg, { cause: error });
     }
   }
 
@@ -66,11 +67,12 @@ window.WFLYUtils = (function () {
     try {
       return await asyncFn();
     } catch (error) {
-      const message = errorMessage || error.message || "操作失敗";
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const message = errorMessage || errorMsg || "操作失敗";
       console.error("[safeAsyncCall]", message, error);
 
       if (typeof onError === "function") {
-        onError(new Error(message));
+        onError(new Error(message, { cause: error }));
       }
 
       return fallback;

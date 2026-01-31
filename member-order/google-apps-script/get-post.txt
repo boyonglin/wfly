@@ -6,6 +6,45 @@
 // 2. 新增屬性：GOOGLE_SHEET_ID = 你的試算表 ID
 //
 // ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * 防止 Spreadsheet 公式注入攻擊
+ * 將以 =, +, -, @ 開頭的字串加上單引號前綴，使其被視為純文字
+ *
+ * @param {*} value - 要處理的值
+ * @returns {*} 處理後的值
+ */
+function sanitizeForSheet(value) {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  // 如果值以 =, +, -, @ 開頭，加上單引號前綴
+  if (/^[=+\-@]/.test(value)) {
+    return "'" + value;
+  }
+  return value;
+}
+
+/**
+ * 對物件中的所有字串值進行公式注入防護
+ *
+ * @param {Object} obj - 要處理的物件
+ * @returns {Object} 處理後的物件
+ */
+function sanitizeObject(obj) {
+  if (!obj || typeof obj !== 'object') {
+    return obj;
+  }
+  const result = {};
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      result[key] = sanitizeForSheet(obj[key]);
+    }
+  }
+  return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // A. 填單時間 | B. 訂單編號 | C. 訂購品項 | D. 總金額
 // E. 顧客姓名 | F. 聯絡電話 | G. 電子郵箱 | H. 生日 | I. 地址 | J. 收入類型 | K. 公司名稱 | L. 統一編號
 // M. 付款方式 | N. 付款狀態 | O. 入帳時間 | P. 發票號碼 | Q. 發票日期 | R. 發票總額
@@ -138,7 +177,9 @@ function doPost(e) {
       throw new Error('No POST data received');
     }
 
-    const data = JSON.parse(e.postData.contents);
+    const rawData = JSON.parse(e.postData.contents);
+    // 【安全性】防止 Spreadsheet 公式注入攻擊
+    const data = sanitizeObject(rawData);
     Logger.log('Parsed data: ' + JSON.stringify(data));
 
     // 【安全性】從腳本屬性取得 Sheet ID，不再從前端接收
