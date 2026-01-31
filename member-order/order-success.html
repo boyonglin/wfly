@@ -293,15 +293,10 @@
                   localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
                   setOrderResult(updatedOrder);
 
-                  // 更新 Google Sheet 付款狀態（非阻塞）
-                  updateSheetPaymentStatus(updatedOrder, paymentData).catch(err =>
-                    console.warn("Sheet update failed (non-blocking):", err)
-                  );
-
-                  // 付款成功後自動開立發票（非阻塞）
-                  issueInvoiceAfterPayment(updatedOrder).catch(err =>
-                    console.warn("Invoice issue failed (non-blocking):", err)
-                  );
+                  // 【安全性說明】
+                  // Google Sheet 付款狀態由 SHOPLINE Webhook 自動更新
+                  // Webhook 有簽章驗證機制，比前端呼叫更安全
+                  // 發票也由 Webhook 自動開立（handlePaymentSuccess）
                 } else if (paymentStatus === "PROCESSING" || paymentStatus === "PENDING") {
                   // 付款處理中
                   const updatedOrder = {
@@ -357,39 +352,6 @@
           );
 
           setIsConfirmingShopline(false);
-        };
-
-        // =============================================
-        // 更新 Google Sheet 付款狀態
-        // =============================================
-        const updateSheetPaymentStatus = async (order, paymentData) => {
-          try {
-            const { GOOGLE_SCRIPT_URL } = window.CONFIG_API || {};
-            if (!GOOGLE_SCRIPT_URL) return;
-
-            // 呼叫 GAS 更新付款狀態
-            const updateData = {
-              action: "updatePaymentStatus",
-              orderId: order.id,
-              paymentStatus: "已付款",
-              paymentMethod: paymentData.payment?.paymentMethod || "SHOPLINE Payments",
-              tradeOrderId: paymentData.tradeOrderId || "",
-              paidAmount: paymentData.payment?.paidAmount?.value
-                ? paymentData.payment.paidAmount.value / 100
-                : order.total,
-              paidAt: new Date().toLocaleString("zh-TW"),
-              installmentCount: order.installmentCount || "", // 分期期數
-            };
-
-            const payload = window.WFLYUtils.encodeToBase64(updateData);
-
-            await fetch(
-              `${GOOGLE_SCRIPT_URL}?action=updatePaymentStatus&data=${encodeURIComponent(payload)}`
-            );
-            console.log("Sheet payment status updated");
-          } catch (error) {
-            console.error("Update sheet error:", error);
-          }
         };
 
         // =============================================

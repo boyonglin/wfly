@@ -19,21 +19,27 @@
 // 沙盒測試卡號：https://docs.shoplinepayments.com/
 // =============================================
 
+// ═══════════════════════════════════════════════════════════════════════
 // 試算表欄位設定 (1-based index)
+// 對應 get-post.txt 的欄位結構：
+// A. 填單時間 | B. 訂單編號 | C. 訂購品項 | D. 總金額
+// E. 顧客姓名 | F. 聯絡電話 | G. 電子郵箱 | H. 生日 | I. 地址 | J. 收入類型 | K. 公司名稱 | L. 統一編號
+// M. 付款方式 | N. 付款狀態 | O. 入帳時間 | P. 發票號碼 | Q. 發票日期 | R. 發票總額
+// ═══════════════════════════════════════════════════════════════════════
 const SHEET_COLS = {
   ORDER_ID: 2,           // B欄 訂單編號
-  CUSTOMER_NAME: 7,      // G欄 客戶姓名
-  CUSTOMER_EMAIL: 10,    // J欄 Email
-  ADDRESS: 11,           // K欄 地址
-  COMPANY: 12,           // L欄 公司抬頭
-  TAX_ID: 13,            // M欄 統一編號
-  PAYMENT_STATUS: 21,    // U欄 付款狀態
-  UPDATE_TIME: 22,       // V欄 更新時間
-  TRADE_ORDER_ID: 23,    // W欄 交易 ID
-  PAYMENT_METHOD: 24,    // X欄 付款方式
-  INVOICE_NUMBER: 25,    // Y欄 發票號碼
-  INVOICE_RANDOM: 26,    // Z欄 發票隨機碼
-  INVOICE_TIME: 27       // AA欄 發票開立時間
+  TOTAL_AMOUNT: 4,       // D欄 總金額
+  CUSTOMER_NAME: 5,      // E欄 顧客姓名
+  CUSTOMER_EMAIL: 7,     // G欄 電子郵箱
+  ADDRESS: 9,            // I欄 地址
+  COMPANY: 11,           // K欄 公司名稱
+  TAX_ID: 12,            // L欄 統一編號
+  PAYMENT_METHOD: 13,    // M欄 付款方式
+  PAYMENT_STATUS: 14,    // N欄 付款狀態
+  PAID_AT: 15,           // O欄 入帳時間
+  INVOICE_NUMBER: 16,    // P欄 發票號碼
+  INVOICE_DATE: 17,      // Q欄 發票日期
+  INVOICE_AMOUNT: 18     // R欄 發票總額
 };
 
 /**
@@ -490,9 +496,9 @@ function handlePaymentSuccess(data) {
 
     const updates = {};
     updates[SHEET_COLS.PAYMENT_STATUS] = '已付款';
-    updates[SHEET_COLS.UPDATE_TIME] = new Date().toLocaleString('zh-TW');
-    updates[SHEET_COLS.TRADE_ORDER_ID] = data.tradeOrderId || '';
-    updates[SHEET_COLS.PAYMENT_METHOD] = data.payment?.paymentMethod || '';
+    updates[SHEET_COLS.PAID_AT] = new Date().toLocaleString('zh-TW');
+    // 付款方式會附加到現有的付款方式後面（例如：SHOPLINE Payments → SHOPLINE Payments (CreditCard)）
+    // 但這裡不覆蓋，因為付款方式已在建單時寫入
 
     const rowIndex = updateSheetOrder(orderId, updates);
 
@@ -596,10 +602,10 @@ function issueInvoiceForOrder(sheet, rowIndex, orderId, paymentData) {
     const result = callEzPayInvoiceAPI(invoiceData, hashKey, hashIV);
 
     if (result.success) {
-      // 更新 Sheet 發票欄位
-      sheet.getRange(rowIndex, SHEET_COLS.INVOICE_NUMBER).setValue(result.invoiceNumber);
-      sheet.getRange(rowIndex, SHEET_COLS.INVOICE_RANDOM).setValue(result.randomNum || '');
-      sheet.getRange(rowIndex, SHEET_COLS.INVOICE_TIME).setValue(new Date().toLocaleString('zh-TW'));
+      // 更新 Sheet 發票欄位 (P=發票號碼, Q=發票日期, R=發票總額)
+      sheet.getRange(rowIndex, SHEET_COLS.INVOICE_NUMBER).setValue(result.invoiceNumber || '');
+      sheet.getRange(rowIndex, SHEET_COLS.INVOICE_DATE).setValue(new Date().toLocaleString('zh-TW'));
+      sheet.getRange(rowIndex, SHEET_COLS.INVOICE_AMOUNT).setValue(totalAmount);
     }
 
     return result;

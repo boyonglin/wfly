@@ -137,33 +137,12 @@ function createHeaderRow() {
 }
 
 function doGet(e) {
-  // 處理 updatePaymentStatus 請求
-  if (e && e.parameter && e.parameter.action === 'updatePaymentStatus' && e.parameter.data) {
-    try {
-      // 解碼 Base64 參數
-      const decoded = Utilities.newBlob(
-        Utilities.base64Decode(e.parameter.data)
-      ).getDataAsString();
-      const data = JSON.parse(decoded);
-
-      const result = updatePaymentStatus(data.orderId, {
-        status: data.paymentStatus || '已付款',
-        paidAt: data.paidAt || new Date().toLocaleString('zh-TW'),
-        paymentMethod: data.paymentMethod || '',
-        tradeOrderId: data.tradeOrderId || '',
-        installmentCount: data.installmentCount || '' // 分期期數
-      });
-
-      return ContentService.createTextOutput(
-        JSON.stringify(result)
-      ).setMimeType(ContentService.MimeType.JSON);
-    } catch (err) {
-      return ContentService.createTextOutput(
-        JSON.stringify({ success: false, error: err.message })
-      ).setMimeType(ContentService.MimeType.JSON);
-    }
-  }
-
+  // ═══════════════════════════════════════════════════════════════════════
+  // 【安全性說明】
+  // 付款狀態更新由 SHOPLINE Webhook 處理（shopline-payments.txt）
+  // Webhook 有簽章驗證機制，比前端呼叫更安全
+  // 此 doGet 只提供健康檢查，不提供任何寫入操作
+  // ═══════════════════════════════════════════════════════════════════════
   return ContentService.createTextOutput(
     JSON.stringify({ status: 'ok', message: 'Apps Script is running' })
   ).setMimeType(ContentService.MimeType.JSON);
