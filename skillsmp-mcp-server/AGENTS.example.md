@@ -10,19 +10,38 @@ Copy the `<workflow>` section below and paste it at the top of your AGENTS.md fi
 <workflow priority="0">
 ## Pre-Task Discovery
 
-Before starting any complex task, use `skillsmp_ai_search_skills` MCP tool to discover relevant skills from SkillsMP marketplace that can help complete the task more effectively.
+Before starting any complex task, search SkillsMP in this order:
+
+1. `skillsmp_search_skills` (keyword search)
+2. If results are insufficient, `skillsmp_ai_search_skills` (semantic search)
 
 Example: If asked to "build a landing page", search for skills first:
+```
+
+skillsmp_search_skills({ query: "landing page" })
+
+```
+
+If keyword search doesn't find a good match, try semantic search:
 ```
 
 skillsmp_ai_search_skills({ query: "build a landing page" })
 
 ```
 
+If multiple relevant skills are found, load 2-3 complementary skills (avoid near-duplicates). Loading is not installation; it just pulls the instructions into context for this task.
+
 If a relevant skill is found, load it with:
 ```
 
 npx openskills read <skill-name>
+
+```
+
+For multiple skills:
+```
+
+npx openskills read skill-one,skill-two
 
 ```
 </workflow>
@@ -64,6 +83,7 @@ npm run build
 ## How It Works
 
 1. AI receives a complex task
-2. AI searches SkillsMP for relevant skills using `skillsmp_ai_search_skills`
-3. If a relevant skill is found, AI loads it with `npx openskills read <skill-name>`
-4. AI follows the skill's instructions to complete the task
+2. AI searches SkillsMP for relevant skills using `skillsmp_search_skills`
+3. If keyword search is insufficient, AI tries `skillsmp_ai_search_skills`
+4. If a relevant skill is found, AI loads it with `npx openskills read <skill-name>`
+5. AI follows the skill's instructions to complete the task
