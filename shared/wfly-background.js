@@ -4,6 +4,7 @@
     noiseSeed: 12345,
     noiseOpacity: 0.35,
     noiseBlend: "overlay",
+    noiseSize: 128, // 噪點圖尺寸 (小圖重複拼貼)
     waveConfigs: [
       { amplitude: 80, frequency: 0.0015, speed: 0.8, direction: 1, yPos: 0.15, opacity: 0.18 },
       { amplitude: 120, frequency: 0.001, speed: -0.5, direction: -1, yPos: 0.35, opacity: 0.15 },
@@ -43,7 +44,7 @@
         opacity: 0.35;
         mix-blend-mode: overlay;
         background-repeat: repeat;
-        background-size: cover;
+        background-size: auto;
       }
     `;
     document.head.appendChild(style);
@@ -67,13 +68,13 @@
     return { canvas, noiseOverlay };
   }
 
-  function createNoiseCanvas(width, height, seed) {
+  function createNoiseCanvas(size, seed) {
     const offscreen = document.createElement("canvas");
-    offscreen.width = width;
-    offscreen.height = height;
+    offscreen.width = size;
+    offscreen.height = size;
     const offCtx = offscreen.getContext("2d");
 
-    const imageData = offCtx.createImageData(width, height);
+    const imageData = offCtx.createImageData(size, size);
     const data = imageData.data;
 
     let seedValue = seed * 10000;
@@ -95,13 +96,8 @@
     return offscreen;
   }
 
-  function drawWaveBackground(ctx, width, height, timeValue, waveConfigs) {
-    const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, "#0a1628");
-    gradient.addColorStop(0.4, "#1e3a5f");
-    gradient.addColorStop(0.7, "#0f2744");
-    gradient.addColorStop(1, "#081220");
-    ctx.fillStyle = gradient;
+  function drawWaveBackground(ctx, width, height, timeValue, waveConfigs, cachedGradients) {
+    ctx.fillStyle = cachedGradients.background;
     ctx.fillRect(0, 0, width, height);
 
     waveConfigs.forEach((config, i) => {
@@ -111,7 +107,7 @@
       ctx.beginPath();
       ctx.moveTo(0, yOffset);
 
-      for (let x = 0; x <= width; x += 2) {
+      for (let x = 0; x <= width; x += 4) {
         const wave1 = Math.sin(x * frequency + timeValue * speed + i * 0.5) * amplitude;
         const wave2 = Math.sin(x * frequency * 1.3 - timeValue * speed * 0.7 + i) * amplitude * 0.3;
         const y = yOffset + (wave1 + wave2) * direction;
@@ -122,14 +118,33 @@
       ctx.lineTo(0, height);
       ctx.closePath();
 
+      ctx.fillStyle = cachedGradients.waves[i];
+      ctx.fill();
+    });
+  }
+
+  function createCachedGradients(ctx, width, height, waveConfigs) {
+    // 背景漸層
+    const background = ctx.createLinearGradient(0, 0, 0, height);
+    background.addColorStop(0, "#0a1628");
+    background.addColorStop(0.4, "#1e3a5f");
+    background.addColorStop(0.7, "#0f2744");
+    background.addColorStop(1, "#081220");
+
+    // 波浪漸層 (每條波浪一個)
+    const waves = waveConfigs.map((config, i) => {
+      const yOffset = height * config.yPos;
+      const { amplitude, opacity } = config;
+
       const waveGradient = ctx.createLinearGradient(0, yOffset - amplitude, 0, yOffset + amplitude);
       const color1 = i % 2 === 0 ? "rgba(30, 58, 138," : "rgba(37, 99, 235,";
       const color2 = i % 2 === 0 ? "rgba(59, 130, 246," : "rgba(96, 165, 250,";
-      waveGradient.addColorStop(0, `${color1} ${config.opacity})`);
-      waveGradient.addColorStop(1, `${color2} ${config.opacity * 0.5})`);
-      ctx.fillStyle = waveGradient;
-      ctx.fill();
+      waveGradient.addColorStop(0, `${color1} ${opacity})`);
+      waveGradient.addColorStop(1, `${color2} ${opacity * 0.5})`);
+      return waveGradient;
     });
+
+    return { background, waves };
   }
 
   function init(options) {
@@ -141,7 +156,15 @@
 
     let cssWidth = 0;
     let cssHeight = 0;
-    let noiseCanvas = null;
+    let cachedGradients = null;
+
+    const noiseCanvas = createNoiseCanvas(settings.noiseSize, settings.noiseSeed);
+    if (noiseOverlay && noiseCanvas) {
+      const noiseDataUrl = noiseCanvas.toDataURL("image/png");
+      noiseOverlay.style.backgroundImage = `url(${noiseDataUrl})`;
+      noiseOverlay.style.opacity = String(settings.noiseOpacity);
+      noiseOverlay.style.mixBlendMode = settings.noiseBlend;
+    }
 
     function setCanvasSize() {
       cssWidth = window.innerWidth;
@@ -152,17 +175,11 @@
       canvas.height = Math.floor(cssHeight * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      noiseCanvas = createNoiseCanvas(canvas.width, canvas.height, settings.noiseSeed);
-      if (noiseOverlay && noiseCanvas) {
-        const noiseDataUrl = noiseCanvas.toDataURL("image/png");
-        noiseOverlay.style.backgroundImage = `url(${noiseDataUrl})`;
-        noiseOverlay.style.opacity = String(settings.noiseOpacity);
-        noiseOverlay.style.mixBlendMode = settings.noiseBlend;
-      }
+      cachedGradients = createCachedGradients(ctx, cssWidth, cssHeight, settings.waveConfigs);
     }
 
     function drawBackground() {
-      drawWaveBackground(ctx, cssWidth, cssHeight, time, settings.waveConfigs);
+      drawWaveBackground(ctx, cssWidth, cssHeight, time, settings.waveConfigs, cachedGradients);
     }
 
     function animate() {
