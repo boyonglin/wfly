@@ -946,7 +946,7 @@ const OrderFormPage = () => {
         <div className="max-w-3xl lg:max-w-4xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between min-h-[48px] sm:min-h-[56px]">
           <div className="flex items-center gap-2 sm:gap-3">
             <img
-              src="../logo.svg"
+              src="../shared/logo.svg"
               alt="吾飛藝術銀行"
               className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl"
             />
