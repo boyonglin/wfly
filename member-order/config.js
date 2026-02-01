@@ -51,6 +51,12 @@ const CONFIG = {
 // 6. 產品資料
 // ═══════════════════════════════════════════════════════════════════════
 // iconName 對應 Lucide 圖標名稱，會在 React 中動態轉換成元件
+// 產品分類定義
+const PRODUCT_CATEGORIES = [
+  { id: "inventory", name: "內資產盤點" },
+  { id: "art", name: "配置藝術" },
+];
+
 const PRODUCTS = [
   {
     id: 1,
@@ -62,6 +68,7 @@ const PRODUCTS = [
     features: ["個人能量場分析", "專屬色彩頻率解碼", "提供平衡建議方案"],
     iconName: "Sparkles",
     color: "from-pink-400 to-rose-500",
+    category: "inventory",
   },
   {
     id: 2,
@@ -74,6 +81,7 @@ const PRODUCTS = [
     iconName: "User",
     popular: true,
     color: "from-violet-500 to-purple-600",
+    category: "inventory",
   },
   {
     id: 3,
@@ -85,6 +93,7 @@ const PRODUCTS = [
     features: ["親子/伴侶關係解碼", "家庭動力系統排列", "居家能量場調整"],
     iconName: "Heart",
     color: "from-orange-400 to-amber-500",
+    category: "inventory",
   },
   {
     id: 4,
@@ -96,6 +105,7 @@ const PRODUCTS = [
     features: ["組織動能分析", "領導力與決策優化", "團隊共識凝聚"],
     iconName: "Briefcase",
     color: "from-slate-600 to-slate-800",
+    category: "inventory",
   },
   {
     id: 5,
@@ -107,6 +117,34 @@ const PRODUCTS = [
     features: ["家族系統排列深度諮詢", "跨世代連結修復", "根源力量整合"],
     iconName: "Network",
     color: "from-emerald-500 to-teal-700",
+    category: "inventory",
+  },
+  // ─────────────────────────────────────────────────────────────────────
+  // 配置藝術分類
+  // ─────────────────────────────────────────────────────────────────────
+  {
+    id: 6,
+    name: "藝術療癒燈畫",
+    subName: "燈畫專區",
+    price: 69800,
+    period: "/件",
+    description: "結合光影與藝術的療癒燈畫，為空間注入溫暖與能量。",
+    features: ["獨特光影藝術", "療癒氛圍營造", "空間能量提升"],
+    iconName: "Sparkles",
+    color: "from-amber-400 to-orange-500",
+    category: "art",
+  },
+  {
+    id: 7,
+    name: "收藏畫作",
+    subName: "畫作專區",
+    price: 300000,
+    period: "/件",
+    description: "精選藝術收藏畫作，為您的空間增添獨特的藝術價值。",
+    features: ["精選藝術品", "收藏價值", "專業藝術諮詢"],
+    iconName: "PenTool",
+    color: "from-indigo-500 to-purple-600",
+    category: "art",
   },
 ];
 
@@ -124,3 +162,4 @@ if (typeof CONFIG_API !== "undefined") {
 
 window.APP_CONFIG = CONFIG;
 window.APP_PRODUCTS = PRODUCTS;
+window.APP_PRODUCT_CATEGORIES = PRODUCT_CATEGORIES;
