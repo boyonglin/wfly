@@ -542,15 +542,12 @@ function handlePaymentSuccess(data) {
 function issueInvoiceForOrder(sheet, rowIndex, orderId, paymentData) {
   try {
     const props = PropertiesService.getScriptProperties();
+    const ezpayInvoiceEndpoint = props.getProperty('EZPAY_INVOICE_ENDPOINT');
 
-    // 檢查 ezPay 設定
-    const merchantId = props.getProperty('EZPAY_MERCHANT_ID');
-    const hashKey = props.getProperty('EZPAY_HASH_KEY');
-    const hashIV = props.getProperty('EZPAY_HASH_IV');
-
-    if (!merchantId || !hashKey || !hashIV) {
-      Logger.log('ezPay Invoice not configured, skipping');
-      return { success: false, error: 'ezPay 未設定' };
+    // 檢查 ezPay Invoice GAS 端點是否設定
+    if (!ezpayInvoiceEndpoint) {
+      Logger.log('EZPAY_INVOICE_ENDPOINT not configured, skipping invoice');
+      return { success: false, error: 'EZPAY_INVOICE_ENDPOINT 未設定' };
     }
 
     // 從 Sheet 讀取訂單資料
@@ -559,53 +556,57 @@ function issueInvoiceForOrder(sheet, rowIndex, orderId, paymentData) {
     const customerName = rowValues[SHEET_COLS.CUSTOMER_NAME - 1] || '客戶';
     const customerEmail = rowValues[SHEET_COLS.CUSTOMER_EMAIL - 1] || '';
     const companyName = rowValues[SHEET_COLS.COMPANY - 1] || '';
-    const taxId = rowValues[SHEET_COLS.TAX_ID - 1] || '';
-    const totalAmount = paymentData.amount || paymentData.payment?.amount || 0;
+    const taxId = String(rowValues[SHEET_COLS.TAX_ID - 1] || '').trim();
+    const address = rowValues[SHEET_COLS.ADDRESS - 1] || '';
+    const itemName = rowValues[2] || '吾飛藝術銀行服務'; // C欄：訂購品項
+
+    // 金額處理：SHOPLINE 回傳的是 *100 的值，需要還原
+    let totalAmount = paymentData.amount?.value || paymentData.payment?.amount?.value || 0;
+    if (totalAmount > 10000) {
+      totalAmount = Math.round(totalAmount / 100); // 還原為台幣
+    }
 
     // 判斷 B2B 或 B2C
     const isB2B = taxId && taxId.length === 8;
 
-    // 準備發票資料
+    // =============================================
+    // 準備發票資料（符合 ezpay-invoice.txt 的格式）
+    // =============================================
     const invoiceData = {
-      MerchantID_: merchantId,
-      RespondType: 'JSON',
-      Version: '1.5',
-      TimeStamp: Math.floor(Date.now() / 1000).toString(),
-      MerchantOrderNo: orderId,
-      Status: '1',
-      Category: isB2B ? 'B2B' : 'B2C',
-      BuyerName: isB2B ? companyName : customerName,
-      BuyerEmail: customerEmail,
-      PrintFlag: isB2B ? 'Y' : 'N',
-      TaxType: '1',
-      TaxRate: '5',
-      Amt: Math.round(totalAmount / 1.05).toString(),
-      TaxAmt: Math.round(totalAmount - totalAmount / 1.05).toString(),
-      TotalAmt: totalAmount.toString(),
-      ItemName: '吾飛藝術銀行服務',
-      ItemCount: '1',
-      ItemUnit: '式',
-      ItemPrice: totalAmount.toString(),
-      ItemAmt: totalAmount.toString(),
+      orderId: orderId,
+      buyerName: isB2B ? (companyName || customerName) : customerName,
+      buyerEmail: customerEmail,
+      totalAmount: totalAmount,
+      items: [
+        {
+          name: itemName,
+          quantity: 1,
+          unit: '式',
+          price: totalAmount
+        }
+      ],
+      comment: '付款方式：SHOPLINE Payments'
     };
 
+    // B2B 發票：加入統編和地址
     if (isB2B) {
-      invoiceData.BuyerUBN = taxId;
-      invoiceData.BuyerAddress = rowValues[SHEET_COLS.ADDRESS - 1] || '';
-    } else {
-      // B2C 使用手機載具（如有提供）或 ezPay 會員載具
-      invoiceData.CarrierType = '0'; // ezPay 電子發票載具
-      invoiceData.PrintFlag = 'N';
+      invoiceData.buyerUBN = taxId;
+      invoiceData.buyerAddress = address;
     }
 
-    // 呼叫 ezPay API 開立發票
-    const result = callEzPayInvoiceAPI(invoiceData, hashKey, hashIV);
+    // 呼叫 ezPay Invoice GAS 開立發票
+    const result = callEzPayInvoiceAPI(ezpayInvoiceEndpoint, invoiceData);
 
     if (result.success) {
       // 更新 Sheet 發票欄位 (P=發票號碼, Q=發票日期, R=發票總額)
-      sheet.getRange(rowIndex, SHEET_COLS.INVOICE_NUMBER).setValue(result.invoiceNumber || '');
+      const invoiceNumber = result.data?.invoiceNumber || result.invoiceNumber || '';
+      sheet.getRange(rowIndex, SHEET_COLS.INVOICE_NUMBER).setValue(invoiceNumber);
       sheet.getRange(rowIndex, SHEET_COLS.INVOICE_DATE).setValue(new Date().toLocaleString('zh-TW'));
       sheet.getRange(rowIndex, SHEET_COLS.INVOICE_AMOUNT).setValue(totalAmount);
+
+      Logger.log('Invoice issued successfully: ' + invoiceNumber);
+    } else {
+      Logger.log('Invoice issue failed: ' + (result.error || 'Unknown error'));
     }
 
     return result;
@@ -617,35 +618,34 @@ function issueInvoiceForOrder(sheet, rowIndex, orderId, paymentData) {
 }
 
 /**
- * 呼叫 ezPay 開立發票 API
- * 注意：此函數需要 AES 加密，建議將 ezpay-invoice.txt 的加密函數整合進來
- * 或直接呼叫已部署的 ezPay Invoice GAS Web App
+ * 呼叫 ezPay Invoice GAS 開立發票
+ * @param {string} endpoint - ezpay-invoice GAS 部署 URL
+ * @param {Object} invoiceData - 發票資料（簡化格式）
+ * @returns {Object} 開立結果
  */
-function callEzPayInvoiceAPI(invoiceData, hashKey, hashIV) {
+function callEzPayInvoiceAPI(endpoint, invoiceData) {
   try {
-    const props = PropertiesService.getScriptProperties();
-    const ezpayInvoiceEndpoint = props.getProperty('EZPAY_INVOICE_ENDPOINT');
+    // 組合請求資料
+    const payload = JSON.stringify({
+      action: 'issueInvoice',
+      data: invoiceData
+    });
 
-    if (ezpayInvoiceEndpoint) {
-      // 方案一：呼叫已部署的 ezPay Invoice GAS
-      const payload = JSON.stringify({
-        action: 'issueInvoice',
-        ...invoiceData
-      });
+    Logger.log('Calling ezPay Invoice API: ' + endpoint);
+    Logger.log('Invoice data: ' + JSON.stringify(invoiceData));
 
-      const response = UrlFetchApp.fetch(ezpayInvoiceEndpoint + '?action=issueInvoice', {
-        method: 'POST',
-        contentType: 'application/json',
-        payload: payload,
-        muteHttpExceptions: true
-      });
+    const response = UrlFetchApp.fetch(endpoint, {
+      method: 'POST',
+      contentType: 'application/json',
+      payload: payload,
+      muteHttpExceptions: true
+    });
 
-      return JSON.parse(response.getContentText());
-    } else {
-      // 方案二：直接呼叫 ezPay API（需整合加密函數）
-      Logger.log('EZPAY_INVOICE_ENDPOINT not set, please configure it');
-      return { success: false, error: 'EZPAY_INVOICE_ENDPOINT 未設定' };
-    }
+    const responseText = response.getContentText();
+    Logger.log('ezPay Invoice response: ' + responseText);
+
+    const result = JSON.parse(responseText);
+    return result;
 
   } catch (error) {
     Logger.log('callEzPayInvoiceAPI error: ' + error.message);
