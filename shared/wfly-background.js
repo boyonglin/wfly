@@ -179,6 +179,11 @@
     }
 
     function drawBackground() {
+      // 確保 gradients 已初始化，避免 setCanvasSize 完成前的 race condition
+      if (!cachedGradients) {
+        if (cssWidth <= 0 || cssHeight <= 0) return;
+        cachedGradients = createCachedGradients(ctx, cssWidth, cssHeight, settings.waveConfigs);
+      }
       drawWaveBackground(ctx, cssWidth, cssHeight, time, settings.waveConfigs, cachedGradients);
     }
 

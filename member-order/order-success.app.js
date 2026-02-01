@@ -20,6 +20,7 @@ import {
   Heart,
   Briefcase,
   Network,
+  PenTool,
   Wallet,
   CheckCircle,
 } from "https://esm.sh/lucide-react@0.263.1";
@@ -36,6 +37,7 @@ const ICON_MAP = {
   Heart: Heart,
   Briefcase: Briefcase,
   Network: Network,
+  PenTool: PenTool,
 };
 
 // 將產品資料轉換為包含實際 icon 元件的版本

@@ -566,8 +566,8 @@ function issueInvoiceForOrder(sheet, rowIndex, orderId, paymentData) {
       totalAmount = Math.round(totalAmount / 100); // 還原為台幣
     }
 
-    // 判斷 B2B 或 B2C
-    const isB2B = taxId && taxId.length === 8;
+    // 判斷 B2B 或 B2C（統編需為 8 碼數字）
+    const isB2B = taxId && /^\d{8}$/.test(taxId);
 
     // =============================================
     // 準備發票資料（符合 ezpay-invoice.txt 的格式）
