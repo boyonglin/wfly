@@ -12,6 +12,7 @@ export default [
       "build/**",
       "*.min.js",
       "eslint.config.js",
+      "**/*.app.js", // React JSX files - handled by browser
     ],
   },
   js.configs.recommended,
