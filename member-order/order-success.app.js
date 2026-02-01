@@ -1,0 +1,1480 @@
+// =============================================
+// 引入 React 與 Lucide 圖標庫
+// =============================================
+import React, { useState, useEffect } from "https://esm.sh/react@18.2.0";
+import { createRoot } from "https://esm.sh/react-dom@18.2.0/client";
+import {
+  Check,
+  X,
+  Copy,
+  CreditCard,
+  MessageCircle,
+  ArrowLeft,
+  RefreshCw,
+  AlertCircle,
+  Image as ImageIcon,
+  Share2,
+  QrCode,
+  Sparkles,
+  User,
+  Heart,
+  Briefcase,
+  Network,
+  Wallet,
+  CheckCircle,
+} from "https://esm.sh/lucide-react@0.263.1";
+
+// =============================================
+// 從全域設定取得常數
+// =============================================
+const { STORAGE_KEY, DRAFT_KEY, LINE_PAY, LINE, API } = window.APP_CONFIG;
+
+// Icon 映射表
+const ICON_MAP = {
+  Sparkles: Sparkles,
+  User: User,
+  Heart: Heart,
+  Briefcase: Briefcase,
+  Network: Network,
+};
+
+// 將產品資料轉換為包含實際 icon 元件的版本
+const initialProducts = window.APP_PRODUCTS.map(product => ({
+  ...product,
+  icon: React.createElement(ICON_MAP[product.iconName], { className: "w-8 h-8" }),
+}));
+
+// =============================================
+// 訂單成功頁面元件
+// =============================================
+const OrderSuccessPage = () => {
+  const [orderResult, setOrderResult] = useState(null);
+  const [restored, setRestored] = useState(false);
+  const [showLineQR, setShowLineQR] = useState(false);
+  const [showImagePreview, setShowImagePreview] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState("");
+
+  // LINE Login 相關狀態
+  const [isLineLoggedIn, setIsLineLoggedIn] = useState(false);
+  const [lineProfile, setLineProfile] = useState(null);
+  const [isSendingToLine, setIsSendingToLine] = useState(false);
+  const [lineSendResult, setLineSendResult] = useState(null); // 'success', 'error', null
+  const [showLineSentModal, setShowLineSentModal] = useState(false);
+
+  // LINE Pay 相關狀態
+  const [isConfirmingLinePay, setIsConfirmingLinePay] = useState(false);
+  const [linePayError, setLinePayError] = useState(null);
+  const [shoplineError, setShoplineError] = useState(null);
+
+  // SHOPLINE Payments 相關狀態
+  const [isConfirmingShopline, setIsConfirmingShopline] = useState(false);
+
+  // ezPay 電子發票相關狀態
+  const [isIssuingInvoice, setIsIssuingInvoice] = useState(false);
+  const [invoiceResult, setInvoiceResult] = useState(null);
+  const [invoiceError, setInvoiceError] = useState(null);
+
+  // =============================================
+  // 初始化 - 載入訂單資料 & 處理付款回傳
+  // =============================================
+  useEffect(() => {
+    // 初始化 LIFF (LINE Login)
+    initializeLiff();
+
+    // 檢查 URL 參數
+    const urlParams = new URLSearchParams(window.location.search);
+    const transactionId = urlParams.get("transactionId"); // LINE Pay 回傳
+    const shoplineTradeOrderId = urlParams.get("tradeOrderId"); // SHOPLINE 回傳的 tradeOrderId
+    const isNewOrder = urlParams.get("new") === "1"; // 從表單頁剛提交過來的新訂單
+
+    try {
+      const savedOrder = localStorage.getItem(STORAGE_KEY);
+      if (savedOrder) {
+        const parsedOrder = JSON.parse(savedOrder);
+        // 檢查訂單是否過期
+        if (parsedOrder.deadline && parsedOrder.deadline > Date.now()) {
+          // 處理 LINE Pay transactionId 回傳
+          // LINE Pay API 本身有防重複機制（return code 1152, 1198）
+          if (
+            transactionId &&
+            parsedOrder.paymentMethod === "linepay" &&
+            parsedOrder.paymentStatus !== "paid"
+          ) {
+            setOrderResult(parsedOrder);
+            // 付款回傳不算歷史訂單
+            confirmLinePay(transactionId, parsedOrder);
+          }
+
+          // 處理 SHOPLINE Payments 回傳（用 tradeOrderId 主動查詢付款狀態）
+          else if (shoplineTradeOrderId && parsedOrder.paymentStatus !== "paid") {
+            setOrderResult(parsedOrder);
+            // 付款回傳不算歷史訂單
+            // 用 tradeOrderId 查詢真正的付款狀態
+            handleShoplinePaymentReturn(parsedOrder, shoplineTradeOrderId);
+          }
+
+          // 一般情況：顯示訂單頁面
+          // pending 狀態會顯示「前往付款」按鈕
+          // paid 狀態會顯示付款成功
+          // processing 狀態會顯示處理中
+          else {
+            setOrderResult(parsedOrder);
+            // 只有非新訂單（重新訪問）才顯示歷史訂單提示
+            if (!isNewOrder) {
+              setRestored(true);
+            }
+            // 若已付款但尚未開發票，嘗試補開
+            if (parsedOrder.paymentStatus === "paid" && !parsedOrder.invoiceNumber) {
+              issueInvoiceAfterPayment(parsedOrder);
+            }
+          }
+        } else {
+          // 訂單已過期，跳轉回表單頁
+          localStorage.removeItem(STORAGE_KEY);
+          window.location.href = "order-form.html";
+        }
+      } else {
+        // 沒有訂單資料，跳轉回表單頁
+        window.location.href = "order-form.html";
+      }
+    } catch (error) {
+      console.error("Failed to load order:", error);
+      window.location.href = "order-form.html";
+    }
+
+    // 清除 URL 參數（避免重新整理時重複確認）
+    if (transactionId || shoplineTradeOrderId || isNewOrder) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  // =============================================
+  // SHOPLINE Payments 付款返回處理
+  // 使用 safeAsyncCall 包裝，防止 API 失敗導致 UI 崩潰
+  // =============================================
+  const handleShoplinePaymentReturn = async (order, tradeOrderId) => {
+    const { SHOPLINE_PAYMENTS } = window.CONFIG_API || {};
+    if (!SHOPLINE_PAYMENTS?.ENDPOINT) {
+      console.log("SHOPLINE Payments not configured");
+      setOrderResult(order); // 顯示原始訂單狀態
+      return;
+    }
+
+    setIsConfirmingShopline(true);
+    setShoplineError(null);
+
+    // 使用 safeAsyncCall 包裝 API 查詢，防止異常導致頁面崩潰
+    await window.WFLYUtils.safeAsyncCall(
+      async () => {
+        // 查詢付款狀態
+        const response = await fetch(
+          `${SHOPLINE_PAYMENTS.ENDPOINT}?action=queryPayment&tradeOrderId=${encodeURIComponent(tradeOrderId)}&sandbox=${SHOPLINE_PAYMENTS.SANDBOX}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: 查詢付款狀態失敗`);
+        }
+
+        const result = await response.json();
+        console.log("SHOPLINE Payment Query Result:", result);
+
+        if (result.success && result.data) {
+          const paymentData = result.data;
+          const paymentStatus = paymentData.status;
+
+          if (paymentStatus === "SUCCEEDED") {
+            // 付款成功！更新訂單狀態
+            const updatedOrder = {
+              ...order,
+              paymentStatus: "paid",
+              shoplineTradeOrderId: tradeOrderId,
+              shoplinePaymentMethod: paymentData.payment?.paymentMethod || "",
+              shoplineConfirmedAt: Date.now(),
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
+            setOrderResult(updatedOrder);
+
+            // 【安全性說明】
+            // Google Sheet 付款狀態由 SHOPLINE Webhook 自動更新
+            // Webhook 有簽章驗證機制，比前端呼叫更安全
+            // 發票也由 Webhook 自動開立（handlePaymentSuccess）
+          } else if (paymentStatus === "PROCESSING" || paymentStatus === "PENDING") {
+            // 付款處理中
+            const updatedOrder = {
+              ...order,
+              paymentStatus: "processing",
+              shoplineTradeOrderId: tradeOrderId,
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
+            setOrderResult(updatedOrder);
+          } else if (paymentStatus === "FAILED") {
+            // 付款失敗 - 留在頁面顯示錯誤，提供重新付款選項
+            console.log("Payment failed, status:", paymentStatus);
+            const failedOrder = {
+              ...order,
+              paymentStatus: "failed",
+              shoplineTradeOrderId: tradeOrderId,
+              paymentFailReason: paymentData.failReason || "付款失敗",
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(failedOrder));
+            setOrderResult(failedOrder);
+          } else {
+            // 取消或其他狀態 - 回到待付款狀態
+            console.log("Payment cancelled or other status:", paymentStatus);
+            const resetOrder = {
+              ...order,
+              paymentStatus: "pending",
+              shoplineTradeOrderId: null,
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(resetOrder));
+            setOrderResult(resetOrder);
+          }
+        } else {
+          // 查詢失敗，回到待付款狀態讓使用者可以重新付款
+          console.error("Query failed:", result.error);
+          const resetOrder = {
+            ...order,
+            paymentStatus: "pending",
+            shoplineTradeOrderId: null,
+          };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(resetOrder));
+          setOrderResult(resetOrder);
+        }
+      },
+      {
+        onError: error => {
+          console.error("SHOPLINE Payment Return Error:", error);
+          // 發生錯誤時，保持訂單顯示並提示用戶
+          setOrderResult(order);
+          setShoplineError("付款狀態查詢失敗，請稍後重新整理頁面或聯繫客服");
+        },
+        errorMessage: "SHOPLINE 付款狀態查詢失敗",
+      }
+    );
+
+    setIsConfirmingShopline(false);
+  };
+
+  // =============================================
+  // LINE Pay 確認付款
+  // =============================================
+  const confirmLinePay = async (transactionId, order) => {
+    if (!LINE_PAY.ENDPOINT) {
+      setLinePayError("LINE Pay 未設定");
+      return;
+    }
+
+    setIsConfirmingLinePay(true);
+    try {
+      // Base64 編碼（支援 UTF-8）
+      const payloadData = {
+        transactionId: transactionId,
+        amount: order.total,
+        orderId: order.id,
+        sandbox: LINE_PAY.SANDBOX,
+      };
+      const payload = window.WFLYUtils.encodeToBase64(payloadData);
+
+      const response = await fetch(
+        `${LINE_PAY.ENDPOINT}?action=linePayConfirm&data=${encodeURIComponent(payload)}`
+      );
+      const result = await response.json();
+
+      if (result.success) {
+        // 更新訂單狀態
+        const updatedOrder = {
+          ...order,
+          paymentStatus: "paid",
+          linePayConfirmedAt: Date.now(),
+          linePayInfo: result.info,
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
+        setOrderResult(updatedOrder);
+
+        // 付款成功後自動開立發票
+        await issueInvoiceAfterPayment(updatedOrder);
+      } else {
+        // LINE Pay 確認失敗 - 導回表單頁讓使用者重新選擇付款方式
+        console.log("LINE Pay confirmation failed:", result.error);
+        const resetOrder = {
+          ...order,
+          paymentStatus: "pending",
+          linePayTransactionId: null,
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(resetOrder));
+        window.location.href = "order-form.html?paymentCancelled=true";
+        return;
+      }
+    } catch (error) {
+      console.error("LINE Pay Confirm Error:", error);
+      // 發生錯誤也導回表單頁
+      const resetOrder = {
+        ...order,
+        paymentStatus: "pending",
+        linePayTransactionId: null,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(resetOrder));
+      window.location.href = "order-form.html?paymentCancelled=true";
+      return;
+    } finally {
+      setIsConfirmingLinePay(false);
+    }
+  };
+
+  // =============================================
+  // ezPay 電子發票開立
+  // =============================================
+  const issueInvoiceAfterPayment = async order => {
+    // 檢查是否已設定發票 API
+    const { EZPAY_INVOICE } = window.CONFIG_API || {};
+    if (!EZPAY_INVOICE?.ENABLED || !EZPAY_INVOICE?.ENDPOINT) {
+      console.log("ezPay Invoice not configured, skipping invoice issue");
+      return;
+    }
+
+    // 檢查是否已開過發票
+    if (order.invoiceNumber) {
+      console.log("Invoice already issued:", order.invoiceNumber);
+      setInvoiceResult({ invoiceNumber: order.invoiceNumber });
+      return;
+    }
+
+    setIsIssuingInvoice(true);
+    setInvoiceError(null);
+
+    try {
+      // 準備發票商品明細
+      const itemsData = Object.entries(order.items).reduce((acc, [id, qty]) => {
+        const productId = parseInt(id);
+        const product = initialProducts.find(p => p.id === productId);
+        if (!product) {
+          console.warn("[Invoice] Product not found for order item:", {
+            productId,
+            quantity: qty,
+          });
+          return acc;
+        }
+        acc.push({
+          name: product.name,
+          quantity: qty,
+          unit: "次",
+          price: product.price,
+        });
+        return acc;
+      }, []);
+
+      // 準備發票資料
+      const invoiceData = {
+        orderId: order.id,
+        buyerName: order.customer.name,
+        buyerEmail: order.customer.email || "",
+        totalAmount: order.total,
+        items: itemsData,
+        comment: `預約顧問：${order.consultant.name}（${order.consultant.location}）`,
+      };
+
+      // 如果有統編，加入統編資訊（B2B）
+      if (order.customer.taxId) {
+        invoiceData.buyerUBN = order.customer.taxId;
+        invoiceData.buyerAddress = order.customer.address || "";
+      }
+
+      // Base64 編碼（支援 UTF-8）
+      const encodedData = window.WFLYUtils.encodeToBase64(invoiceData);
+
+      // 呼叫發票 API
+      const response = await fetch(
+        `${EZPAY_INVOICE.ENDPOINT}?action=issueInvoice&data=${encodeURIComponent(encodedData)}`
+      );
+      const result = await response.json();
+
+      if (result.success) {
+        console.log("Invoice issued successfully:", result.data);
+        setInvoiceResult(result.data);
+
+        // 更新訂單資料，加入發票資訊
+        const updatedOrder = {
+          ...order,
+          invoiceNumber: result.data.invoiceNumber,
+          invoiceTransNo: result.data.invoiceTransNo,
+          invoiceRandomNum: result.data.randomNum,
+          invoiceIssuedAt: result.data.createTime,
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
+        setOrderResult(updatedOrder);
+      } else {
+        throw new Error(result.error || "發票開立失敗");
+      }
+    } catch (error) {
+      console.error("Issue Invoice Error:", error);
+      setInvoiceError(error.message);
+      // 發票開立失敗不影響付款成功狀態
+    } finally {
+      setIsIssuingInvoice(false);
+    }
+  };
+
+  // 手動開立發票（用於付款成功但發票失敗的情況）
+  const handleManualIssueInvoice = async () => {
+    if (!orderResult) return;
+    await issueInvoiceAfterPayment(orderResult);
+  };
+
+  // =============================================
+  // LINE Login (LIFF) 初始化
+  // =============================================
+  const initializeLiff = async () => {
+    try {
+      // 檢查是否有設定 LIFF ID
+      if (!LINE.LOGIN_CHANNEL_ID || LINE.LOGIN_CHANNEL_ID === "YOUR_LINE_LOGIN_CHANNEL_ID") {
+        console.log("LINE Login not configured, using QR code fallback");
+        return;
+      }
+
+      await liff.init({ liffId: LINE.LOGIN_CHANNEL_ID });
+
+      if (liff.isLoggedIn()) {
+        const profile = await liff.getProfile();
+        setLineProfile(profile);
+        setIsLineLoggedIn(true);
+        console.log("LINE Login successful:", profile.displayName);
+      }
+    } catch (error) {
+      console.error("LIFF initialization failed:", error);
+    }
+  };
+
+  // =============================================
+  // LINE Login 登入流程
+  // =============================================
+  const handleLineLogin = async () => {
+    try {
+      // 檢查 LIFF 設定
+      if (!LINE.LOGIN_CHANNEL_ID || LINE.LOGIN_CHANNEL_ID === "YOUR_LINE_LOGIN_CHANNEL_ID") {
+        // 未設定 LINE Login，使用傳統 QR Code 方式
+        handleShowLineQR();
+        return;
+      }
+
+      // 檢查是否有設定 API 代理
+      if (!API.PROXY_ENDPOINT || API.PROXY_ENDPOINT === "") {
+        alert("尚未設定 API 代理端點，請改用 QR Code 方式");
+        handleShowLineQR();
+        return;
+      }
+
+      if (!liff.isLoggedIn()) {
+        // 尚未登入，導向 LINE Login
+        liff.login({ redirectUri: window.location.href });
+        return;
+      }
+
+      // 已登入，直接發送訂單到客戶 LINE
+      await sendOrderToLine();
+    } catch (error) {
+      console.error("LINE Login error:", error);
+      alert("發送失敗，請改用掃描 QR Code 方式");
+      handleShowLineQR();
+    }
+  };
+
+  // =============================================
+  // 發送訂單到 LINE (從官方帳號推送給客戶)
+  // 使用 Google Apps Script 作為後端，透過 JSONP 繞過 CORS
+  // =============================================
+  const sendOrderToLine = async () => {
+    if (!orderResult) {
+      alert("無法發送訂單，請確認訂單資料存在");
+      return;
+    }
+
+    // 檢查是否已登入 LINE
+    if (!lineProfile || !lineProfile.userId) {
+      alert("請先登入 LINE 以接收訂單通知");
+      return;
+    }
+
+    setIsSendingToLine(true);
+
+    try {
+      // 準備訂單資料
+      const itemsData = Object.entries(orderResult.items).reduce((acc, [id, qty]) => {
+        const product = initialProducts.find(p => p.id === parseInt(id));
+        if (!product) {
+          console.warn("[LINE Push] Product not found:", id);
+          return acc;
+        }
+        acc.push({
+          name: product.name,
+          qty: qty,
+          price: product.price,
+          subtotal: product.price * qty,
+        });
+        return acc;
+      }, []);
+
+      const orderData = {
+        orderId: orderResult.id,
+        customerName: orderResult.customer.name,
+        customerPhone: orderResult.customer.phone,
+        customerEmail: orderResult.customer.email,
+        items: itemsData,
+        total: orderResult.total,
+        consultantName: orderResult.consultant.name,
+        consultantId: orderResult.consultant.id,
+        consultantLocation: orderResult.consultant.location,
+      };
+
+      // Base64 編碼（支援 UTF-8）
+      const dataToSend = {
+        userId: lineProfile.userId,
+        orderData: orderData,
+      };
+      const base64Data = window.WFLYUtils.encodeToBase64(dataToSend);
+
+      // 使用 JSONP 方式呼叫 Google Apps Script（繞過 CORS）
+      const result = await new Promise((resolve, reject) => {
+        const callbackName = "lineCallback_" + Date.now();
+        const timeout = setTimeout(() => {
+          delete window[callbackName];
+          reject(new Error("請求超時"));
+        }, 30000);
+
+        window[callbackName] = response => {
+          clearTimeout(timeout);
+          delete window[callbackName];
+          resolve(response);
+        };
+
+        const script = document.createElement("script");
+        script.src = `${API.PROXY_ENDPOINT}?action=pushOrderCard&data=${encodeURIComponent(base64Data)}&callback=${callbackName}`;
+        script.onerror = () => {
+          clearTimeout(timeout);
+          delete window[callbackName];
+          reject(new Error("網路請求失敗"));
+        };
+        document.body.appendChild(script);
+
+        // 清理 script 標籤
+        script.onload = () => {
+          document.body.removeChild(script);
+        };
+      });
+
+      console.log("LINE Push result:", result);
+
+      if (result.success) {
+        setLineSendResult("success");
+        // 保存發送記錄
+        const updatedOrder = {
+          ...orderResult,
+          lineUserId: lineProfile.userId,
+          lineDisplayName: lineProfile.displayName,
+          lineSentAt: new Date().toISOString(),
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrder));
+        setOrderResult(updatedOrder);
+      } else {
+        console.error("LINE Push failed:", result);
+        throw new Error(result.error || "發送失敗");
+      }
+    } catch (error) {
+      console.error("Send to LINE error:", error);
+      setLineSendResult("error");
+    } finally {
+      setIsSendingToLine(false);
+      setShowLineSentModal(true);
+    }
+  };
+
+  // =============================================
+  // 訂單文字生成與分享功能
+  // =============================================
+  const generateOrderText = order => {
+    if (!order) return "";
+    const itemsList = Object.entries(order.items)
+      .map(([id, qty]) => {
+        const product = initialProducts.find(p => p.id === parseInt(id));
+        return `• ${product.name} x ${qty} = NT$ ${(product.price * qty).toLocaleString()}`;
+      })
+      .join("\n");
+
+    const addressInfo = order.customer.address ? `\n[地址] ${order.customer.address}` : "";
+
+    // 付款狀態
+    let paymentInfo = "";
+    if (order.paymentStatus === "paid") {
+      paymentInfo = `\n------------------------\n[付款狀態] ✅ 已付款`;
+      if (order.paymentMethod === "linepay") {
+        paymentInfo += ` (LINE Pay)`;
+      }
+    }
+
+    // 發票資訊
+    let invoiceInfo = "";
+    if (order.invoiceNumber) {
+      invoiceInfo = `\n[發票號碼] ${order.invoiceNumber}`;
+      if (order.invoiceRandomNum) {
+        invoiceInfo += ` (隨機碼: ${order.invoiceRandomNum})`;
+      }
+    }
+
+    return `【吾飛藝術銀行 - 訂單確認】\n訂單編號：${order.id}\n------------------------\n[服務顧問]\n姓名：${order.consultant.name} (${order.consultant.id})\n據點：${order.consultant.location}\n------------------------\n[客戶] ${order.customer.name} / ${order.customer.phone}${addressInfo}\n[來源] ${order.customer.source || "無"}\n------------------------\n[訂購項目]\n${itemsList}\n------------------------\n總金額：NT$ ${order.total.toLocaleString()}${paymentInfo}${invoiceInfo}\n\n* 請協助確認款項，謝謝！`;
+  };
+
+  const copyToClipboard = async (text, silent = false) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      if (!silent) alert("複製成功！");
+    } catch (err) {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      textArea.style.top = "0";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        const successful = document.execCommand("copy");
+        if (successful) {
+          if (!silent) alert("複製成功！");
+        } else {
+          if (!silent) alert("複製失敗，請手動長按選取文字複製。");
+        }
+      } catch (fallbackErr) {
+        console.error("Copy failed", fallbackErr);
+        if (!silent) alert("複製失敗，請嘗試使用截圖功能。");
+      }
+      document.body.removeChild(textArea);
+    }
+  };
+
+  const handleShowLineQR = async () => {
+    if (!orderResult) return;
+    const text = generateOrderText(orderResult);
+    await copyToClipboard(text, true);
+    setShowLineQR(true);
+  };
+
+  const handleShare = async () => {
+    if (!orderResult) return;
+    const text = generateOrderText(orderResult);
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "吾飛藝術銀行 - 訂單確認",
+          text: text,
+        });
+      } catch (err) {
+        console.log("Error sharing", err);
+      }
+    } else {
+      copyToClipboard(text);
+    }
+  };
+
+  const downloadReceiptImage = () => {
+    const receiptElement = document.getElementById("receipt-card");
+    if (!receiptElement) return;
+
+    const btnTextElement = document.getElementById("download-btn-text");
+    const originalBtnText = btnTextElement.innerText;
+    btnTextElement.innerText = "生成中...";
+
+    html2canvas(receiptElement, { scale: 3, backgroundColor: "#ffffff", useCORS: true })
+      .then(canvas => {
+        const imgData = canvas.toDataURL("image/png");
+        setPreviewImageUrl(imgData);
+        setShowImagePreview(true);
+        btnTextElement.innerText = originalBtnText;
+      })
+      .catch(err => {
+        console.error("Screenshot error:", err);
+        alert("圖片生成失敗，請嘗試手動截圖。");
+        btnTextElement.innerText = originalBtnText;
+      });
+  };
+
+  // =============================================
+  // 導航處理
+  // =============================================
+  const handleBackToEdit = () => {
+    // 將訂單資料轉回草稿格式，保留 orderId 以便修改時維持同一編號
+    if (orderResult) {
+      const draftData = {
+        consultantInfo: orderResult.consultant,
+        customerInfo: orderResult.customer,
+        cart: orderResult.items,
+        signatureData: orderResult.signature,
+        editingOrderId: orderResult.id, // 保留原訂單編號
+        updatedAt: Date.now(),
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
+      localStorage.removeItem(STORAGE_KEY);
+    }
+    window.location.href = "order-form.html";
+  };
+
+  const handleNewOrder = () => {
+    if (confirm("確定要建立新的一張訂單嗎？\n(將清除目前的客戶資料與簽名，但保留顧問資料)")) {
+      // 保留顧問資料
+      if (orderResult) {
+        const draftData = {
+          consultantInfo: orderResult.consultant,
+          customerInfo: {
+            name: "",
+            phone: "",
+            birthday: "",
+            email: "",
+            address: "",
+            company: "",
+            taxId: "",
+            source: "",
+            notes: "",
+            appointmentDate: "",
+            appointmentTime: "",
+            appointmentPeriod: "morning",
+          },
+          cart: {},
+          signatureData: null,
+          updatedAt: Date.now(),
+        };
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
+      }
+      localStorage.removeItem(STORAGE_KEY);
+      window.location.href = "order-form.html";
+    }
+  };
+
+  // =============================================
+  // 載入中或無資料
+  // =============================================
+  if (!orderResult) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif" }}
+      >
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-400">載入訂單資料中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // =============================================
+  // 渲染成功頁面
+  // =============================================
+  return (
+    <div
+      className="min-h-screen pb-20"
+      style={{ fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif" }}
+    >
+      <div className="w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto min-h-screen flex flex-col">
+        {/* 成功頁面 Header - GCG Glass Style */}
+        <div className="gcg-glass text-white p-8 sm:p-10 md:p-12 text-center rounded-b-3xl shadow-xl relative z-10 safe-area-top border-b border-white/10">
+          <div className="w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] md:w-20 md:h-20 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-5">
+            <Check className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 text-white stroke-[3]" />
+          </div>
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent tracking-tight">
+            訂單已送出
+          </h2>
+          <p className="text-slate-400 text-xs sm:text-sm">請完成付款並傳送資料至官方 Line 確認</p>
+        </div>
+
+        <div className="px-4 sm:px-6 md:px-8 -mt-6 pt-2 relative z-20 flex-grow max-w-xl lg:max-w-2xl mx-auto w-full">
+          {restored && (
+            <div className="mb-4 sm:mb-6 gcg-glass border border-blue-500/30 text-blue-400 p-3 sm:p-4 md:p-5 rounded-xl sm:rounded-2xl flex items-center gap-2 text-sm shadow-md backdrop-blur-xl">
+              <AlertCircle className="w-4 h-4" /> 這是您尚未清除的歷史訂單
+            </div>
+          )}
+
+          {/* 訂單摘要卡片 - GCG Glass Style */}
+          <div
+            id="receipt-card"
+            className="gcg-glass rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden mb-4 sm:mb-6 border border-white/10 backdrop-blur-xl"
+          >
+            <div className="bg-white/5 border-b border-white/10 p-3 sm:p-4 flex justify-between items-center backdrop-blur-sm">
+              <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Order ID
+              </span>
+              <span className="font-mono font-bold text-sm sm:text-base text-white">
+                {orderResult.id}
+              </span>
+            </div>
+            <div className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+              {/* 客戶資料區塊 */}
+              <div className="text-sm border-b border-dashed border-white/10 pb-3 sm:pb-4 space-y-2 sm:space-y-3">
+                <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                  <div>
+                    <p className="text-[10px] sm:text-xs text-slate-500">客戶姓名</p>
+                    <p className="font-medium text-sm sm:text-base text-white">
+                      {orderResult.customer.name}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] sm:text-xs text-slate-500">聯絡電話</p>
+                    <p className="font-medium text-sm sm:text-base text-white">
+                      {orderResult.customer.phone}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                  <div>
+                    <p className="text-[10px] sm:text-xs text-slate-500">生日</p>
+                    <p className="font-medium text-sm sm:text-base text-white">
+                      {orderResult.customer.birthday || "-"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] sm:text-xs text-slate-500">統編</p>
+                    <p className="font-medium text-sm sm:text-base text-white">
+                      {orderResult.customer.taxId || "-"}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                  <div>
+                    <p className="text-[10px] sm:text-xs text-slate-500">公司</p>
+                    <p className="font-medium text-sm sm:text-base text-white">
+                      {orderResult.customer.company || "-"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] sm:text-xs text-slate-500">資訊來源</p>
+                    <p className="font-medium text-sm sm:text-base text-white">
+                      {orderResult.customer.source || "-"}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[10px] sm:text-xs text-slate-500">信箱</p>
+                  <p className="font-medium text-sm sm:text-base text-white break-all">
+                    {orderResult.customer.email}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] sm:text-xs text-slate-500">地址</p>
+                  <p className="font-medium text-sm sm:text-base text-white break-words">
+                    {orderResult.customer.address || "-"}
+                  </p>
+                </div>
+              </div>
+              {/* 預約時間區塊 */}
+              {(orderResult.customer.appointmentDate || orderResult.customer.appointmentTime) && (
+                <div className="text-sm border-b border-dashed border-white/10 pb-3 sm:pb-4 space-y-2 sm:space-y-3">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                    <div>
+                      <p className="text-[10px] sm:text-xs text-slate-500">預約日期</p>
+                      <p className="font-medium text-sm sm:text-base text-white">
+                        {orderResult.customer.appointmentDate
+                          ? new Date(orderResult.customer.appointmentDate).toLocaleDateString(
+                              "zh-TW",
+                              {
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                                weekday: "short",
+                              }
+                            )
+                          : "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] sm:text-xs text-slate-500">預約時段</p>
+                      <p className="font-medium text-sm sm:text-base text-white">
+                        {orderResult.customer.appointmentPeriod && (
+                          <span>
+                            {orderResult.customer.appointmentPeriod === "morning" && "上午"}
+                            {orderResult.customer.appointmentPeriod === "afternoon" && "下午"}
+                            {orderResult.customer.appointmentPeriod === "evening" && "晚上"}
+                          </span>
+                        )}
+                        {orderResult.customer.appointmentPeriod &&
+                          orderResult.customer.appointmentTime &&
+                          " "}
+                        {orderResult.customer.appointmentTime && (
+                          <span>{orderResult.customer.appointmentTime}</span>
+                        )}
+                        {!orderResult.customer.appointmentPeriod &&
+                          !orderResult.customer.appointmentTime &&
+                          "-"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 訂購項目 */}
+              <div>
+                <p className="text-[10px] sm:text-xs text-slate-500 mb-2">訂購項目</p>
+                <ul className="space-y-1.5 sm:space-y-2">
+                  {Object.entries(orderResult.items).map(([id, qty]) => {
+                    const product = initialProducts.find(p => p.id === parseInt(id));
+                    return (
+                      <li key={id} className="flex justify-between text-xs sm:text-sm">
+                        <span className="text-white">
+                          {product.name}{" "}
+                          <span className="text-slate-500 text-[10px] sm:text-xs">x{qty}</span>
+                        </span>
+                        <span className="font-medium text-white">
+                          NT$ {(product.price * qty).toLocaleString()}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+
+              <div className="pt-3 sm:pt-4 border-t border-white/10 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 sm:gap-0">
+                <div>
+                  <p className="text-[10px] sm:text-xs text-slate-500">服務顧問</p>
+                  <p className="text-xs sm:text-sm font-medium text-white">
+                    {orderResult.consultant.name}{" "}
+                    <span className="text-[10px] sm:text-xs text-slate-500">
+                      ({orderResult.consultant.id})
+                    </span>
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-slate-500">
+                    {orderResult.consultant.location}
+                  </p>
+                </div>
+                <div className="text-left sm:text-right w-full sm:w-auto">
+                  <p className="text-[10px] sm:text-xs text-slate-500">總金額 (含稅)</p>
+                  <p className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
+                    <span className="text-slate-500 text-sm mr-1">NT$</span>
+                    {orderResult.total.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div
+              className="bg-white/5 p-2 sm:p-3 flex border-t border-white/10 backdrop-blur-sm"
+              data-html2canvas-ignore
+            >
+              <button
+                onClick={downloadReceiptImage}
+                className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-slate-300 text-[10px] sm:text-xs font-bold border-r border-white/10 py-2 active:bg-white/5 transition-colors hover:text-white"
+              >
+                <ImageIcon className="w-3 h-3 sm:w-4 sm:h-4" />{" "}
+                <span id="download-btn-text">下載圖片</span>
+              </button>
+              <button
+                onClick={() => copyToClipboard(generateOrderText(orderResult), false)}
+                className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-slate-300 text-[10px] sm:text-xs font-bold border-r border-white/10 py-2 active:bg-white/5 transition-colors hover:text-white"
+              >
+                <Copy className="w-3 h-3 sm:w-4 sm:h-4" /> 複製文字
+              </button>
+              <button
+                onClick={handleShare}
+                className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-slate-300 text-[10px] sm:text-xs font-bold py-2 active:bg-white/5 transition-colors hover:text-white"
+              >
+                <Share2 className="w-3 h-3 sm:w-4 sm:h-4" /> 分享
+              </button>
+            </div>
+          </div>
+
+          {/* LINE Pay 確認中提示 */}
+          {isConfirmingLinePay && (
+            <div className="gcg-glass border border-[#06C755]/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6 text-center backdrop-blur-xl">
+              <div className="w-8 h-8 border-[3px] border-[#06C755] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+              <p className="text-sm font-bold text-[#06C755]">正在確認 LINE Pay 付款...</p>
+              <p className="text-xs text-slate-500 mt-1">請稍候</p>
+            </div>
+          )}
+
+          {/* SHOPLINE Payments 確認中提示 */}
+          {isConfirmingShopline && orderResult?.paymentStatus !== "paid" && (
+            <div className="gcg-glass border border-blue-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6 text-center backdrop-blur-xl">
+              <div className="w-8 h-8 border-[3px] border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+              <p className="text-sm font-bold text-blue-400">
+                正在確認
+                {orderResult?.shoplinePaymentType === "atm"
+                  ? " ATM 轉帳"
+                  : orderResult?.shoplinePaymentType === "linepay"
+                    ? " LINE Pay "
+                    : orderResult?.shoplinePaymentType === "installment"
+                      ? "分期付款"
+                      : "信用卡付款"}
+                ...
+              </p>
+              <p className="text-xs text-slate-500 mt-1">請稍候</p>
+            </div>
+          )}
+
+          {/* LINE Pay 付款成功 */}
+          {orderResult?.paymentStatus === "paid" && orderResult?.paymentMethod === "linepay" && (
+            <div className="gcg-glass border border-[#06C755] rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md relative overflow-hidden backdrop-blur-xl">
+              <div className="absolute top-0 right-0 bg-gradient-to-r from-[#06C755] to-[#05b04d] text-white text-[8px] sm:text-[10px] font-bold px-3 py-1.5 rounded-bl-lg uppercase tracking-wider">
+                已付款
+              </div>
+              <div className="flex items-center gap-3">
+                <Wallet className="w-6 h-6 text-[#06C755] flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-white">LINE Pay 付款完成</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {orderResult.linePayConfirmedAt &&
+                      new Date(orderResult.linePayConfirmedAt).toLocaleString("zh-TW")}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SHOPLINE Payments 付款成功 */}
+          {orderResult?.paymentStatus === "paid" && orderResult?.paymentMethod === "shopline" && (
+            <div className="gcg-glass border border-blue-500 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md relative overflow-hidden backdrop-blur-xl">
+              <div className="absolute top-0 right-0 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-[8px] sm:text-[10px] font-bold px-3 py-1.5 rounded-bl-lg uppercase tracking-wider">
+                已付款
+              </div>
+              <div className="flex items-center gap-3">
+                <CreditCard className="w-6 h-6 text-blue-400 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-white">SHOPLINE 付款完成</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {orderResult.shoplinePaidAt &&
+                      new Date(orderResult.shoplinePaidAt).toLocaleString("zh-TW")}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SHOPLINE Payments 付款處理中 */}
+          {orderResult?.paymentStatus === "processing" && (
+            <div className="gcg-glass border border-yellow-500/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md relative overflow-hidden backdrop-blur-xl">
+              <div className="absolute top-0 right-0 bg-gradient-to-r from-yellow-500 to-amber-500 text-white text-[8px] sm:text-[10px] font-bold px-3 py-1.5 rounded-bl-lg uppercase tracking-wider">
+                處理中
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-6 h-6 border-[3px] border-yellow-500 border-t-transparent rounded-full animate-spin flex-shrink-0"></div>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-white">付款確認中</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    系統正在處理您的付款，請稍候或重新整理頁面查看最新狀態
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 付款失敗狀態 - 顯示錯誤訊息 */}
+          {orderResult?.paymentStatus === "failed" && (
+            <div className="gcg-glass border border-red-500/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md relative overflow-hidden backdrop-blur-xl">
+              <div className="absolute top-0 right-0 bg-gradient-to-r from-red-500 to-rose-500 text-white text-[8px] sm:text-[10px] font-bold px-3 py-1.5 rounded-bl-lg uppercase tracking-wider">
+                付款失敗
+              </div>
+              <div className="flex items-start gap-3">
+                <X className="w-6 h-6 text-red-400 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-white">付款未成功</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {orderResult.paymentFailReason ||
+                      "您的付款因信用卡問題或其他原因未能完成，請點擊下方「返回修改」重新選擇付款方式"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 待付款狀態 - 顯示前往付款按鈕 */}
+          {(!orderResult?.paymentStatus || orderResult?.paymentStatus === "pending") &&
+            !isConfirmingLinePay &&
+            !isConfirmingShopline &&
+            orderResult?.paymentMethod && (
+              <div className="gcg-glass border border-orange-500/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md relative overflow-hidden backdrop-blur-xl">
+                <div className="absolute top-0 right-0 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-[8px] sm:text-[10px] font-bold px-3 py-1.5 rounded-bl-lg uppercase tracking-wider">
+                  待付款
+                </div>
+                <div className="flex items-start gap-3 mb-3">
+                  <AlertCircle className="w-6 h-6 text-orange-400 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-white">尚未完成付款</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {orderResult?.sessionUrl
+                        ? "您的付款尚未完成，請點擊下方按鈕繼續付款"
+                        : "請點擊「返回修改」重新提交訂單以取得付款連結"}
+                    </p>
+                  </div>
+                </div>
+                {orderResult?.sessionUrl && (
+                  <a
+                    href={orderResult.sessionUrl}
+                    className="w-full py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm font-bold flex items-center justify-center gap-2 hover:from-orange-600 hover:to-amber-600 active:scale-[0.98] transition-all duration-200"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    前往付款
+                  </a>
+                )}
+              </div>
+            )}
+
+          {/* 電子發票開立中 */}
+          {isIssuingInvoice && (
+            <div className="gcg-glass border border-purple-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6 text-center backdrop-blur-xl">
+              <div className="w-8 h-8 border-[3px] border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+              <p className="text-sm font-bold text-purple-400">正在開立電子發票...</p>
+              <p className="text-xs text-slate-500 mt-1">請稍候</p>
+            </div>
+          )}
+
+          {/* 電子發票開立成功 */}
+          {orderResult?.invoiceNumber && (
+            <div className="gcg-glass border border-purple-500 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md relative overflow-hidden backdrop-blur-xl">
+              <div className="absolute top-0 right-0 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-[8px] sm:text-[10px] font-bold px-3 py-1.5 rounded-bl-lg uppercase tracking-wider">
+                已開立
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <CreditCard className="w-5 h-5 text-purple-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-white">電子發票已開立</p>
+                  <p className="text-xs text-purple-400 font-mono font-bold mt-1">
+                    發票號碼：{orderResult.invoiceNumber}
+                  </p>
+                  {orderResult.invoiceRandomNum && (
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      隨機碼：{orderResult.invoiceRandomNum}
+                    </p>
+                  )}
+                  {orderResult.invoiceIssuedAt && (
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      開立時間：{orderResult.invoiceIssuedAt}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-500 mt-2 pl-[52px]">
+                發票將自動上傳至財政部，您可透過手機載具或 ezPay 平台查詢
+              </p>
+            </div>
+          )}
+
+          {/* 電子發票開立失敗 */}
+          {invoiceError && !orderResult?.invoiceNumber && (
+            <div className="gcg-glass border border-orange-500/30 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md backdrop-blur-xl">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-orange-400">發票開立失敗</p>
+                  <p className="text-xs text-slate-400 mt-1">{invoiceError}</p>
+                  <button
+                    onClick={handleManualIssueInvoice}
+                    className="mt-2 px-3 py-1.5 bg-orange-500 text-white text-xs font-bold rounded-lg hover:bg-orange-600 transition-colors"
+                  >
+                    重新開立發票
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SHOPLINE Payments 查詢失敗 */}
+          {shoplineError && (
+            <div className="gcg-glass border border-red-500/30 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md backdrop-blur-xl">
+              <h3 className="font-bold text-red-400 mb-2 flex items-center gap-2 text-xs sm:text-sm">
+                <AlertCircle className="w-4 h-4" /> 付款狀態查詢失敗
+              </h3>
+              <p className="text-xs text-red-400 mb-3">{shoplineError}</p>
+              <p className="text-xs text-slate-500">請稍後重新整理或聯繫客服</p>
+            </div>
+          )}
+
+          {/* LINE Pay 付款失敗 */}
+          {linePayError && (
+            <div className="gcg-glass border border-red-500/30 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 shadow-md backdrop-blur-xl">
+              <h3 className="font-bold text-red-400 mb-2 flex items-center gap-2 text-xs sm:text-sm">
+                <AlertCircle className="w-4 h-4" /> 付款失敗
+              </h3>
+              <p className="text-xs text-red-400 mb-3">{linePayError}</p>
+              <p className="text-xs text-slate-500">請重新訂購或聯繫客服</p>
+            </div>
+          )}
+
+          {/* 操作區塊 - 重新設計的清晰架構 */}
+          <div className="space-y-4 sm:space-y-5 pb-6 sm:pb-8 safe-area-bottom">
+            {/* === 主要操作區：發送到 LINE === */}
+            <div className="gcg-glass rounded-2xl p-4 sm:p-5 border border-white/10 backdrop-blur-xl">
+              {/* 區塊標題 */}
+              <div className="flex items-center gap-2 mb-3 sm:mb-4">
+                <div className="w-1.5 h-8 rounded-full bg-gradient-to-b from-blue-500 to-blue-600"></div>
+                <div className="flex-1">
+                  <h3 className="text-sm sm:text-base font-bold text-white">傳送訂單到 LINE</h3>
+                  <p className="text-[10px] sm:text-xs text-slate-400">
+                    完成付款後請傳送至官方帳號確認
+                  </p>
+                </div>
+              </div>
+
+              {/* LINE 登入狀態 */}
+              {isLineLoggedIn && lineProfile && (
+                <div className="mb-3 bg-gradient-to-r from-[#06C755]/10 to-[#06C755]/5 rounded-xl p-3 flex items-center gap-3 border border-[#06C755]/20">
+                  {lineProfile.pictureUrl && (
+                    <img
+                      src={lineProfile.pictureUrl}
+                      alt="LINE Profile"
+                      className="w-10 h-10 rounded-full ring-2 ring-[#06C755]/40"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-[#06C755] flex-shrink-0" />
+                      <p className="text-[10px] sm:text-xs text-[#06C755] font-bold">
+                        已連結 LINE 帳號
+                      </p>
+                    </div>
+                    <p className="text-xs sm:text-sm text-white font-medium truncate">
+                      {lineProfile.displayName}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* 已發送提示 */}
+              {orderResult?.lineSentAt && (
+                <div className="mb-3 bg-gradient-to-r from-purple-500/10 to-purple-500/5 rounded-xl p-3 flex items-start gap-2 border border-purple-500/20">
+                  <CheckCircle className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm text-purple-400 font-medium">訂單已發送</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      {new Date(orderResult.lineSentAt).toLocaleString("zh-TW")}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* 主要按鈕組 */}
+              <div className="space-y-3">
+                <button
+                  onClick={isLineLoggedIn ? sendOrderToLine : handleLineLogin}
+                  disabled={isSendingToLine}
+                  className={`w-full py-3 sm:py-3.5 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all duration-200 ${
+                    isSendingToLine
+                      ? "bg-slate-700 text-slate-400 cursor-not-allowed"
+                      : "gcg-btn-primary"
+                  }`}
+                >
+                  {isSendingToLine ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      發送中...
+                    </>
+                  ) : (
+                    <>
+                      <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
+                      {isLineLoggedIn
+                        ? orderResult?.lineSentAt
+                          ? "重新發送訂單"
+                          : "發送訂單到 LINE"
+                        : "用 LINE 登入並接收訂單"}
+                    </>
+                  )}
+                </button>
+
+                {/* QR Code 備用選項 - 只在未登入時顯示 */}
+                {!isLineLoggedIn && (
+                  <button
+                    onClick={handleShowLineQR}
+                    className="w-full py-3 sm:py-3.5 rounded-xl bg-white/5 border border-white/20 text-slate-300 text-xs sm:text-sm font-medium flex items-center justify-center gap-2 hover:bg-white/10 hover:border-white/30 active:scale-[0.98] transition-all duration-200"
+                  >
+                    <QrCode className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    或使用 QR Code 手動傳送
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* === 次要操作區：編輯與新增 === */}
+            <div className="flex items-center gap-2 sm:gap-3">
+              <button
+                onClick={handleBackToEdit}
+                className="flex-1 py-3 sm:py-3.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-xs sm:text-sm font-medium flex items-center justify-center gap-1.5 hover:bg-white/10 hover:border-white/20 hover:text-white active:scale-[0.98] transition-all duration-200"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                返回修改
+              </button>
+              <button
+                onClick={handleNewOrder}
+                className="flex-1 py-3 sm:py-3.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-xs sm:text-sm font-medium flex items-center justify-center gap-1.5 hover:bg-white/10 hover:border-white/20 hover:text-white active:scale-[0.98] transition-all duration-200"
+              >
+                <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                建立新單
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Line QR Code Modal - GCG Glass Style */}
+        {showLineQR && (
+          <div className="fixed inset-0 z-[70] gcg-modal-overlay flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+            <div className="gcg-modal w-full max-w-[calc(100%-1.5rem)] sm:max-w-sm md:max-w-md rounded-2xl shadow-2xl p-4 sm:p-6 text-center space-y-4 sm:space-y-6 relative animate-scale-in backdrop-blur-xl">
+              <button
+                onClick={() => setShowLineQR(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              <div>
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-[#06C755]/20 rounded-full flex items-center justify-center mx-auto mb-2 sm:mb-3">
+                  <QrCode className="w-5 h-5 sm:w-6 sm:h-6 text-[#06C755]" />
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-white">加入官方帳號</h3>
+                <p className="text-xs sm:text-sm text-slate-400 mt-1 sm:mt-2">
+                  訂單資料已自動複製！
+                  <br />
+                  請掃描或點擊下方按鈕加入好友，
+                  <br />
+                  並在聊天室<span className="font-bold text-[#06C755]">「貼上」</span>
+                  即可傳送。
+                </p>
+              </div>
+
+              <div className="bg-white p-3 sm:p-4 rounded-xl inline-block">
+                <img
+                  src={LINE.QR_CODE_URL}
+                  alt="Line QR Code"
+                  className="w-32 h-32 sm:w-40 sm:h-40"
+                />
+              </div>
+
+              <a
+                href={LINE.ADD_FRIEND_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 sm:py-3 rounded-xl gcg-btn-primary text-sm sm:text-base font-bold flex items-center justify-center gap-2 active:scale-95 transition-all duration-200"
+              >
+                開啟 LINE App <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 rotate-180" />
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* 圖片預覽 Modal - GCG Glass Style */}
+        {showImagePreview && (
+          <div
+            className="fixed inset-0 z-[80] gcg-modal-overlay flex items-center justify-center p-2 sm:p-4 animate-fade-in"
+            onClick={() => setShowImagePreview(false)}
+          >
+            <div
+              className="relative max-w-[calc(100%-1rem)] sm:max-w-sm md:max-w-md w-full max-h-[90vh] overflow-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="gcg-glass rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl p-1.5 sm:p-2 backdrop-blur-xl border border-white/10">
+                <div className="flex justify-between items-center p-2 mb-2 border-b border-white/10">
+                  <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4" /> 長按圖片即可儲存
+                  </h3>
+                  <button
+                    onClick={() => setShowImagePreview(false)}
+                    className="p-1 rounded-full hover:bg-white/10 transition-colors"
+                  >
+                    <X className="w-5 h-5 text-slate-400" />
+                  </button>
+                </div>
+                <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-inner">
+                  <img src={previewImageUrl} alt="Order Receipt" className="w-full h-auto" />
+                </div>
+                <p className="text-center text-xs text-slate-400 mt-3 mb-1">
+                  請長按上方圖片並選擇「加入照片」或「儲存影像」
+                </p>
+              </div>
+              <button
+                onClick={() => setShowImagePreview(false)}
+                className="mt-4 w-full py-3 rounded-xl gcg-glass text-white font-bold backdrop-blur-xl border border-white/20 hover:bg-white/10 transition-all duration-200 active:scale-95"
+              >
+                關閉預覽
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* LINE 發送結果 Modal - GCG Glass Style */}
+        {showLineSentModal && (
+          <div className="fixed inset-0 z-[90] gcg-modal-overlay flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+            <div className="gcg-modal w-full max-w-[calc(100%-1.5rem)] sm:max-w-sm md:max-w-md rounded-2xl shadow-2xl p-6 sm:p-8 text-center space-y-4 sm:space-y-6 animate-scale-in backdrop-blur-xl">
+              {lineSendResult === "success" ? (
+                <>
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-green-400/20 to-green-600/20 rounded-full flex items-center justify-center mx-auto">
+                    <Check className="w-8 h-8 sm:w-10 sm:h-10 text-green-400 stroke-[3]" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">訂單已發送！</h3>
+                    <p className="text-sm text-slate-400">
+                      訂單確認卡片已發送到您的 LINE
+                      <br />
+                      請開啟 LINE App 查看
+                    </p>
+                  </div>
+                  <div className="gcg-glass rounded-xl p-4 text-left border border-white/10 backdrop-blur-sm">
+                    <p className="text-xs text-slate-500 mb-1">發送對象</p>
+                    <div className="flex items-center gap-3">
+                      {lineProfile?.pictureUrl && (
+                        <img
+                          src={lineProfile.pictureUrl}
+                          alt=""
+                          className="w-10 h-10 rounded-full ring-2 ring-white/10"
+                        />
+                      )}
+                      <div>
+                        <p className="font-bold text-white">{lineProfile?.displayName}</p>
+                        <p className="text-xs text-slate-500">LINE 用戶</p>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowLineSentModal(false)}
+                    className="w-full py-3 rounded-xl gcg-btn-primary font-bold active:scale-95 transition-all duration-200"
+                  >
+                    好的
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 bg-red-500/20 rounded-full flex items-center justify-center mx-auto">
+                    <AlertCircle className="w-8 h-8 sm:w-10 sm:h-10 text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">發送失敗</h3>
+                    <p className="text-sm text-slate-400">
+                      無法透過 LINE 發送訂單
+                      <br />
+                      請改用 QR Code 方式手動傳送
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => {
+                        setShowLineSentModal(false);
+                        handleShowLineQR();
+                      }}
+                      className="w-full py-3 rounded-xl gcg-btn-primary flex items-center justify-center gap-2 active:scale-95 transition-all duration-200"
+                    >
+                      <QrCode className="w-4 h-4" /> 使用 QR Code 傳送
+                    </button>
+                    <button
+                      onClick={() => setShowLineSentModal(false)}
+                      className="w-full py-2.5 rounded-xl gcg-glass border border-white/10 text-slate-300 font-bold active:scale-95 transition-all duration-200 hover:border-white/20 backdrop-blur-xl"
+                    >
+                      關閉
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// =============================================
+// 掛載 React 應用
+// =============================================
+const root = createRoot(document.getElementById("root"));
+root.render(<OrderSuccessPage />);
